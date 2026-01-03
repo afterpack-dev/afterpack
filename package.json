@@ -1,0 +1,39 @@
+{
+  "name": "afterpack",
+  "version": "0.0.1",
+  "description": "A high-performance post-build JavaScript obfuscator and minifier",
+  "type": "module",
+  "main": "./dist/cli.js",
+  "bin": {
+    "afterpack": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown src/cli.ts --format esm --dts",
+    "dev": "tsdown src/cli.ts --format esm --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "obfuscator",
+    "minifier",
+    "javascript",
+    "protection",
+    "security"
+  ],
+  "author": "AfterPack",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/afterpack-dev/afterpack.git"
+  },
+  "homepage": "https://afterpack.dev",
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "tsdown": "^0.11.0",
+    "typescript": "^5.0.0"
+  }
+}
