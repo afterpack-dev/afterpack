@@ -1,0 +1,90 @@
+name: Publish
+
+on:
+  push:
+    tags: ["v*"]
+  repository_dispatch:
+    types: [core-published]
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  test:
+    name: Test before publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+
+  publish:
+    name: Publish to NPM
+    needs: test
+    runs-on: ubuntu-latest
+    environment: npm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: "https://registry.npmjs.org"
+
+      # Auto-update @afterpack/core (minor/patch only)
+      - name: Update @afterpack/core
+        if: github.event_name == 'repository_dispatch'
+        run: |
+          NEW_VERSION="${{ github.event.client_payload.version }}"
+          NEW_VERSION="${NEW_VERSION#v}"
+
+          # Get current version
+          CURRENT=$(npm pkg get dependencies.@afterpack/core | tr -d '"^~')
+
+          # Extract major versions
+          NEW_MAJOR=$(echo $NEW_VERSION | cut -d. -f1)
+          CURRENT_MAJOR=$(echo $CURRENT | cut -d. -f1)
+
+          if [ "$NEW_MAJOR" != "$CURRENT_MAJOR" ]; then
+            echo "⚠️ Major version change ($CURRENT → $NEW_VERSION). Skipping auto-update."
+            exit 1
+          fi
+
+          echo "Updating @afterpack/core from $CURRENT to $NEW_VERSION"
+          npm install @afterpack/core@$NEW_VERSION
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+
+      - name: Publish
+        run: npm publish --provenance --access public
+
+      # Commit updated package.json if auto-updated
+      - name: Commit dependency update
+        if: github.event_name == 'repository_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "chore: update @afterpack/core to ${{ github.event.client_payload.version }}" || echo "No changes to commit"
+          git push
