@@ -12,15 +12,14 @@ npx afterpack
 
 ## Features
 
-Coming Soon:
-
-- 20-70x faster than any other javascript obfuscator (Rust-powered)
-- Superior minification (smaller output than in other tools)
-- Fast runtime speed (minimal runtime performance overhead)
-- Native integration with Vite, Next.js, Turbopack, Astro
-- Source map generation and consumption
-- Deterministic builds for CI caching
-- And many more
+- **Free & Production-Ready** — Full obfuscation at no cost. Pro unlocks multi-file and edge features
+- **20-70x Faster** — Rust-powered engine leaves JavaScript-based tools in the dust
+- **Irreversible** — Non-linear transforms that can't be undone by deobfuscators or AI
+- **Any Complexity** — From minimal to extreme protection with `--inflate`
+- **Deterministic** — Same input = same output. Works with Turborepo, Nx, Bazel
+- **Source Maps** — Generate and chain for Sentry/Datadog error tracking
+- **Framework Presets** — Safe defaults for Next.js, Vite, Astro
+- **Dual Runtime** — Native bindings + WASM for edge deployment
 
 ## License
 

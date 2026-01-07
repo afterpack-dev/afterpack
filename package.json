@@ -13,27 +13,37 @@
   "scripts": {
     "build": "tsdown src/cli.ts --format esm --dts",
     "dev": "tsdown src/cli.ts --format esm --watch",
-    "prepublishOnly": "npm run build"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "pnpm build"
   },
   "keywords": [
     "obfuscator",
     "minifier",
     "javascript",
     "protection",
-    "security"
+    "security",
+    "afterpack"
   ],
-  "author": "AfterPack",
+  "author": "AfterPack <hello@afterpack.dev>",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/afterpack-dev/afterpack.git"
   },
   "homepage": "https://afterpack.dev",
+  "bugs": {
+    "url": "https://github.com/afterpack-dev/afterpack/issues"
+  },
   "engines": {
     "node": ">=18"
   },
+  "dependencies": {
+    "@afterpack/core": "^0.0.1"
+  },
   "devDependencies": {
     "tsdown": "^0.11.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
   }
 }

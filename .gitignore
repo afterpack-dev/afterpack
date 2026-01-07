@@ -26,3 +26,11 @@ coverage/
 # Misc
 *.tgz
 .turbo
+
+# Local development override
+.pnpmfile.cjs
+pnpm-lock.yaml
+pnpm-workspace.yaml
+
+# Misc
+local/
