@@ -36,13 +36,8 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: 'pnpm'
 
-      - name: Remove local dev overrides
-        run: |
-          rm -f .pnpmfile.cjs
-          rm -f pnpm-workspace.yaml
-
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Build
         run: pnpm run build
