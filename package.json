@@ -1,6 +1,6 @@
 {
   "name": "afterpack",
-  "version": "0.0.1",
+  "version": "0.0.9",
   "description": "A high-performance post-build JavaScript obfuscator and minifier",
   "type": "module",
   "main": "./dist/cli.js",
@@ -39,7 +39,7 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@afterpack/core": "^0.0.1"
+    "@afterpack/core": "^0.0.9"
   },
   "devDependencies": {
     "tsdown": "^0.11.0",

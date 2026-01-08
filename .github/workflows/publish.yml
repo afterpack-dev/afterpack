@@ -17,19 +17,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: 'pnpm'
+
+      - name: Remove local dev overrides
+        run: |
+          rm -f .pnpmfile.cjs
+          rm -f pnpm-workspace.yaml
 
       - name: Install dependencies
-        run: npm install
+        run: pnpm install --no-frozen-lockfile
 
       - name: Build
-        run: npm run build
+        run: pnpm run build
 
       - name: Run tests
-        run: npm test
+        run: pnpm test
 
   publish:
     name: Publish to NPM
@@ -39,11 +50,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           registry-url: "https://registry.npmjs.org"
+
+      - name: Remove local dev overrides
+        run: |
+          rm -f .pnpmfile.cjs
+          rm -f pnpm-workspace.yaml
 
       # Auto-update @afterpack/core (minor/patch only)
       - name: Update @afterpack/core
@@ -65,26 +86,33 @@ jobs:
           fi
 
           echo "Updating @afterpack/core from $CURRENT to $NEW_VERSION"
-          npm install @afterpack/core@$NEW_VERSION
+          pnpm add @afterpack/core@$NEW_VERSION
 
       - name: Install dependencies
-        run: npm install
+        run: pnpm install --no-frozen-lockfile
 
       - name: Build
-        run: npm run build
+        run: pnpm run build
 
       - name: Run tests
-        run: npm test
+        run: pnpm test
 
-      - name: Publish
-        run: npm publish --provenance --access public
-
-      # Commit updated package.json if auto-updated
-      - name: Commit dependency update
+      # For repository_dispatch: bump version, commit, tag - the tag will trigger publish
+      - name: Bump version and tag (auto-update only)
         if: github.event_name == 'repository_dispatch'
         run: |
+          npm version patch --no-git-tag-version
+          VERSION=$(node -p "require('./package.json').version")
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add package.json package-lock.json
-          git commit -m "chore: update @afterpack/core to ${{ github.event.client_payload.version }}" || echo "No changes to commit"
-          git push
+          git add package.json pnpm-lock.yaml
+          git commit -m "chore: update @afterpack/core to ${{ github.event.client_payload.version }}, release v$VERSION"
+          git tag "v$VERSION"
+          git push && git push --tags
+
+      # For tag push: publish to npm
+      - name: Publish
+        if: github.event_name == 'push'
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
