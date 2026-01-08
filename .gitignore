@@ -27,9 +27,8 @@ coverage/
 *.tgz
 .turbo
 
-# Local development override
+# Local development override (use `pnpm link` for local dev)
 .pnpmfile.cjs
-pnpm-lock.yaml
 pnpm-workspace.yaml
 
 # Misc
