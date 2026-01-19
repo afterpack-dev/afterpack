@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
-import { version } from "@afterpack/core";
+import { version } from "../package.json";
 
 const args = process.argv.slice(2);
 
 // Version flag
 if (args.includes("--version") || args.includes("-v")) {
-  console.log(`AfterPack v${version()}`);
+  console.log(`AfterPack v${version}`);
   process.exit(0);
 }
 
@@ -14,7 +14,7 @@ if (args.includes("--version") || args.includes("-v")) {
 if (args[0] === "audit") {
   console.log(`
   ╔═══════════════════════════════════════════════════════╗
-  ║  AfterPack v${version().padEnd(42)}║
+  ║  AfterPack v${version.padEnd(42)}║
   ╚═══════════════════════════════════════════════════════╝
 
   Audit command coming soon!
@@ -33,7 +33,7 @@ if (args[0] === "audit") {
 // Default: show main waitlist message
 console.log(`
   ╔═══════════════════════════════════════════════════════╗
-  ║  AfterPack v${version().padEnd(42)}║
+  ║  AfterPack v${version.padEnd(42)}║
   ╚═══════════════════════════════════════════════════════╝
 
   Coming soon: High-performance JavaScript protection.
