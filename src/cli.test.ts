@@ -1,8 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { execSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 
 /**
  * End-to-end tests for the AfterPack CLI.
@@ -30,18 +28,6 @@ function runCLI(args: string): { stdout: string; stderr: string; exitCode: numbe
 }
 
 describe("AfterPack CLI", () => {
-  let tmpDir: string;
-
-  beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), "afterpack-e2e-"));
-  });
-
-  afterEach(() => {
-    if (tmpDir && existsSync(tmpDir)) {
-      rmSync(tmpDir, { recursive: true });
-    }
-  });
-
   describe("--version", () => {
     it("should display version", () => {
       const { stdout, exitCode } = runCLI("--version");
@@ -56,102 +42,43 @@ describe("AfterPack CLI", () => {
     });
   });
 
-  describe("--help", () => {
-    it("should display help", () => {
-      const { stdout, exitCode } = runCLI("--help");
-      expect(exitCode).toBe(0);
-      expect(stdout).toContain("Usage:");
-      expect(stdout).toContain("npx afterpack");
-      expect(stdout).toContain("afterpack.dev");
-    });
-
-    it("should work with -h flag", () => {
-      const { stdout, exitCode } = runCLI("-h");
-      expect(exitCode).toBe(0);
-      expect(stdout).toContain("Usage:");
-    });
-
-    it("should show help when no arguments", () => {
+  describe("default command", () => {
+    it("should show waitlist message when no arguments", () => {
       const { stdout, exitCode } = runCLI("");
       expect(exitCode).toBe(0);
-      expect(stdout).toContain("Usage:");
+      expect(stdout).toContain("AfterPack v");
+      expect(stdout).toContain("Coming soon: High-performance JavaScript protection");
+      expect(stdout).toContain("https://www.afterpack.dev");
+    });
+
+    it("should show waitlist message for any unknown command", () => {
+      const { stdout, exitCode } = runCLI("unknown");
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("Join the waitlist for early access");
+    });
+
+    it("should show waitlist message for file arguments", () => {
+      const { stdout, exitCode } = runCLI("somefile.js");
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("https://www.afterpack.dev");
     });
   });
 
-  describe("file processing", () => {
-    it("should process a JavaScript file", () => {
-      const testFile = join(tmpDir, "test.js");
-      writeFileSync(testFile, 'console.log("hello");');
-
-      const { stdout, exitCode } = runCLI(testFile);
-
+  describe("audit command", () => {
+    it("should show coming soon message", () => {
+      const { stdout, exitCode } = runCLI("audit");
       expect(exitCode).toBe(0);
-      expect(stdout).toContain("Processing:");
-      expect(stdout).toContain("Done!");
-
-      const content = readFileSync(testFile, "utf8");
-      expect(content).toContain('console.log("hello");');
-      expect(content).toContain("// Processed by AfterPack");
+      expect(stdout).toContain("AfterPack v");
+      expect(stdout).toContain("Audit command coming soon");
+      expect(stdout).toContain("analyze your site");
+      expect(stdout).toContain("https://www.afterpack.dev");
     });
 
-    it("should process .mjs files", () => {
-      const testFile = join(tmpDir, "test.mjs");
-      writeFileSync(testFile, 'export const x = 1;');
-
-      const { exitCode } = runCLI(testFile);
+    it("should show same message with URL argument", () => {
+      const { stdout, exitCode } = runCLI("audit https://example.com");
       expect(exitCode).toBe(0);
-
-      const content = readFileSync(testFile, "utf8");
-      expect(content).toContain("// Processed by AfterPack");
-    });
-
-    it("should process .cjs files", () => {
-      const testFile = join(tmpDir, "test.cjs");
-      writeFileSync(testFile, 'module.exports = {};');
-
-      const { exitCode } = runCLI(testFile);
-      expect(exitCode).toBe(0);
-
-      const content = readFileSync(testFile, "utf8");
-      expect(content).toContain("// Processed by AfterPack");
-    });
-
-    it("should process multiple files", () => {
-      const file1 = join(tmpDir, "a.js");
-      const file2 = join(tmpDir, "b.js");
-      writeFileSync(file1, "const a = 1;");
-      writeFileSync(file2, "const b = 2;");
-
-      const { stdout, exitCode } = runCLI(`${file1} ${file2}`);
-
-      expect(exitCode).toBe(0);
-      expect(stdout).toContain("All files processed successfully");
-
-      expect(readFileSync(file1, "utf8")).toContain("// Processed by AfterPack");
-      expect(readFileSync(file2, "utf8")).toContain("// Processed by AfterPack");
-    });
-  });
-
-  describe("error handling", () => {
-    it("should error on non-existent file", () => {
-      const { stderr, exitCode } = runCLI(join(tmpDir, "nonexistent.js"));
-      expect(exitCode).toBe(1);
-      expect(stderr).toContain("File not found");
-    });
-
-    it("should error on non-JavaScript file", () => {
-      const testFile = join(tmpDir, "test.txt");
-      writeFileSync(testFile, "not javascript");
-
-      const { stderr, exitCode } = runCLI(testFile);
-      expect(exitCode).toBe(1);
-      expect(stderr).toContain("Expected JavaScript file");
-    });
-
-    it("should error on directory", () => {
-      const { stderr, exitCode } = runCLI(tmpDir);
-      expect(exitCode).toBe(1);
-      expect(stderr).toContain("directory");
+      expect(stdout).toContain("Audit command coming soon");
+      expect(stdout).toContain("https://www.afterpack.dev");
     });
   });
 });
