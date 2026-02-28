@@ -10,7 +10,9 @@ export async function* streamSSE(
   const response = await fetch(url, options);
 
   if (!response.ok) {
-    throw new Error(`SSE request failed: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `SSE request failed: ${response.status} ${response.statusText}`,
+    );
   }
 
   const body = response.body;

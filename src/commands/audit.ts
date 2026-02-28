@@ -1,5 +1,14 @@
 import { version } from "../../package.json";
-import { bold, dim, red, green, yellow, cyan, severityColor, header } from "../utils/format.js";
+import {
+  bold,
+  cyan,
+  dim,
+  green,
+  header,
+  red,
+  severityColor,
+  yellow,
+} from "../utils/format.js";
 import { streamSSE } from "../utils/sse.js";
 
 const API_BASE = "https://api.afterpack.dev";
@@ -60,7 +69,8 @@ function printSummaryBox(result: ScanResult): void {
 
   // Score
   if (result.score !== undefined) {
-    const scoreColor = result.score >= 70 ? green : result.score >= 40 ? yellow : red;
+    const scoreColor =
+      result.score >= 70 ? green : result.score >= 40 ? yellow : red;
     lines.push(`  Score: ${scoreColor(bold(`${result.score}/100`))}`);
     lines.push("");
   }
@@ -72,9 +82,7 @@ function printSummaryBox(result: ScanResult): void {
     if (r.unprotected) parts.push(`${r.unprotected} unprotected`);
     if (r.sourceExposed) parts.push(`${r.sourceExposed} source exposed`);
     const detail = parts.length > 0 ? ` (${parts.join(", ")})` : "";
-    lines.push(
-      `  Resources      ${r.total ?? 0} found${detail}`,
-    );
+    lines.push(`  Resources      ${r.total ?? 0} found${detail}`);
   }
 
   // Findings
@@ -84,9 +92,7 @@ function printSummaryBox(result: ScanResult): void {
       const s = f.severity.toLowerCase();
       counts[s] = (counts[s] || 0) + 1;
     }
-    const parts = Object.entries(counts).map(
-      ([sev, n]) => `${n} ${sev}`,
-    );
+    const parts = Object.entries(counts).map(([sev, n]) => `${n} ${sev}`);
     lines.push(
       `  Findings       ${result.findings.length} issues (${parts.join(", ")})`,
     );
@@ -129,7 +135,11 @@ export async function audit(url: string | undefined): Promise<void> {
   console.log(header(version));
   console.log(`  Scanning ${cyan(normalizedUrl)} ...\n`);
 
-  const phases = ["Fetching page", "Rendering JavaScript", "Analyzing resources"];
+  const phases = [
+    "Fetching page",
+    "Rendering JavaScript",
+    "Analyzing resources",
+  ];
   let currentPhaseIndex = -1;
   let extraLinesSincePhase = 0;
   const result: ScanResult = {};
@@ -191,7 +201,9 @@ export async function audit(url: string | undefined): Promise<void> {
           const sev = finding.severity.toLowerCase();
           if (sev === "critical" || sev === "high") {
             const color = severityColor(sev);
-            console.log(`  ${color("⚠")}  ${color(finding.severity)}: ${finding.title}`);
+            console.log(
+              `  ${color("⚠")}  ${color(finding.severity)}: ${finding.title}`,
+            );
             extraLinesSincePhase++;
           }
           break;
@@ -214,7 +226,8 @@ export async function audit(url: string | undefined): Promise<void> {
           if (payload.resources) result.resources = payload.resources;
           if (payload.findings) result.findings = payload.findings;
           if (payload.techStack) result.techStack = payload.techStack;
-          if (payload.readability !== undefined) result.readability = payload.readability;
+          if (payload.readability !== undefined)
+            result.readability = payload.readability;
 
           printSummaryBox(result);
 
@@ -225,10 +238,16 @@ export async function audit(url: string | undefined): Promise<void> {
             );
             if (critical.length > 0) {
               console.log(
-                `\n  ${red("⚠")}  ${bold(`${critical.length} critical finding${critical.length > 1 ? "s" : ""}:`)}`,
+                `\n  ${red("⚠")}  ${bold(
+                  `${critical.length} critical finding${
+                    critical.length > 1 ? "s" : ""
+                  }:`,
+                )}`,
               );
               for (const f of critical) {
-                console.log(`     ${f.title}${f.detail ? ` (${dim(f.detail)})` : ""}`);
+                console.log(
+                  `     ${f.title}${f.detail ? ` (${dim(f.detail)})` : ""}`,
+                );
               }
             }
           }
@@ -236,21 +255,23 @@ export async function audit(url: string | undefined): Promise<void> {
           // Report link
           if (result.id) {
             console.log(
-              `\n  Full report: ${cyan(`${WEB_BASE}/security-scanner?id=${result.id}`)}\n`,
+              `\n  Full report: ${cyan(
+                `${WEB_BASE}/security-scanner?id=${result.id}`,
+              )}\n`,
             );
           } else {
             console.log("");
           }
 
           process.exit(0);
-          break;
 
         case "error":
           console.error(
-            `\n  ${red("Error:")} ${payload.message ?? payload.error ?? "Scan failed"}\n`,
+            `\n  ${red("Error:")} ${
+              payload.message ?? payload.error ?? "Scan failed"
+            }\n`,
           );
           process.exit(1);
-          break;
       }
     }
 
@@ -258,10 +279,14 @@ export async function audit(url: string | undefined): Promise<void> {
     if (result.score !== undefined) {
       printSummaryBox(result);
     }
-    console.error(`\n  ${yellow("Warning:")} Stream ended without completion event.\n`);
+    console.error(
+      `\n  ${yellow("Warning:")} Stream ended without completion event.\n`,
+    );
     process.exit(1);
   } catch (err: any) {
-    console.error(`\n  ${red("Error:")} ${err.message ?? "Failed to connect to API"}\n`);
+    console.error(
+      `\n  ${red("Error:")} ${err.message ?? "Failed to connect to API"}\n`,
+    );
     process.exit(1);
   }
 }

@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
 import { execSync } from "node:child_process";
 import { join } from "node:path";
+import { describe, expect, it } from "vitest";
 
 /**
  * End-to-end tests for the AfterPack CLI.
@@ -11,7 +11,11 @@ import { join } from "node:path";
 
 const CLI_PATH = join(__dirname, "..", "dist", "cli.js");
 
-function runCLI(args: string): { stdout: string; stderr: string; exitCode: number } {
+function runCLI(args: string): {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+} {
   try {
     const stdout = execSync(`node ${CLI_PATH} ${args}`, {
       encoding: "utf8",
