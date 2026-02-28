@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { version } from "../package.json";
+import { audit } from "./commands/audit.js";
 
 const args = process.argv.slice(2);
 
@@ -10,40 +11,30 @@ if (args.includes("--version") || args.includes("-v")) {
   process.exit(0);
 }
 
-// Audit command
-if (args[0] === "audit") {
-  console.log(`
-  ╔═══════════════════════════════════════════════════════╗
-  ║  AfterPack v${version.padEnd(42)}║
-  ╚═══════════════════════════════════════════════════════╝
+// Command routing
+const command = args[0];
 
-  Audit command coming soon!
+switch (command) {
+  case "audit":
+    await audit(args[1]);
+    break;
 
-  This will analyze your site and reveal what AI can
-  extract from your client-side JavaScript.
+  default:
+    console.log(`
+  AfterPack v${version}
 
   ┌─────────────────────────────────────────────────────┐
-  │  Join the waitlist to get notified:                 │
-  │  https://www.afterpack.dev                          │
+  │  Launching soon — join the waitlist for day-one     │
+  │  access: https://www.afterpack.dev                  │
   └─────────────────────────────────────────────────────┘
+
+  Usage: afterpack <command> [options]
+
+  Commands:
+    audit <url>     Audit your frontend for leaked secrets & sensitive data
+
+  Options:
+    -v, --version   Show version
 `);
-  process.exit(0);
+    break;
 }
-
-// Default: show main waitlist message
-console.log(`
-  ╔═══════════════════════════════════════════════════════╗
-  ║  AfterPack v${version.padEnd(42)}║
-  ╚═══════════════════════════════════════════════════════╝
-
-  Coming soon: High-performance JavaScript protection.
-
-  Secure your client-side logic from AI extraction,
-  reverse engineering, vulnerability scanning, and
-  automated scraping.
-
-  ┌─────────────────────────────────────────────────────┐
-  │  Join the waitlist for early access:                │
-  │  https://www.afterpack.dev                          │
-  └─────────────────────────────────────────────────────┘
-`);

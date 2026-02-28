@@ -43,21 +43,21 @@ describe("AfterPack CLI", () => {
   });
 
   describe("default command", () => {
-    it("should show waitlist message when no arguments", () => {
+    it("should show help with available commands when no arguments", () => {
       const { stdout, exitCode } = runCLI("");
       expect(exitCode).toBe(0);
       expect(stdout).toContain("AfterPack v");
-      expect(stdout).toContain("Coming soon: High-performance JavaScript protection");
+      expect(stdout).toContain("audit <url>");
       expect(stdout).toContain("https://www.afterpack.dev");
     });
 
-    it("should show waitlist message for any unknown command", () => {
+    it("should show help for any unknown command", () => {
       const { stdout, exitCode } = runCLI("unknown");
       expect(exitCode).toBe(0);
-      expect(stdout).toContain("Join the waitlist for early access");
+      expect(stdout).toContain("audit <url>");
     });
 
-    it("should show waitlist message for file arguments", () => {
+    it("should show help for file arguments", () => {
       const { stdout, exitCode } = runCLI("somefile.js");
       expect(exitCode).toBe(0);
       expect(stdout).toContain("https://www.afterpack.dev");
@@ -65,20 +65,11 @@ describe("AfterPack CLI", () => {
   });
 
   describe("audit command", () => {
-    it("should show coming soon message", () => {
+    it("should show usage and exit 1 when no URL is provided", () => {
       const { stdout, exitCode } = runCLI("audit");
-      expect(exitCode).toBe(0);
-      expect(stdout).toContain("AfterPack v");
-      expect(stdout).toContain("Audit command coming soon");
-      expect(stdout).toContain("analyze your site");
-      expect(stdout).toContain("https://www.afterpack.dev");
-    });
-
-    it("should show same message with URL argument", () => {
-      const { stdout, exitCode } = runCLI("audit https://example.com");
-      expect(exitCode).toBe(0);
-      expect(stdout).toContain("Audit command coming soon");
-      expect(stdout).toContain("https://www.afterpack.dev");
+      expect(exitCode).toBe(1);
+      expect(stdout).toContain("Usage:");
+      expect(stdout).toContain("afterpack audit");
     });
   });
 });
