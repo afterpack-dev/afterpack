@@ -169,7 +169,7 @@ export async function audit(url: string | undefined): Promise<void> {
   }
 
   try {
-    const stream = streamSSE(`${API_BASE}/v1/scan`, {
+    const stream = streamSSE(`${API_BASE}/v1/audit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url: normalizedUrl }),
@@ -256,7 +256,7 @@ export async function audit(url: string | undefined): Promise<void> {
           if (result.id) {
             console.log(
               `\n  Full report: ${cyan(
-                `${WEB_BASE}/security-scanner?id=${result.id}`,
+                `${WEB_BASE}/security-scanner/${result.id}`,
               )}\n`,
             );
           } else {
