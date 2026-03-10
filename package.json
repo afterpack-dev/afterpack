@@ -1,6 +1,6 @@
 {
   "name": "afterpack",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "description": "A high-performance post-build JavaScript obfuscator and minifier",
   "type": "module",
   "main": "./dist/cli.js",
