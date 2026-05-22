@@ -45,6 +45,9 @@
   "engines": {
     "node": ">=18"
   },
+  "dependencies": {
+    "@afterpack/core": "^0.0.1"
+  },
   "devDependencies": {
     "@biomejs/biome": "^2.4.4",
     "@types/node": "^25.0.9",

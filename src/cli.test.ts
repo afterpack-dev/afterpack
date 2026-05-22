@@ -76,4 +76,18 @@ describe("AfterPack CLI", () => {
       expect(stdout).toContain("afterpack audit");
     });
   });
+
+  describe("obfuscate command", () => {
+    it("should show usage and exit 1 when no file is provided", () => {
+      const { stdout, exitCode } = runCLI("obfuscate");
+      expect(exitCode).toBe(1);
+      expect(stdout).toContain("Usage:");
+      expect(stdout).toContain("afterpack obfuscate");
+    });
+
+    it("should be listed in the help output", () => {
+      const { stdout } = runCLI("");
+      expect(stdout).toContain("obfuscate <file.js>");
+    });
+  });
 });

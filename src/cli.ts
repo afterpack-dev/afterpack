@@ -2,6 +2,7 @@
 
 import { version } from "../package.json";
 import { audit } from "./commands/audit.js";
+import { obfuscate } from "./commands/obfuscate.js";
 
 const args = process.argv.slice(2);
 
@@ -19,6 +20,10 @@ switch (command) {
     await audit(args[1]);
     break;
 
+  case "obfuscate":
+    await obfuscate(args[1]);
+    break;
+
   default:
     console.log(`
   AfterPack v${version}
@@ -31,7 +36,8 @@ switch (command) {
   Usage: afterpack <command> [options]
 
   Commands:
-    audit <url>     Audit your frontend for leaked secrets & sensitive data
+    audit <url>          Audit your frontend for leaked secrets & sensitive data
+    obfuscate <file.js>  Obfuscate a JavaScript file with the AfterPack engine
 
   Options:
     -v, --version   Show version
