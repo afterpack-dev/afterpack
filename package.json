@@ -46,7 +46,7 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@afterpack/core": "^0.0.1"
+    "@afterpack/core": "~0.0.9"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.4",
