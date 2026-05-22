@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import type { Diagnostic, ProcessResult } from "@afterpack/core";
 import { version } from "../../package.json";
 import { bold, cyan, dim, green, header, red } from "../utils/format.js";
 
@@ -13,36 +14,10 @@ import { bold, cyan, dim, green, header, red } from "../utils/format.js";
  * changes; this command already speaks the final contract.
  */
 
-// --- ProcessResult contract (engine.md §2, §6, §18) -------------------------
-// Mirrors `@afterpack/core`'s exported `ProcessResult` interface and
-// `cloudflare/packages/shared-types`. Declared locally so the command type-
-// checks even before `@afterpack/core` is installed (it is loaded lazily).
-
-type Severity = "info" | "error" | "critical";
-
-interface Diagnostic {
-  severity: Severity;
-  message: string;
-  code: string;
-}
-
-interface CoverageMetric {
-  inflatableBytes: number;
-  safetyPreservedBytes: number;
-  reflectionPreservedBytes: number;
-  userSkippedBytes: number;
-  userExcludedBytes: number;
-  totalBytes: number;
-}
-
-interface ProcessResult {
-  code: string;
-  sourceMap: string | null;
-  coverage: CoverageMetric;
-  complexityScore: number;
-  diagnostics: Diagnostic[];
-  protectionMap: unknown | null;
-}
+// The `ProcessResult` / `Diagnostic` contract (engine.md §2, §6, §18) is owned
+// by `@afterpack/core` and imported type-only above — a `import type` is erased
+// at compile time, so it does NOT pull the native addon into the bundle. The
+// module itself is still loaded lazily at runtime (see `loadCore` below).
 
 /** Minimal shape of the `@afterpack/core` native module this command uses. */
 interface AfterpackCore {
