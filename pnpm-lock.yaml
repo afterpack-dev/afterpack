@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      '@afterpack/core':
+        specifier: ~0.0.9
+        version: 0.0.9
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.4.4
@@ -28,6 +32,40 @@ importers:
         version: 2.1.9(@types/node@25.0.9)
 
 packages:
+
+  '@afterpack/core-darwin-arm64@0.0.9':
+    resolution: {integrity: sha512-bEYZb9ddf/NtD13XaD+2ugPnig4QweD+vIC5G6qKtvM471jE+bbSTdPZF8APGnNyQacTm4x7zO3Z2xRbSJ+52Q==}
+    engines: {node: '>= 18'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@afterpack/core-darwin-x64@0.0.9':
+    resolution: {integrity: sha512-j3o7kdVv5cO9afYvdfhyADqsBoE4OoqXS3+ULDj6FXqQl4h5YBBFWycMCW5PyWEY7Jm6yf0eSOD0jsFHECvDqA==}
+    engines: {node: '>= 18'}
+    cpu: [x64]
+    os: [darwin]
+
+  '@afterpack/core-linux-arm64-gnu@0.0.9':
+    resolution: {integrity: sha512-K0+uKkc4IB4S1DQVmhytCPAeP+8DjYAiF+MUCEo4h/33opMAOOBO95oStYVGZJsJc4bXIbdmvamUN6jO5Nvutg==}
+    engines: {node: '>= 18'}
+    cpu: [arm64]
+    os: [linux]
+
+  '@afterpack/core-linux-x64-gnu@0.0.9':
+    resolution: {integrity: sha512-aZis4ne6AlVr3iZLrHl5imXl2jiJHuEEvLSHHp5j3WbFNCRvQ9/sK+2hluzPMqUI5FTNANqTi4SpNrHVDypxSg==}
+    engines: {node: '>= 18'}
+    cpu: [x64]
+    os: [linux]
+
+  '@afterpack/core-win32-x64-msvc@0.0.9':
+    resolution: {integrity: sha512-EIEFpX9b6CLARwdfOGCT8UqHTg/fYDP/rR9E8ESQ4Ru7xKyXvmmHYyuda28ef2J2WI8TA1Y9jJShPmW8dRngQQ==}
+    engines: {node: '>= 18'}
+    cpu: [x64]
+    os: [win32]
+
+  '@afterpack/core@0.0.9':
+    resolution: {integrity: sha512-KPop4DQtcbzr7Slv2KO0Ojw24fXXJJl68bzaAUdVjLWMjK/SsOtsjttZYmjVIV2KzcTB7DeWUx7xiTVkXGPjTw==}
+    engines: {node: '>= 18'}
 
   '@babel/generator@7.28.5':
     resolution: {integrity: sha512-3EwLFhZ38J4VyIP6WNtt2kUdW9dokXA9Cr4IVIFHuCpZ3H8/YFOl5JjZHisrn1fATPBmKKqXzDFvh9fUwHz6CQ==}
@@ -994,6 +1032,29 @@ packages:
     hasBin: true
 
 snapshots:
+
+  '@afterpack/core-darwin-arm64@0.0.9':
+    optional: true
+
+  '@afterpack/core-darwin-x64@0.0.9':
+    optional: true
+
+  '@afterpack/core-linux-arm64-gnu@0.0.9':
+    optional: true
+
+  '@afterpack/core-linux-x64-gnu@0.0.9':
+    optional: true
+
+  '@afterpack/core-win32-x64-msvc@0.0.9':
+    optional: true
+
+  '@afterpack/core@0.0.9':
+    optionalDependencies:
+      '@afterpack/core-darwin-arm64': 0.0.9
+      '@afterpack/core-darwin-x64': 0.0.9
+      '@afterpack/core-linux-arm64-gnu': 0.0.9
+      '@afterpack/core-linux-x64-gnu': 0.0.9
+      '@afterpack/core-win32-x64-msvc': 0.0.9
 
   '@babel/generator@7.28.5':
     dependencies:
