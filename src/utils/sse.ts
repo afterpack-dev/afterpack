@@ -3,6 +3,18 @@ export interface SSEEvent {
   data: string;
 }
 
+export class RateLimitedError extends Error {
+  readonly retryAfterSeconds: number | null;
+  readonly scansIn24h: number | null;
+
+  constructor(retryAfterSeconds: number | null, scansIn24h: number | null) {
+    super("Rate limited");
+    this.name = "RateLimitedError";
+    this.retryAfterSeconds = retryAfterSeconds;
+    this.scansIn24h = scansIn24h;
+  }
+}
+
 export async function* streamSSE(
   url: string,
   options?: RequestInit,
@@ -10,6 +22,23 @@ export async function* streamSSE(
   const response = await fetch(url, options);
 
   if (!response.ok) {
+    if (response.status === 429) {
+      const body = await response.json().catch(() => null);
+      if (
+        body &&
+        typeof body === "object" &&
+        (body as { error?: unknown }).error === "rate_limited"
+      ) {
+        const b = body as {
+          retryAfterSeconds?: number;
+          scansIn24h?: number;
+        };
+        throw new RateLimitedError(
+          typeof b.retryAfterSeconds === "number" ? b.retryAfterSeconds : null,
+          typeof b.scansIn24h === "number" ? b.scansIn24h : null,
+        );
+      }
+    }
     throw new Error(
       `SSE request failed: ${response.status} ${response.statusText}`,
     );

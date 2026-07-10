@@ -9,7 +9,7 @@ import {
   severityColor,
   yellow,
 } from "../utils/format.js";
-import { streamSSE } from "../utils/sse.js";
+import { RateLimitedError, streamSSE } from "../utils/sse.js";
 
 const API_BASE = "https://api.afterpack.dev";
 const WEB_BASE = "https://afterpack.dev";
@@ -284,9 +284,30 @@ export async function audit(url: string | undefined): Promise<void> {
     );
     process.exit(1);
   } catch (err: any) {
+    if (err instanceof RateLimitedError) {
+      const limit = err.scansIn24h ?? 3;
+      const secs =
+        err.retryAfterSeconds && Number.isFinite(err.retryAfterSeconds)
+          ? Math.max(0, err.retryAfterSeconds)
+          : 0;
+      console.error(
+        `\n  ${yellow("Daily scan limit reached.")}\n` +
+          `  We allow ${limit} scans per day for non-registered users.\n` +
+          (secs > 0 ? `  Try again in ${formatRetry(secs)}.\n` : "\n"),
+      );
+      process.exit(1);
+    }
     console.error(
       `\n  ${red("Error:")} ${err.message ?? "Failed to connect to API"}\n`,
     );
     process.exit(1);
   }
+}
+
+function formatRetry(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const rawMinutes = Math.floor((seconds % 3600) / 60);
+  const minutes = hours === 0 ? Math.max(1, rawMinutes) : rawMinutes;
+  if (hours === 0) return `${minutes}m`;
+  return `${hours}h ${minutes}m`;
 }
