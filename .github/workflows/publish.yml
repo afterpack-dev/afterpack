@@ -106,9 +106,20 @@ jobs:
           git tag "v$VERSION"
           git push && git push --tags
 
-      # For tag push: publish to npm
+      # For tag push: publish to npm. Tags matching v*-rc.* go to the `rc`
+      # dist-tag; everything else is a stable release on `latest`.
+      # NODE_AUTH_TOKEN can be dropped once npm Trusted Publishing (OIDC) is
+      # configured for this package on npmjs.com — id-token: write and
+      # npm >= 11.5.1 are already in place for that switch.
+      - name: Update npm for provenance/OIDC support
+        if: github.event_name == 'push'
+        run: npm install -g npm@latest
+
       - name: Publish
         if: github.event_name == 'push'
-        run: npm publish --access public
+        run: |
+          if [[ "$GITHUB_REF_NAME" == *-rc.* ]]; then TAG=rc; else TAG=latest; fi
+          echo "Publishing $GITHUB_REF_NAME to dist-tag $TAG"
+          npm publish --access public --provenance --tag "$TAG"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
