@@ -39,8 +39,8 @@ npx afterpack audit example.com
 ## Obfuscation
 
 - **Free & Production-Ready** — Full obfuscation at no cost. Pro unlocks multi-file and edge features
-- **20-70x Faster** — Rust-powered engine leaves JavaScript-based tools in the dust
-- **Irreversible** — Non-linear transforms that can't be undone by deobfuscators or AI
+- **Rust-Powered** — Native Rust engine built on SWC, not a JavaScript AST walker
+- **Per-Build Polymorphism** — Every build is structurally different, so there's no reusable deobfuscator: reversing one release teaches an attacker nothing about the next
 - **Any Complexity** — From minimal to extreme protection with `--inflate`
 - **Deterministic** — Same input = same output. Works with Turborepo, Nx, Bazel
 - **Source Maps** — Generate and chain for Sentry/Datadog error tracking
