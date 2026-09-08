@@ -1,0 +1,49 @@
+{
+  "name": "@afterpack/protection-map",
+  "version": "0.1.0",
+  "description": "AfterPack Protection Map - render ProtectionMapData JSON into a self-contained HTML heatmap viewer",
+  "type": "module",
+  "main": "./render-core.mjs",
+  "types": "./render-core.d.ts",
+  "exports": {
+    ".": {
+      "types": "./render-core.d.ts",
+      "default": "./render-core.mjs"
+    },
+    "./template.html": "./template.html"
+  },
+  "bin": {
+    "afterpack-protection-map": "./render.mjs"
+  },
+  "files": [
+    "LICENSE",
+    "NOTICE",
+    "README.md",
+    "codec.mjs",
+    "render-core.d.ts",
+    "render-core.mjs",
+    "render.mjs",
+    "template.html"
+  ],
+  "scripts": {
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "test": "node --test"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/afterpack-dev/afterpack.git",
+    "directory": "packages/protection-map"
+  },
+  "license": "Apache-2.0",
+  "homepage": "https://www.afterpack.dev",
+  "bugs": {
+    "url": "https://github.com/afterpack-dev/afterpack/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

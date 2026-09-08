@@ -1,0 +1,55 @@
+{
+  "name": "@afterpack/integration-utils",
+  "version": "0.1.0",
+  "description": "AfterPack framework-integration helpers - source-map discovery, artifact paths, report policy, and artifact writing shared by @afterpack/vite and @afterpack/next",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "LICENSE",
+    "NOTICE",
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown src/index.ts --format esm --dts",
+    "dev": "tsdown src/index.ts --format esm --watch",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@afterpack/protection-map": "workspace:*",
+    "@jridgewell/sourcemap-codec": "^1.5.5"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.4",
+    "@types/node": "^22.0.0",
+    "tsdown": "^0.11.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/afterpack-dev/afterpack.git",
+    "directory": "packages/integration-utils"
+  },
+  "license": "Apache-2.0",
+  "homepage": "https://www.afterpack.dev",
+  "bugs": {
+    "url": "https://github.com/afterpack-dev/afterpack/issues"
+  }
+}

@@ -1,0 +1,375 @@
+{
+  "adding": "Append a case to a section, or add a whole section.",
+  "sections": [
+    {
+      "name": "a literal pattern, matched as a whole path or as a segment-boundary suffix",
+      "cases": [
+        {
+          "pattern": "dist/vendor/a.js",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": true
+        },
+        {
+          "pattern": "vendor/a.js",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": true
+        },
+        {
+          "pattern": "a.js",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": true
+        },
+        {
+          "pattern": "proj/dist/vendor/a.js",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": true
+        },
+        {
+          "pattern": "/Users/x/proj/dist/vendor/a.js",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": true
+        },
+        {
+          "pattern": "b.js",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": false
+        },
+        {
+          "pattern": "vendor",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": false
+        },
+        {
+          "pattern": "dist/a.js",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": false
+        }
+      ]
+    },
+    {
+      "name": "the suffix is boundary-aligned, never mid-segment",
+      "cases": [
+        {
+          "pattern": "endor/a.js",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": false
+        },
+        {
+          "pattern": "or/**",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": false
+        }
+      ]
+    },
+    {
+      "name": "a trailing ** covers the subtree AND the directory itself",
+      "cases": [
+        {
+          "pattern": "dist/**",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": true
+        },
+        {
+          "pattern": "dist/vendor/**",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": true
+        },
+        {
+          "pattern": "dist/**",
+          "path": "/Users/x/proj/dist",
+          "matches": true
+        },
+        {
+          "pattern": "**",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": true
+        },
+        {
+          "pattern": "build/**",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": false
+        }
+      ]
+    },
+    {
+      "name": "a ** segment spans zero or more segments",
+      "cases": [
+        {
+          "pattern": "**/a.js",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": true
+        },
+        {
+          "pattern": "**/a.js",
+          "path": "a.js",
+          "matches": true
+        },
+        {
+          "pattern": "**/vendor/a.js",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": true
+        },
+        {
+          "pattern": "**/vendor/b.js",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": false
+        },
+        {
+          "pattern": "dist/**/a.js",
+          "path": "/Users/x/proj/dist/a.js",
+          "matches": true
+        },
+        {
+          "pattern": "dist/**/vendor/a.js",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": true
+        }
+      ]
+    },
+    {
+      "name": "node_modules, the pattern the walk opt-in is written with",
+      "cases": [
+        {
+          "pattern": "**/node_modules/**",
+          "path": "/Users/x/proj/node_modules/lodash/index.js",
+          "matches": true
+        },
+        {
+          "pattern": "**/node_modules/**",
+          "path": "node_modules/a.js",
+          "matches": true
+        },
+        {
+          "pattern": "**/node_modules/**",
+          "path": "/x/node_modules",
+          "matches": true
+        },
+        {
+          "pattern": "**/node_modules/**",
+          "path": "/a/node_modules/b/node_modules/c/d.js",
+          "matches": true
+        },
+        {
+          "pattern": "**/node_modules/b/**/d.js",
+          "path": "/a/node_modules/b/node_modules/c/d.js",
+          "matches": true
+        },
+        {
+          "pattern": "**/node_modules/**",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": false
+        },
+        {
+          "pattern": "node_modules/**",
+          "path": "/Users/x/proj/node_modules",
+          "matches": true
+        }
+      ]
+    },
+    {
+      "name": "* and ? never cross a separator",
+      "cases": [
+        {
+          "pattern": "dist/*/a.js",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": true
+        },
+        {
+          "pattern": "*.js",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": true
+        },
+        {
+          "pattern": "vendor/a.?s",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": true
+        },
+        {
+          "pattern": "dist/*.js",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": false
+        },
+        {
+          "pattern": "vendor/a.?",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": false
+        },
+        {
+          "pattern": "dist?vendor/a.js",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": false
+        }
+      ]
+    },
+    {
+      "name": "a leading / or a drive letter anchors to the whole path",
+      "cases": [
+        {
+          "pattern": "/Users/**",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": true
+        },
+        {
+          "pattern": "dist/**",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": true
+        },
+        {
+          "pattern": "/dist/**",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": false
+        },
+        {
+          "pattern": "C:/proj/**",
+          "path": "C:\\proj\\dist\\vendor\\a.js",
+          "matches": true
+        },
+        {
+          "pattern": "D:/proj/**",
+          "path": "C:\\proj\\dist\\vendor\\a.js",
+          "matches": false
+        }
+      ]
+    },
+    {
+      "name": "backslashes normalize to / on both sides",
+      "cases": [
+        {
+          "pattern": "dist/vendor/**",
+          "path": "C:\\proj\\dist\\vendor\\a.js",
+          "matches": true
+        },
+        {
+          "pattern": "dist\\vendor\\**",
+          "path": "C:\\proj\\dist\\vendor\\a.js",
+          "matches": true
+        },
+        {
+          "pattern": "C:\\proj\\**",
+          "path": "C:\\proj\\dist\\vendor\\a.js",
+          "matches": true
+        },
+        {
+          "pattern": "D:\\proj\\**",
+          "path": "C:\\proj\\dist\\vendor\\a.js",
+          "matches": false
+        },
+        {
+          "pattern": "**/node_modules/**",
+          "path": "C:\\proj\\node_modules\\dep\\index.js",
+          "matches": true
+        }
+      ]
+    },
+    {
+      "name": "matching is case-sensitive",
+      "cases": [
+        {
+          "pattern": "DIST/**",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": false
+        },
+        {
+          "pattern": "dist/vendor/A.js",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": false
+        },
+        {
+          "pattern": "**/NODE_MODULES/**",
+          "path": "/Users/x/proj/node_modules/lodash/index.js",
+          "matches": false
+        }
+      ]
+    },
+    {
+      "name": "an empty or separator-only pattern matches nothing",
+      "cases": [
+        {
+          "pattern": "",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": false
+        },
+        {
+          "pattern": "/",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": false
+        },
+        {
+          "pattern": "///",
+          "path": "/Users/x/proj/dist/vendor/a.js",
+          "matches": false
+        },
+        {
+          "pattern": "dist/**",
+          "path": "",
+          "matches": false
+        }
+      ]
+    },
+    {
+      "name": "backtracking, at both the segment and the ** level",
+      "cases": [
+        {
+          "pattern": "**/b/**/e/**",
+          "path": "/a/b/c/d/e/f.min.js",
+          "matches": true
+        },
+        {
+          "pattern": "**/*.min.js",
+          "path": "/a/b/c/d/e/f.min.js",
+          "matches": true
+        },
+        {
+          "pattern": "a/**/c/**/f.min.js",
+          "path": "/a/b/c/d/e/f.min.js",
+          "matches": true
+        },
+        {
+          "pattern": "**/**/**/f.min.js",
+          "path": "/a/b/c/d/e/f.min.js",
+          "matches": true
+        },
+        {
+          "pattern": "**/b/**/z/**",
+          "path": "/a/b/c/d/e/f.min.js",
+          "matches": false
+        },
+        {
+          "pattern": "*a*a*a*b",
+          "path": "aaaaaaaaaaaaaaaaaaaaaaaaab",
+          "matches": true
+        },
+        {
+          "pattern": "*a*a*a*b",
+          "path": "aaaaaaaaaaaaaaaaaaaaaaaaac",
+          "matches": false
+        }
+      ]
+    },
+    {
+      "name": "wildcards count characters, not bytes",
+      "cases": [
+        {
+          "pattern": "данные/**",
+          "path": "/proj/данные/файл.js",
+          "matches": true
+        },
+        {
+          "pattern": "файл.js",
+          "path": "/proj/данные/файл.js",
+          "matches": true
+        },
+        {
+          "pattern": "????.js",
+          "path": "/proj/данные/файл.js",
+          "matches": true
+        },
+        {
+          "pattern": "???.js",
+          "path": "/proj/данные/файл.js",
+          "matches": false
+        }
+      ]
+    }
+  ]
+}

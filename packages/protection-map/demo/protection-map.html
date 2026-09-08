@@ -1,0 +1,1787 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>AfterPack · Protection Map</title>
+<style>
+/* ==========================================================================
+   AfterPack Protection Map — self-contained viewer.
+   Dev-only artifact. No external requests: no CDN, no webfonts, no images.
+   ========================================================================== */
+
+/* ---- design tokens (light default) -------------------------------------- */
+:root {
+  color-scheme: light dark;
+
+  --font-mono: ui-monospace, "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  --ground: #f7f9f8;
+  --surface-1: #ffffff;
+  --surface-2: #eef2f2;
+  --surface-3: #e4eaea;
+  --surface-hover: #dfe8e8;
+  --border: #d7e0e0;
+  --border-strong: #bdcbcb;
+  --text-primary: #10201f;
+  --text-secondary: #45605f;
+  --text-muted: #77908e;
+
+  --brand: #0e8f9d;
+  --brand-ink: #ffffff;
+  --focus-ring: #0e8f9d;
+
+  /* the whole-file "machinery bucket" wash -- deliberately near-neutral */
+  --wash: #ecf3f3;
+
+  /* protection heatmap: sequential single-hue teal, pale(low score) -> deep(high score) */
+  --heat-0: #d3eef1;
+  --heat-1: #abdde4;
+  --heat-2: #7ec5cf;
+  --heat-3: #49a5b1;
+  --heat-4: #01828f;
+  --heat-5: #005f6a;
+  --heat-6: #004048;
+
+  /* cost lens: sequential single-hue amber, pale(cheap) -> deep(costly) */
+  --cost-0: #f8e3d5;
+  --cost-1: #eec9ae;
+  --cost-2: #dda780;
+  --cost-3: #c48350;
+  --cost-4: #a45f24;
+  --cost-5: #7f4406;
+  --cost-6: #5a2d00;
+
+  /* exclusion bands (orthogonal to heat/cost -- the engine currently only ever
+     emits "inflatable", the rest are reserved by the spec) */
+  --band-safety: #cfd8d8;
+  --band-reflection: #b9c4c4;
+  --band-skip: #8f9d9d;
+
+  /* status colors -- semantic, kept separate from the brand accent and from
+     both ramps; never the only signal (icon + text label always ship too) */
+  --status-leak: #ad3646;
+  --status-leak-soft: #fbe7ea;
+  --status-property: #9a5c12;
+  --status-property-soft: #f7ecd9;
+  --status-weak: #7a6a00;
+  --status-weak-soft: #f2efd6;
+
+  /* reversal-class chips -- categorical, distinct from the sequential heat
+     ramp above. preserved=neutral, renamed-encoded=brand teal (achieved
+     today), flattened-fused=deeper blue-teal (Free ceiling), destroyed-fused
+     = premium violet/gold (Pro ceiling). */
+  --class-preserved: #5b6d6b;
+  --class-preserved-soft: #e7edec;
+  --class-renamed: #0e8f9d;
+  --class-renamed-soft: #dbf1f2;
+  --class-flattened: #21607f;
+  --class-flattened-soft: #dce9f0;
+  --class-destroyed: #7141b8;
+  --class-destroyed-soft: #efe3fb;
+  --class-destroyed-edge: #c99a3a;
+
+  --shadow: 0 1px 2px rgba(16, 32, 31, 0.06), 0 4px 16px rgba(16, 32, 31, 0.06);
+  --radius: 8px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #0d1414;
+    --surface-1: #121b1b;
+    --surface-2: #16201f;
+    --surface-3: #1c2726;
+    --surface-hover: #223030;
+    --border: #223030;
+    --border-strong: #2d3d3c;
+    --text-primary: #e7f1f0;
+    --text-secondary: #a9c1bf;
+    --text-muted: #6f8886;
+
+    --brand: #2ec1cf;
+    --brand-ink: #06181a;
+    --focus-ring: #2ec1cf;
+
+    --wash: #142020;
+
+    --heat-0: #081e21; --heat-1: #02353a; --heat-2: #00535b; --heat-3: #00737e;
+    --heat-4: #0094a3; --heat-5: #00b5c6; --heat-6: #44d4e2;
+
+    --cost-0: #2a1c11; --cost-1: #482b14; --cost-2: #6d411c; --cost-3: #955823;
+    --cost-4: #bf6f29; --cost-5: #e78b3c; --cost-6: #fca765;
+
+    --band-safety: #2a3636; --band-reflection: #33403f; --band-skip: #46504f;
+
+    --status-leak: #e2707c; --status-leak-soft: #2a1418;
+    --status-property: #e3a24a; --status-property-soft: #2a2013;
+    --status-weak: #cdbb55; --status-weak-soft: #26240f;
+
+    --class-preserved: #9fb3b0; --class-preserved-soft: #1c2726;
+    --class-renamed: #2ec1cf; --class-renamed-soft: #0e2b2c;
+    --class-flattened: #5db8e0; --class-flattened-soft: #12262f;
+    --class-destroyed: #c9a3ff; --class-destroyed-soft: #241a33; --class-destroyed-edge: #e8c468;
+
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+}
+
+/* explicit toggle always wins over both the default and the media query,
+   because an attribute selector out-specifies a bare :root in both places */
+:root[data-theme="light"] {
+  --ground: #f7f9f8; --surface-1: #ffffff; --surface-2: #eef2f2; --surface-3: #e4eaea;
+  --surface-hover: #dfe8e8; --border: #d7e0e0; --border-strong: #bdcbcb;
+  --text-primary: #10201f; --text-secondary: #45605f; --text-muted: #77908e;
+  --brand: #0e8f9d; --brand-ink: #ffffff; --focus-ring: #0e8f9d; --wash: #ecf3f3;
+  --heat-0: #d3eef1; --heat-1: #abdde4; --heat-2: #7ec5cf; --heat-3: #49a5b1;
+  --heat-4: #01828f; --heat-5: #005f6a; --heat-6: #004048;
+  --cost-0: #f8e3d5; --cost-1: #eec9ae; --cost-2: #dda780; --cost-3: #c48350;
+  --cost-4: #a45f24; --cost-5: #7f4406; --cost-6: #5a2d00;
+  --band-safety: #cfd8d8; --band-reflection: #b9c4c4; --band-skip: #8f9d9d;
+  --status-leak: #ad3646; --status-leak-soft: #fbe7ea;
+  --status-property: #9a5c12; --status-property-soft: #f7ecd9;
+  --status-weak: #7a6a00; --status-weak-soft: #f2efd6;
+  --class-preserved: #5b6d6b; --class-preserved-soft: #e7edec;
+  --class-renamed: #0e8f9d; --class-renamed-soft: #dbf1f2;
+  --class-flattened: #21607f; --class-flattened-soft: #dce9f0;
+  --class-destroyed: #7141b8; --class-destroyed-soft: #efe3fb; --class-destroyed-edge: #c99a3a;
+  --shadow: 0 1px 2px rgba(16, 32, 31, 0.06), 0 4px 16px rgba(16, 32, 31, 0.06);
+}
+
+:root[data-theme="dark"] {
+  --ground: #0d1414; --surface-1: #121b1b; --surface-2: #16201f; --surface-3: #1c2726;
+  --surface-hover: #223030; --border: #223030; --border-strong: #2d3d3c;
+  --text-primary: #e7f1f0; --text-secondary: #a9c1bf; --text-muted: #6f8886;
+  --brand: #2ec1cf; --brand-ink: #06181a; --focus-ring: #2ec1cf; --wash: #142020;
+  --heat-0: #081e21; --heat-1: #02353a; --heat-2: #00535b; --heat-3: #00737e;
+  --heat-4: #0094a3; --heat-5: #00b5c6; --heat-6: #44d4e2;
+  --cost-0: #2a1c11; --cost-1: #482b14; --cost-2: #6d411c; --cost-3: #955823;
+  --cost-4: #bf6f29; --cost-5: #e78b3c; --cost-6: #fca765;
+  --band-safety: #2a3636; --band-reflection: #33403f; --band-skip: #46504f;
+  --status-leak: #e2707c; --status-leak-soft: #2a1418;
+  --status-property: #e3a24a; --status-property-soft: #2a2013;
+  --status-weak: #cdbb55; --status-weak-soft: #26240f;
+  --class-preserved: #9fb3b0; --class-preserved-soft: #1c2726;
+  --class-renamed: #2ec1cf; --class-renamed-soft: #0e2b2c;
+  --class-flattened: #5db8e0; --class-flattened-soft: #12262f;
+  --class-destroyed: #c9a3ff; --class-destroyed-soft: #241a33; --class-destroyed-edge: #e8c468;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+/* ---- reset / base --------------------------------------------------------- */
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+html { overflow-x: hidden; }
+body {
+  margin: 0;
+  overflow-x: hidden;
+  background: var(--ground);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, h4 { margin: 0; font-family: var(--font-mono); font-weight: 600; }
+button { font: inherit; color: inherit; }
+p { margin: 0 0 0.6em; }
+p:last-child { margin-bottom: 0; }
+ul { margin: 0; padding: 0; list-style: none; }
+a { color: var(--brand); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.mono { font-family: var(--font-mono); }
+
+/* ---- app shell -------------------------------------------------------------- */
+.app-shell {
+  display: grid;
+  grid-template-columns: 262px minmax(0, 1fr) 340px;
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "top    top    top"
+    "left   center right";
+  height: 100vh;
+  width: 100%;
+}
+@media (max-width: 980px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto auto;
+    grid-template-areas:
+      "top"
+      "left"
+      "center"
+      "right";
+    height: auto;
+    min-height: 100vh;
+  }
+  .rail-left, .rail-right { max-height: 46vh; }
+  .pane-center { min-height: 60vh; }
+}
+@media (max-width: 480px) {
+  .topbar { padding: 8px 10px; }
+  .rail-left, .rail-right { padding: 10px 8px 18px; }
+  .code-toolbar { padding: 6px 10px; }
+}
+
+/* ---- top bar ---------------------------------------------------------------- */
+.topbar {
+  grid-area: top;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  row-gap: 8px;
+  padding: 10px 16px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+  min-width: 0;
+}
+.topbar h1 {
+  font-size: 14px;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.topbar h1 .dot { color: var(--brand); }
+.tag-devonly {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--status-leak);
+  border: 1px solid var(--status-leak);
+  border-radius: 4px;
+  padding: 2px 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.topbar .spacer { flex: 1 1 auto; min-width: 8px; }
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.segmented button {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: none;
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  padding: 7px 12px;
+  cursor: pointer;
+}
+.segmented button + button { border-left: 1px solid var(--border-strong); }
+.segmented button[aria-pressed="true"] { background: var(--brand); color: var(--brand-ink); }
+.segmented button:hover:not([aria-pressed="true"]) { background: var(--surface-hover); }
+
+.theme-toggle {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  padding: 7px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.theme-toggle:hover { background: var(--surface-hover); }
+
+/* ---- rails ------------------------------------------------------------------ */
+.rail-left, .rail-right { overflow-y: auto; min-width: 0; }
+.rail-left {
+  grid-area: left;
+  background: var(--surface-2);
+  border-right: 1px solid var(--border);
+  padding: 14px 12px 24px;
+}
+.rail-right {
+  grid-area: right;
+  background: var(--surface-2);
+  border-left: 1px solid var(--border);
+  padding: 14px 12px 24px;
+}
+.rail-section { margin-bottom: 18px; }
+.rail-section:last-child { margin-bottom: 0; }
+.rail-section > .eyebrow { display: block; margin-bottom: 8px; }
+
+.workspace-line {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+/* file tree */
+.tree { display: flex; flex-direction: column; }
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  padding-right: 8px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+}
+.tree-row:hover { background: var(--surface-hover); }
+.tree-row-file.is-active { background: var(--surface-1); box-shadow: 0 0 0 1px var(--brand) inset; font-weight: 700; }
+.tree-twisty {
+  flex: 0 0 auto;
+  width: 1em;
+  display: inline-block;
+  text-align: center;
+  color: var(--text-muted);
+  transition: transform 0.12s ease;
+}
+.tree-row-folder[aria-expanded="false"] .tree-twisty { transform: rotate(-90deg); }
+.tree-icon { flex: 0 0 auto; }
+.tree-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-count { flex: 0 0 auto; font-size: 10px; color: var(--text-muted); }
+.tree-file-meter { padding-bottom: 6px; padding-right: 10px; }
+.badge-leak {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--status-leak);
+  border-radius: 999px;
+  padding: 1px 6px;
+  line-height: 1.4;
+}
+
+.meter { height: 5px; border-radius: 3px; background: var(--surface-3); overflow: hidden; }
+.meter > i { display: block; height: 100%; border-radius: 3px 0 0 3px; }
+.meter-lg { height: 7px; border-radius: 4px; }
+
+/* KPI grid */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  row-gap: 6px;
+  column-gap: 10px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+.kpi-label { font-size: 11.5px; color: var(--text-secondary); align-self: center; }
+.kpi-value { font-family: var(--font-mono); font-size: 12.5px; font-weight: 700; text-align: right; white-space: nowrap; }
+.kpi-value.warn { color: var(--status-leak); }
+
+/* class distribution + legend */
+.class-dist-bar { display: flex; height: 10px; border-radius: 4px; overflow: hidden; background: var(--surface-3); margin-bottom: 8px; }
+.class-dist-bar i { display: block; height: 100%; }
+.class-dist-bar i[data-class="preserved"] { background: var(--class-preserved); }
+.class-dist-bar i[data-class="renamed-encoded"] { background: var(--class-renamed); }
+.class-dist-bar i[data-class="flattened-fused"] { background: var(--class-flattened); }
+.class-dist-bar i[data-class="destroyed-fused"] { background: var(--class-destroyed); }
+.class-dist-rows { display: flex; flex-direction: column; gap: 4px; margin-bottom: 2px; }
+.class-dist-row { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.class-dist-count { margin-left: auto; font-family: var(--font-mono); font-weight: 700; color: var(--text-secondary); }
+.class-reached-line { font-size: 11px; color: var(--text-secondary); margin-top: 6px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.class-dist-footnote { font-size: 10px; color: var(--text-muted); margin-top: 6px; font-style: italic; }
+
+.class-legend-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 11px; }
+.class-legend-note { color: var(--text-secondary); flex: 1 1 auto; min-width: 0; }
+.class-legend-flag {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.class-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.class-chip .dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+.class-chip[data-class="preserved"] { color: var(--class-preserved); background: var(--class-preserved-soft); }
+.class-chip[data-class="preserved"] .dot { background: var(--class-preserved); }
+.class-chip[data-class="renamed-encoded"] { color: var(--class-renamed); background: var(--class-renamed-soft); }
+.class-chip[data-class="renamed-encoded"] .dot { background: var(--class-renamed); }
+.class-chip[data-class="flattened-fused"] { color: var(--class-flattened); background: var(--class-flattened-soft); }
+.class-chip[data-class="flattened-fused"] .dot { background: var(--class-flattened); }
+.class-chip[data-class="destroyed-fused"] { color: var(--class-destroyed); background: var(--class-destroyed-soft); border-color: var(--class-destroyed-edge); }
+.class-chip[data-class="destroyed-fused"] .dot { background: var(--class-destroyed); }
+.class-chip.is-ghost { opacity: 0.6; background: transparent; border-style: dashed; border-color: currentColor; }
+
+.tier-pill {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: 4px;
+  padding: 2px 6px;
+  border: 1px solid;
+  flex-shrink: 0;
+}
+.tier-pill.tier-free { color: var(--text-secondary); border-color: var(--border-strong); background: var(--surface-2); }
+.tier-pill.tier-pro { color: var(--class-destroyed); border-color: var(--class-destroyed); background: var(--class-destroyed-soft); }
+
+/* legend (heat/cost scale) */
+.legend-bar { height: 10px; border-radius: 3px; border: 1px solid var(--border); }
+.legend-labels { display: flex; justify-content: space-between; margin-top: 5px; font-size: 10.5px; font-family: var(--font-mono); color: var(--text-muted); }
+
+/* engine info */
+.engine-info {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-muted);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 8px;
+}
+.engine-info dt { text-align: left; }
+.engine-info dd { margin: 0; text-align: right; color: var(--text-secondary); overflow-wrap: anywhere; }
+
+/* ---- center code pane -------------------------------------------------------- */
+.pane-center { grid-area: center; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--ground); }
+.code-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+.code-toolbar .toolbar-spacer { flex: 1 1 auto; min-width: 8px; }
+.toggle-inline { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); cursor: pointer; }
+.toggle-inline input[type="checkbox"] { accent-color: var(--brand); width: 13px; height: 13px; margin: 0; }
+.toggle-inline:has(input:disabled) { opacity: 0.45; cursor: not-allowed; }
+#highlight-class-status { color: var(--brand); }
+
+.code-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 10px 0 40px; }
+.code-line { display: flex; min-width: max-content; white-space: pre; }
+.ln {
+  position: sticky;
+  left: 0;
+  flex: 0 0 auto;
+  min-width: 3.6em;
+  padding: 0 10px 0 14px;
+  text-align: right;
+  color: var(--text-muted);
+  background: var(--ground);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  user-select: none;
+}
+.lc { flex: 1 1 auto; font-family: var(--font-mono); font-size: 12.5px; padding-right: 40px; }
+.tok { cursor: pointer; border-radius: 2px; transition: filter 0.1s ease; }
+.tok:hover { filter: brightness(1.12); }
+.tok.is-selected { outline: 2px solid var(--brand); outline-offset: 1px; }
+.tok.spot-leak { text-decoration: underline; text-decoration-color: var(--status-leak); text-decoration-thickness: 2px; text-underline-offset: 2px; }
+.tok.spot-propertyName { text-decoration: underline; text-decoration-color: var(--status-property); text-decoration-thickness: 2px; text-underline-offset: 2px; }
+.tok.spot-weak { text-decoration: underline dashed; text-decoration-color: var(--status-weak); text-decoration-thickness: 2px; text-underline-offset: 2px; }
+.pin { display: inline-block; margin-right: 1px; }
+
+/* "highlight same class" mode -- a deliberate, labeled overlay (toggled via
+   #highlight-class-toggle), orthogonal to the heat wash. Dims every painted
+   token whose region is a DIFFERENT reversal class than the current
+   selection, and rings the ones that match. Tokens with no data-class
+   (engine scaffolding / gaps) are untouched either way. */
+.code-body[data-highlight-class] .tok[data-class]:not([data-class="preserved"]):not([data-class="renamed-encoded"]):not([data-class="flattened-fused"]):not([data-class="destroyed-fused"]) { opacity: 1; }
+.code-body[data-highlight-class="preserved"] .tok[data-class]:not([data-class="preserved"]),
+.code-body[data-highlight-class="renamed-encoded"] .tok[data-class]:not([data-class="renamed-encoded"]),
+.code-body[data-highlight-class="flattened-fused"] .tok[data-class]:not([data-class="flattened-fused"]),
+.code-body[data-highlight-class="destroyed-fused"] .tok[data-class]:not([data-class="destroyed-fused"]) {
+  opacity: 0.28;
+}
+.code-body[data-highlight-class="preserved"] .tok[data-class="preserved"] { box-shadow: 0 0 0 1px var(--class-preserved) inset; }
+.code-body[data-highlight-class="renamed-encoded"] .tok[data-class="renamed-encoded"] { box-shadow: 0 0 0 1px var(--class-renamed) inset; }
+.code-body[data-highlight-class="flattened-fused"] .tok[data-class="flattened-fused"] { box-shadow: 0 0 0 1px var(--class-flattened) inset; }
+.code-body[data-highlight-class="destroyed-fused"] .tok[data-class="destroyed-fused"] { box-shadow: 0 0 0 1px var(--class-destroyed) inset; }
+
+/* ---- right panel -------------------------------------------------------------- */
+.caveat {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  margin-bottom: 16px;
+}
+
+.weakspot-item {
+  width: 100%;
+  text-align: left;
+  display: block;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 9px;
+  cursor: pointer;
+  margin-bottom: 7px;
+}
+.weakspot-item:last-child { margin-bottom: 0; }
+.weakspot-item:hover { border-color: var(--border-strong); }
+.weakspot-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.weakspot-sample { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.weakspot-reason { font-size: 11px; color: var(--text-secondary); }
+.empty-note { font-size: 11.5px; color: var(--text-muted); font-style: italic; }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 2px 7px;
+  flex-shrink: 0;
+}
+.pill-leak { background: var(--status-leak-soft); color: var(--status-leak); }
+.pill-propertyName { background: var(--status-property-soft); color: var(--status-property); }
+.pill-weak { background: var(--status-weak-soft); color: var(--status-weak); }
+
+.inspector-section {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.inspector-section:last-child { margin-bottom: 0; }
+.inspector-section h3 { font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.inspector-empty { font-size: 12px; color: var(--text-muted); }
+
+/* region card -- the LEAD of the inspector: reversal class first, everything
+   else (lineage, cost) is secondary and sits below it */
+.region-card-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.region-score { margin-left: auto; font-family: var(--font-mono); font-weight: 700; font-size: 13px; color: var(--text-primary); }
+.region-why { font-size: 12px; color: var(--text-secondary); margin: 8px 0 6px; }
+.region-meta { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); }
+
+.stat-grid { display: grid; grid-template-columns: 1fr auto; row-gap: 4px; column-gap: 8px; font-size: 12px; }
+.stat-grid dt { color: var(--text-secondary); }
+.stat-grid dd { margin: 0; text-align: right; font-family: var(--font-mono); font-weight: 600; overflow-wrap: anywhere; }
+
+.lineage-row { display: flex; align-items: baseline; gap: 6px; padding: 5px 0; border-top: 1px dashed var(--border); font-size: 11.5px; }
+.lineage-row:first-child { border-top: none; }
+.lineage-idx { color: var(--text-muted); font-family: var(--font-mono); flex: 0 0 auto; width: 1.6em; }
+.lineage-transform { font-family: var(--font-mono); font-weight: 700; flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.lineage-count { color: var(--brand); font-weight: 700; }
+.chip {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: var(--surface-3);
+  color: var(--text-secondary);
+  border-radius: 4px;
+  padding: 1px 5px;
+  flex: 0 0 auto;
+}
+.lineage-delta { color: var(--text-muted); font-family: var(--font-mono); font-size: 10.5px; flex: 0 0 auto; white-space: nowrap; }
+.lineage-more { margin-top: 6px; font-size: 10.5px; color: var(--text-muted); font-style: italic; }
+
+.callout { border: 1px solid var(--status-leak); background: var(--status-leak-soft); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 12px; }
+.callout.callout-propertyName { border-color: var(--status-property); background: var(--status-property-soft); }
+.callout.callout-weak { border-color: var(--status-weak); background: var(--status-weak-soft); }
+.callout h3 { display: flex; align-items: center; gap: 6px; color: var(--status-leak); margin-bottom: 8px; }
+.callout-propertyName h3 { color: var(--status-property); }
+.callout-weak h3 { color: var(--status-weak); }
+.callout p { font-size: 12px; color: var(--text-primary); }
+.callout .class-chip { margin-bottom: 8px; }
+.sample-box {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 6px 8px;
+  margin: 6px 0;
+  word-break: break-all;
+}
+.cta { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.cta code { font-family: var(--font-mono); font-size: 11px; background: var(--surface-1); border: 1px solid var(--border); border-radius: 5px; padding: 4px 7px; }
+.copy-btn {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border: 1px solid var(--status-leak);
+  color: var(--status-leak);
+  background: transparent;
+  border-radius: 5px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.callout-propertyName .copy-btn { border-color: var(--status-property); color: var(--status-property); }
+.callout-weak .copy-btn { border-color: var(--status-weak); color: var(--status-weak); }
+.copy-btn:hover { background: var(--surface-1); }
+
+.ceiling-box { border: 1px solid var(--class-destroyed); background: var(--class-destroyed-soft); border-radius: var(--radius); padding: 10px 12px; margin-top: 4px; }
+.ceiling-box h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--class-destroyed); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ceiling-box .sample-box { background: var(--surface-1); }
+.ceiling-note { font-size: 11px; color: var(--text-secondary); margin-top: 6px; }
+.copy-btn-pro { border-color: var(--class-destroyed); color: var(--class-destroyed); }
+.copy-btn-pro:hover { background: var(--surface-1); }
+
+/* narrow-screen: keep the code pane's own horizontal scroll only */
+@media (max-width: 980px) { .app-shell { overflow: visible; } }
+
+/* scrollbar aesthetics (progressive; harmless if unsupported) */
+.rail-left, .rail-right, .code-body { scrollbar-width: thin; }
+</style>
+</head>
+<body>
+<div class="app-shell" id="app">
+
+  <header class="topbar">
+    <h1>AfterPack<span class="dot"> · </span>Protection Map</h1>
+    <span class="tag-devonly">Dev only</span>
+    <div class="spacer"></div>
+    <div class="segmented" role="group" aria-label="Heatmap mode">
+      <button type="button" id="mode-protection" aria-pressed="true">Protection</button>
+      <button type="button" id="mode-cost" aria-pressed="false">Cost</button>
+    </div>
+    <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Cycle color theme">🖥 Auto</button>
+  </header>
+
+  <aside class="rail-left" aria-label="Files and summary">
+    <div class="rail-section">
+      <span class="eyebrow">Files</span>
+      <div class="workspace-line" id="workspace-summary">—</div>
+      <div class="tree" id="file-tree" role="group" aria-label="File tree"></div>
+    </div>
+
+    <div class="rail-section">
+      <span class="eyebrow">Summary · selected file</span>
+      <div class="kpi-grid" id="kpi-grid"></div>
+    </div>
+
+    <div class="rail-section">
+      <span class="eyebrow">Class distribution · selected file</span>
+      <div class="class-dist-bar" id="class-dist-bar"></div>
+      <ul class="class-dist-rows" id="class-dist-rows"></ul>
+      <div class="class-reached-line" id="class-reached"></div>
+      <div class="class-dist-footnote" id="class-dist-footnote" hidden></div>
+    </div>
+
+    <div class="rail-section">
+      <span class="eyebrow">Reversal classes</span>
+      <ul id="class-legend"></ul>
+    </div>
+
+    <div class="rail-section">
+      <span class="eyebrow" id="legend-title">Scale · Protection</span>
+      <div class="legend-bar" id="legend-bar"></div>
+      <div class="legend-labels" id="legend-labels"><span>low</span><span>high</span></div>
+    </div>
+
+    <div class="rail-section">
+      <span class="eyebrow">Engine</span>
+      <dl class="engine-info" id="engine-info"></dl>
+    </div>
+  </aside>
+
+  <main class="pane-center" aria-label="Original source, painted by protection intensity">
+    <div class="code-toolbar" id="code-toolbar">
+      <span id="source-origin-note">—</span>
+      <span class="toolbar-spacer"></span>
+      <label class="toggle-inline" id="highlight-class-label">
+        <input type="checkbox" id="highlight-class-toggle" disabled />
+        Highlight same class
+      </label>
+      <span id="highlight-class-status" hidden></span>
+    </div>
+    <div class="code-body" id="code-body" tabindex="0" role="group" aria-label="Painted source code"></div>
+  </main>
+
+  <aside class="rail-right" aria-label="Weak spots and inspector">
+    <div class="caveat">
+      Sizes are the engine's <strong>estimate</strong> of added output bytes, not a byte-exact
+      count. Decode-ops / call-frames are a <strong>per-site static</strong> op count — not
+      amortized over loops or repeated calls.
+    </div>
+
+    <div class="rail-section">
+      <span class="eyebrow" id="weakspots-title">Weak spots</span>
+      <div id="weakspots-list"></div>
+    </div>
+
+    <div class="rail-section">
+      <span class="eyebrow">Inspector</span>
+      <div id="inspector"></div>
+    </div>
+  </aside>
+
+</div>
+
+<script id="afterpack-data" type="application/json">{"files":[{"schemaVersion":2,"generatedAt":null,"engine":{"version":"0.0.10","backend":"IrAuthoritative","seed":42,"preset":"Hard","materialize":true,"complexityTarget":12},"file":{"path":null,"sourceOrigin":"engineInput","originalSource":"// A small payment module — the kind of code a customer wants to protect.\nclass PaymentProcessor {\n  #apiKey;\n  constructor(apiKey) {\n    this.#apiKey = apiKey;\n    this.endpoint = \"https://api.payments.acme.io/v2/charge\";\n  }\n  charge(amount, currency) {\n    const payload = { key: this.#apiKey, amount, currency, note: \"customer charge\" };\n    return this.#send(payload);\n  }\n  #send(payload) { return globalThis.fetch(this.endpoint, { method: \"POST\", body: JSON.stringify(payload) }); }\n}\n\nconst SECRET_KEY = \"sk_live_51H8xQ2eZvKYlo2C9_supersecret_deadbeef\";\nconst config = { region: \"us-east-1\", maxRetries: 3, timeoutMs: 30000, debug: false, tier: \"enterprise\" };\n\nfunction classify(code) {\n  switch (code) {\n    case \"ok\": return \"accepted\";\n    case \"insufficient\": return \"declined-funds\";\n    default: return \"unknown-status\";\n  }\n}\n\nretry: for (let attempt = 0; attempt \u003c config.maxRetries; attempt++) {\n  if (attempt > 10) { console.log(\"DEBUG_BACKDOOR_TOKEN_do_not_ship\"); break retry; }\n}\n\nconst proc = new PaymentProcessor(SECRET_KEY);\nconsole.log(classify(\"ok\"), proc.charge(4200, \"USD\"));\n","inputSize":1107,"outputSize":79944,"inflationRatio":72.2168,"coverage":{"totalBytes":1107,"inflatableBytes":869,"safetyPreservedBytes":238,"reflectionPreservedBytes":0,"userSkippedBytes":0,"userExcludedBytes":0,"vendorExcludedBytes":0}},"regions":[{"span":[0,1107],"nodeKind":"Program","reversalClass":"preserved","score":0,"tier":null,"why":"Third-party code or public contracts — left readable on purpose.","ceiling":null,"entropyRaw":10232,"entropy":0.466,"transformCount":2039,"sizeDeltaEst":30792,"perf":{"costClass":"decode+call","decodeOps":37,"callFrames":2002},"lineage":[{"transform":"MaterializeAsCachedString","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":556,"label":["materializationKind","cachedString"]},{"transform":"MaterializeAsConditionalSelection","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":282,"label":["materializationKind","conditionalSelection"]},{"transform":"MaterializeAsObjectProperty","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":158,"label":["materializationKind","objectProperty"]},{"transform":"MaterializeAsMixedArray","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":255,"label":["materializationKind","mixedArray"]},{"transform":"MaterializeAsObjectProperty","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":217,"label":["materializationKind","objectProperty"]},{"transform":"MaterializeAsCachedString","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":250,"label":["materializationKind","cachedString"]},{"transform":"MaterializeAsConditionalSelection","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":291,"label":["materializationKind","conditionalSelection"]},{"transform":"MaterializeAsMixedArray","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":279,"label":["materializationKind","mixedArray"]},{"transform":"MaterializeAsConditionalSelection","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":246,"label":["materializationKind","conditionalSelection"]},{"transform":"MaterializeAsObjectProperty","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":252,"label":["materializationKind","objectProperty"]},{"transform":"MaterializeAsCachedString","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":232,"label":["materializationKind","cachedString"]},{"transform":"MaterializeAsCachedString","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":202,"label":["materializationKind","cachedString"]},{"transform":"MaterializeAsCachedString","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":191,"label":["materializationKind","cachedString"]},{"transform":"MaterializeAsObjectProperty","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":163,"label":["materializationKind","objectProperty"]},{"transform":"MaterializeAsMixedArray","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":256,"label":["materializationKind","mixedArray"]},{"transform":"MaterializeAsConditionalSelection","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":238,"label":["materializationKind","conditionalSelection"]},{"transform":"MaterializeAsConditionalSelection","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":269,"label":["materializationKind","conditionalSelection"]},{"transform":"MaterializeAsMixedArray","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":265,"label":["materializationKind","mixedArray"]},{"transform":"MaterializeAsCachedString","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":186,"label":["materializationKind","cachedString"]},{"transform":"MaterializeAsObjectProperty","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":199,"label":["materializationKind","objectProperty"]}],"annotations":["materializationSite"],"band":"inflatable","outputSpan":null,"lineageCapped":2039},{"span":[514,562],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":47,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":1436,"entropy":0.465,"transformCount":287,"sizeDeltaEst":3720,"perf":{"costClass":"decode+call","decodeOps":1,"callFrames":286},"lineage":[{"transform":"MaterializeAsConditionalSelection","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":574,"label":["materializationKind","conditionalSelection"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]}],"annotations":["materializationSite"],"band":"inflatable","outputSpan":null,"lineageCapped":287},{"span":[655,667],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":47,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":186,"entropy":0.4665,"transformCount":37,"sizeDeltaEst":673,"perf":{"costClass":"decode+call","decodeOps":1,"callFrames":36},"lineage":[{"transform":"MaterializeAsMixedArray","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":277,"label":["materializationKind","mixedArray"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]}],"annotations":["materializationSite"],"band":"inflatable","outputSpan":null,"lineageCapped":37},{"span":[589,600],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":47,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":46,"entropy":0.4721,"transformCount":9,"sizeDeltaEst":286,"perf":{"costClass":"decode+call","decodeOps":1,"callFrames":8},"lineage":[{"transform":"MaterializeAsObjectProperty","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":198,"label":["materializationKind","objectProperty"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]}],"annotations":["materializationSite"],"band":"inflatable","outputSpan":null},{"span":[1005,1051],"nodeKind":"VarDecl","reversalClass":"renamed-encoded","score":46,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":40,"entropy":0.4647,"transformCount":8,"sizeDeltaEst":88,"perf":{"costClass":"call","decodeOps":0,"callFrames":8},"lineage":[{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]}],"annotations":[],"band":"inflatable","outputSpan":null},{"span":[581,587],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":46,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":25,"entropy":0.4647,"transformCount":5,"sizeDeltaEst":55,"perf":{"costClass":"call","decodeOps":0,"callFrames":5},"lineage":[{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]}],"annotations":[],"band":"inflatable","outputSpan":null},{"span":[614,615],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":46,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":25,"entropy":0.4647,"transformCount":5,"sizeDeltaEst":55,"perf":{"costClass":"call","decodeOps":0,"callFrames":5},"lineage":[{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]}],"annotations":[],"band":"inflatable","outputSpan":null},{"span":[635,640],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":46,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":25,"entropy":0.4647,"transformCount":5,"sizeDeltaEst":55,"perf":{"costClass":"call","decodeOps":0,"callFrames":5},"lineage":[{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]}],"annotations":[],"band":"inflatable","outputSpan":null},{"span":[1073,1077],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":48,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":21,"entropy":0.4812,"transformCount":4,"sizeDeltaEst":221,"perf":{"costClass":"decode+call","decodeOps":1,"callFrames":3},"lineage":[{"transform":"MaterializeAsCachedString","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":188,"label":["materializationKind","cachedString"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]}],"annotations":["materializationSite"],"band":"inflatable","outputSpan":null},{"span":[602,612],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":46,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":20,"entropy":0.4647,"transformCount":4,"sizeDeltaEst":44,"perf":{"costClass":"call","decodeOps":0,"callFrames":4},"lineage":[{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]}],"annotations":[],"band":"inflatable","outputSpan":null},{"span":[617,626],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":46,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":20,"entropy":0.4647,"transformCount":4,"sizeDeltaEst":44,"perf":{"costClass":"call","decodeOps":0,"callFrames":4},"lineage":[{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]}],"annotations":[],"band":"inflatable","outputSpan":null},{"span":[628,633],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":46,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":20,"entropy":0.4647,"transformCount":4,"sizeDeltaEst":44,"perf":{"costClass":"call","decodeOps":0,"callFrames":4},"lineage":[{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]}],"annotations":[],"band":"inflatable","outputSpan":null},{"span":[649,653],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":46,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":20,"entropy":0.4647,"transformCount":4,"sizeDeltaEst":44,"perf":{"costClass":"call","decodeOps":0,"callFrames":4},"lineage":[{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]}],"annotations":[],"band":"inflatable","outputSpan":null},{"span":[1022,1038],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":46,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":20,"entropy":0.4647,"transformCount":4,"sizeDeltaEst":44,"perf":{"costClass":"call","decodeOps":0,"callFrames":4},"lineage":[{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]}],"annotations":[],"band":"inflatable","outputSpan":null},{"span":[1098,1103],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":49,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":16,"entropy":0.4866,"transformCount":3,"sizeDeltaEst":167,"perf":{"costClass":"decode+call","decodeOps":1,"callFrames":2},"lineage":[{"transform":"MaterializeAsObjectProperty","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":145,"label":["materializationKind","objectProperty"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]}],"annotations":["materializationSite"],"band":"inflatable","outputSpan":null},{"span":[579,669],"nodeKind":"Object","reversalClass":"renamed-encoded","score":46,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":10,"entropy":0.4647,"transformCount":2,"sizeDeltaEst":22,"perf":{"costClass":"call","decodeOps":0,"callFrames":2},"lineage":[{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]}],"annotations":[],"band":"inflatable","outputSpan":null},{"span":[1052,1059],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":46,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":10,"entropy":0.4647,"transformCount":2,"sizeDeltaEst":22,"perf":{"costClass":"call","decodeOps":0,"callFrames":2},"lineage":[{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]}],"annotations":[],"band":"inflatable","outputSpan":null},{"span":[1060,1063],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":46,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":10,"entropy":0.4647,"transformCount":2,"sizeDeltaEst":22,"perf":{"costClass":"call","decodeOps":0,"callFrames":2},"lineage":[{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]}],"annotations":[],"band":"inflatable","outputSpan":null},{"span":[1064,1072],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":46,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":10,"entropy":0.4647,"transformCount":2,"sizeDeltaEst":22,"perf":{"costClass":"call","decodeOps":0,"callFrames":2},"lineage":[{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]}],"annotations":[],"band":"inflatable","outputSpan":null},{"span":[1092,1096],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":46,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":10,"entropy":0.4647,"transformCount":2,"sizeDeltaEst":22,"perf":{"costClass":"call","decodeOps":0,"callFrames":2},"lineage":[{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]},{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]}],"annotations":[],"band":"inflatable","outputSpan":null},{"span":[183,223],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":53,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":6,"entropy":0.5276,"transformCount":1,"sizeDeltaEst":526,"perf":{"costClass":"decode","decodeOps":1,"callFrames":0},"lineage":[{"transform":"MaterializeAsConditionalSelection","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":526,"label":["materializationKind","conditionalSelection"]}],"annotations":["materializationSite"],"band":"inflatable","outputSpan":null},{"span":[323,340],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":53,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":6,"entropy":0.5276,"transformCount":1,"sizeDeltaEst":332,"perf":{"costClass":"decode","decodeOps":1,"callFrames":0},"lineage":[{"transform":"MaterializeAsConditionalSelection","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":332,"label":["materializationKind","conditionalSelection"]}],"annotations":["materializationSite"],"band":"inflatable","outputSpan":null},{"span":[448,454],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":53,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":6,"entropy":0.5276,"transformCount":1,"sizeDeltaEst":238,"perf":{"costClass":"decode","decodeOps":1,"callFrames":0},"lineage":[{"transform":"MaterializeAsMixedArray","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":238,"label":["materializationKind","mixedArray"]}],"annotations":["materializationSite"],"band":"inflatable","outputSpan":null},{"span":[725,729],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":53,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":6,"entropy":0.5276,"transformCount":1,"sizeDeltaEst":217,"perf":{"costClass":"decode","decodeOps":1,"callFrames":0},"lineage":[{"transform":"MaterializeAsConditionalSelection","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":217,"label":["materializationKind","conditionalSelection"]}],"annotations":["materializationSite"],"band":"inflatable","outputSpan":null},{"span":[738,748],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":53,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":6,"entropy":0.5276,"transformCount":1,"sizeDeltaEst":221,"perf":{"costClass":"decode","decodeOps":1,"callFrames":0},"lineage":[{"transform":"MaterializeAsCachedString","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":221,"label":["materializationKind","cachedString"]}],"annotations":["materializationSite"],"band":"inflatable","outputSpan":null},{"span":[759,773],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":53,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":6,"entropy":0.5276,"transformCount":1,"sizeDeltaEst":288,"perf":{"costClass":"decode","decodeOps":1,"callFrames":0},"lineage":[{"transform":"MaterializeAsMixedArray","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":288,"label":["materializationKind","mixedArray"]}],"annotations":["materializationSite"],"band":"inflatable","outputSpan":null},{"span":[782,798],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":53,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":6,"entropy":0.5276,"transformCount":1,"sizeDeltaEst":243,"perf":{"costClass":"decode","decodeOps":1,"callFrames":0},"lineage":[{"transform":"MaterializeAsObjectProperty","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":243,"label":["materializationKind","objectProperty"]}],"annotations":["materializationSite"],"band":"inflatable","outputSpan":null},{"span":[820,836],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":53,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":6,"entropy":0.5276,"transformCount":1,"sizeDeltaEst":324,"perf":{"costClass":"decode","decodeOps":1,"callFrames":0},"lineage":[{"transform":"MaterializeAsConditionalSelection","category":"Data","phase":"Inflate","entropyGain":6,"sizeDeltaEst":324,"label":["materializationKind","conditionalSelection"]}],"annotations":["materializationSite"],"band":"inflatable","outputSpan":null},{"span":[708,712],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":46,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":5,"entropy":0.4647,"transformCount":1,"sizeDeltaEst":11,"perf":{"costClass":"call","decodeOps":0,"callFrames":1},"lineage":[{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]}],"annotations":[],"band":"inflatable","outputSpan":null},{"span":[1080,1084],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":46,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":5,"entropy":0.4647,"transformCount":1,"sizeDeltaEst":11,"perf":{"costClass":"call","decodeOps":0,"callFrames":1},"lineage":[{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]}],"annotations":[],"band":"inflatable","outputSpan":null},{"span":[1085,1091],"nodeKind":"IIFE","reversalClass":"renamed-encoded","score":46,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":5,"entropy":0.4647,"transformCount":1,"sizeDeltaEst":11,"perf":{"costClass":"call","decodeOps":0,"callFrames":1},"lineage":[{"transform":"ScopeDeepen","category":"Structural","phase":"Inflate","entropyGain":5,"sizeDeltaEst":11,"label":["fallbackKind","iifeWrap"]}],"annotations":[],"band":"inflatable","outputSpan":null},{"span":[76,493],"nodeKind":"Lowered","reversalClass":"renamed-encoded","score":39,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":4,"entropy":0.3935,"transformCount":1,"sizeDeltaEst":0,"perf":{"costClass":"none","decodeOps":0,"callFrames":0},"lineage":[{"transform":"LowerClass","category":"Structural","phase":"Parse","entropyGain":4,"sizeDeltaEst":0,"label":null}],"annotations":[],"band":"inflatable","outputSpan":null},{"span":[1018,1050],"nodeKind":"Lowered","reversalClass":"renamed-encoded","score":39,"tier":"free","why":"Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free)","ceiling":{"class":"flattened-fused","directive":"preset=hard — control-flow flattening + identity fusion (Free, as it ships)"},"entropyRaw":4,"entropy":0.3935,"transformCount":1,"sizeDeltaEst":0,"perf":{"costClass":"none","decodeOps":0,"callFrames":0},"lineage":[{"transform":"LowerNew","category":"Structural","phase":"Parse","entropyGain":4,"sizeDeltaEst":0,"label":null}],"annotations":[],"band":"inflatable","outputSpan":null}],"spotlights":[{"span":[852,1003],"severity":"leak","mechanism":"preservedLeaf","disposition":"leak","sample":"DEBUG_BACKDOOR_TOKEN_do_not_ship","bytes":32,"reason":"a readable literal survived un-protected in the output","proHint":"/* @afterpack extreme */","reversalClass":"preserved"}],"aggregate":{"avgEntropy":0.4771,"maxEntropy":0.5276,"minEntropy":0.3935,"totalTransforms":2445,"weakRegions":1,"leakCount":1,"perfCostTotal":{"decodeOps":50,"callFrames":2393},"sizeDeltaEstTotal":38864,"classSummary":{"preserved":1,"renamed-encoded":32,"flattened-fused":0,"destroyed-fused":0,"maxClassReached":"renamed-encoded"},"directives":[]}}]}</script>
+<script>
+(function () {
+  "use strict";
+
+  /* ============================================================
+   * 1. Load + parse the embedded document.
+   *    render.mjs always hands us `{ files: [ProtectionMapData, ...] }`
+   *    -- one entry per file, even though only one file exists today.
+   *    See render.mjs's top-of-file comment: there is no decided
+   *    multi-file schema anywhere in the repo, so this wrapper is an
+   *    explicit, documented convention owned by this viewer only.
+   * ============================================================ */
+  var dataEl = document.getElementById("afterpack-data");
+  var DATA = null;
+  try {
+    DATA = JSON.parse(dataEl.textContent);
+  } catch (e) {
+    document.getElementById("code-body").textContent =
+      "Failed to parse embedded Protection Map data: " + e.message;
+    return;
+  }
+  if (!DATA || !Array.isArray(DATA.files)) DATA = { files: [] };
+
+  /* ============================================================
+   * 2. Color math -- OKLab/OKLCH conversion + perceptual lerp.
+   *    Turns the discrete design-token ramp stops (read live off CSS
+   *    custom properties, so the toggle and the theme both stay a
+   *    single source of truth) into a smooth continuous ramp.
+   * ============================================================ */
+  function s2lin(c) { return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+  function lin2s(c) { c = Math.max(0, Math.min(1, c)); return c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055; }
+  function hex2rgb(hex) {
+    hex = hex.trim().replace(/^#/, "");
+    if (hex.length === 3) hex = hex.split("").map(function (c) { return c + c; }).join("");
+    return [0, 2, 4].map(function (i) { return parseInt(hex.slice(i, i + 2), 16) / 255; });
+  }
+  function rgb2hex(rgb) {
+    function to255(c) { return Math.round(Math.max(0, Math.min(1, c)) * 255).toString(16).padStart(2, "0"); }
+    return "#" + rgb.map(to255).join("");
+  }
+  function oklabFromLin(rgb) {
+    var r = rgb[0], g = rgb[1], b = rgb[2];
+    var l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+    var m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+    var s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+    return [
+      0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+      1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+      0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s
+    ];
+  }
+  function linFromOklab(lab) {
+    var L = lab[0], a = lab[1], b = lab[2];
+    var l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+    var m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+    var s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+    var l = l_ * l_ * l_, m = m_ * m_ * m_, s = s_ * s_ * s_;
+    return [
+      +4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+      -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+      -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s
+    ];
+  }
+  function hex2oklab(hex) { return oklabFromLin(hex2rgb(hex).map(s2lin)); }
+  function oklab2hex(lab) { return rgb2hex(linFromOklab(lab).map(lin2s)); }
+  function rampColor(stops, t) {
+    t = Math.max(0, Math.min(1, t));
+    var n = stops.length;
+    var pos = t * (n - 1);
+    var i = Math.min(n - 2, Math.floor(pos));
+    var f = pos - i;
+    var a = hex2oklab(stops[i]), b = hex2oklab(stops[i + 1]);
+    var lab = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+    return oklab2hex(lab);
+  }
+  function hexToRgba(hex, a) {
+    var rgb = hex2rgb(hex).map(function (c) { return Math.round(c * 255); });
+    return "rgba(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + "," + a.toFixed(3) + ")";
+  }
+  function readVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  function currentRamp(prefix) {
+    var out = [];
+    for (var i = 0; i <= 6; i++) out.push(readVar("--" + prefix + "-" + i));
+    return out;
+  }
+  // token wash: alpha climbs with score/cost so hotter code reads more
+  // saturated, capped well below 1 so the page's own text color stays
+  // legible painted straight on top (no per-token ink swap needed).
+  // capped at 0.5 (not higher) so that even the theoretical worst case --
+  // score 100, the ramp's deepest/brightest stop, dark theme's light body
+  // text on top -- stays >= 4.5:1 contrast (verified: 4.70:1 at cap).
+  function tokenAlpha(m) { return m <= 0 ? 0 : Math.min(0.5, 0.16 + (m / 100) * 0.34); }
+  // per-line wash is deliberately much fainter -- a subtle ambient cue,
+  // diluted by any uncovered/gap characters on that line.
+  function lineAlpha(m) { return m <= 0 ? 0 : Math.min(0.22, 0.05 + (m / 100) * 0.17); }
+  function heatSolid(score) { return rampColor(currentRamp("heat"), Math.max(0, Math.min(100, score)) / 100); }
+
+  function escapeHtml(str) {
+    return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function escapeAttr(str) {
+    return escapeHtml(str).replace(/"/g, "&quot;");
+  }
+  function fmtBytes(n) {
+    if (n == null) return "—";
+    if (n < 1024) return n + " B";
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+    return (n / (1024 * 1024)).toFixed(2) + " MB";
+  }
+  function fmtNum(n) { return n == null ? "—" : n.toLocaleString(); }
+
+  function logScaleInto(list, getValue, propName) {
+    var vals = list.map(function (r) { return Math.max(0, getValue(r)); });
+    var lo = vals.length ? Math.min.apply(null, vals) : 0;
+    var hi = vals.length ? Math.max.apply(null, vals) : 0;
+    var lnLo = Math.log(lo + 1), lnHi = Math.log(hi + 1);
+    var span = lnHi - lnLo;
+    list.forEach(function (r, i) {
+      var v = vals[i];
+      var t = span > 1e-9 ? (Math.log(v + 1) - lnLo) / span : (hi > 0 ? 1 : 0);
+      r[propName] = Math.max(0, Math.min(1, t));
+    });
+  }
+
+  /* ============================================================
+   * 3. Reversal-class metadata (client-side legend copy; every
+   *    region's own `why` is data-driven and shown separately).
+   * ============================================================ */
+  var CLASS_ORDER = ["preserved", "renamed-encoded", "flattened-fused", "destroyed-fused"];
+  var CLASS_META = {
+    "preserved": { label: "Preserved", note: "Left readable on purpose — third-party code or a public contract." },
+    "renamed-encoded": { label: "Renamed & encoded", note: "Identifiers renamed, constants rebuilt at use sites. Recoverable with effort. (Free — achieved by this build)" },
+    "flattened-fused": { label: "Flattened & fused", note: "Control flow flattened, logic fused into an equivalent-but-different program. (Free ceiling)" },
+    "destroyed-fused": { label: "Destroyed & fused", note: "Boundary-destroying fusion across the bundle — recovering authored structure is computationally infeasible for a static reader. (Pro)" }
+  };
+  var CATEGORY_LABEL = { Data: "data", Structural: "struct", Control: "control" };
+  var SEVERITY_ICON = { leak: "🔓", propertyName: "🔑", weak: "〰" };
+  var SEVERITY_LABEL = { leak: "Leak", propertyName: "Property name", weak: "Weak" };
+  var MACHINERY_BLURB = "Whole-file pipeline bookkeeping — materialization plumbing, wrapper IIFEs, cached-string tables, and similar — that doesn't map to any specific span of your source. Excluded from the heat map and from token selection on purpose: every character in the file technically falls inside this bucket, so painting or selecting it would make the whole file look uniformly “protected” and hide the real, per-token signal underneath.";
+
+  function classChipHtml(cls, ghost, labelOverride) {
+    var meta = CLASS_META[cls] || { label: cls };
+    var label = labelOverride != null ? labelOverride : meta.label;
+    return '<span class="class-chip' + (ghost ? " is-ghost" : "") + '" data-class="' + cls + '"><span class="dot" aria-hidden="true"></span>' + escapeHtml(label) + "</span>";
+  }
+
+  /* ============================================================
+   * 4. Byte-offset <-> JS-string-index mapping (per file).
+   *    Region/spotlight spans are UTF-8 BYTE offsets into
+   *    `file.originalSource`, but JS strings are indexed in UTF-16
+   *    code units -- any non-ASCII character makes the two diverge.
+   * ============================================================ */
+  function buildByteStarts(str) {
+    var encoder = new TextEncoder();
+    var starts = new Array(str.length + 1);
+    var byteOffset = 0;
+    var i = 0;
+    while (i < str.length) {
+      starts[i] = byteOffset;
+      var codePoint = str.codePointAt(i);
+      var units = codePoint > 0xffff ? 2 : 1;
+      var chunkLen = encoder.encode(String.fromCodePoint(codePoint)).length;
+      if (units === 2) starts[i + 1] = byteOffset;
+      byteOffset += chunkLen;
+      i += units;
+    }
+    starts[str.length] = byteOffset;
+    return starts;
+  }
+  function makeByteToChar(str) {
+    var starts = buildByteStarts(str);
+    var len = str.length;
+    return function (byteOffset) {
+      var lo = 0, hi = starts.length - 1;
+      if (byteOffset <= 0) return 0;
+      if (byteOffset >= starts[hi]) return len;
+      while (lo < hi) {
+        var mid = (lo + hi + 1) >> 1;
+        if (starts[mid] <= byteOffset) lo = mid; else hi = mid - 1;
+      }
+      return lo;
+    };
+  }
+
+  /* ============================================================
+   * 5. Per-file preprocessing: regions, spotlights, the machinery
+   *    (whole-file "engine scaffolding") bucket, and the sweep-line
+   *    fill run over region + spotlight boundaries.
+   *
+   *    Fill rule: color_at(char) = the SMALLEST-WIDTH (deepest, most
+   *    specific) non-machinery region whose span contains it. This
+   *    replaces v1's "max entropy wins" rule -- a region's identity
+   *    IS its reversal class now, so the most specific region is
+   *    always the right one to paint AND to select on click (a click
+   *    can never resolve to a coarse ancestor region anymore).
+   *
+   *    The machinery/background bucket (nodeKind Program/IIFE-shaped,
+   *    reversalClass "preserved", score 0, span covering the whole
+   *    file) is excluded from ever winning a run. Every character not
+   *    covered by a more specific region still falls inside it (its
+   *    span is the whole file), so those gap runs paint as a flat,
+   *    constant, near-neutral `--wash` -- never the score-scaled heat
+   *    ramp -- and clicking one shows the "engine scaffolding /
+   *    un-attributable" panel instead of a region card.
+   * ============================================================ */
+  function prepareFile(fdoc, fileIdx) {
+    var source = (fdoc.file && fdoc.file.originalSource) || "";
+    var sourceLen = source.length;
+    var byteToChar = makeByteToChar(source);
+
+    var regions = (fdoc.regions || []).map(function (r, idx) {
+      var startChar = byteToChar(r.span[0]);
+      var endChar = Math.max(byteToChar(r.span[1]), startChar);
+      var isMachinery = startChar <= 0 && endChar >= sourceLen &&
+        r.reversalClass === "preserved" && (r.score || 0) <= 0;
+      return { idx: idx, raw: r, startChar: startChar, endChar: endChar, width: endChar - startChar, isMachinery: isMachinery };
+    });
+    var machinery = regions.filter(function (r) { return r.isMachinery; })[0] || null;
+    var realRegions = regions.filter(function (r) { return !r.isMachinery; });
+
+    var spotlights = (fdoc.spotlights || []).map(function (s, idx) {
+      var span = s.span || [0, 0];
+      var startChar = byteToChar(span[0]);
+      var endChar = Math.max(byteToChar(span[1]), startChar);
+      // The engine's spotlight span can cover the whole enclosing statement
+      // (e.g. a labeled loop), not just the leaked literal -- narrow the
+      // painted/clickable range to the exact `sample` text when it's found
+      // inside that span, so the red underline + pin land on the actual
+      // leak, not the surrounding control flow that happens to contain it.
+      if (s.sample) {
+        var localIdx = source.slice(startChar, endChar).indexOf(s.sample);
+        if (localIdx >= 0) {
+          startChar = startChar + localIdx;
+          endChar = startChar + s.sample.length;
+        }
+      }
+      return { idx: idx, raw: s, startChar: startChar, endChar: endChar };
+    });
+
+    logScaleInto(realRegions, function (r) { return Math.max(0, r.raw.sizeDeltaEst || 0); }, "costT");
+
+    var boundarySet = {};
+    function addB(p) { boundarySet[p] = true; }
+    addB(0); addB(sourceLen);
+    realRegions.forEach(function (r) { addB(r.startChar); addB(r.endChar); });
+    spotlights.forEach(function (s) { addB(s.startChar); addB(s.endChar); });
+    var boundaries = Object.keys(boundarySet).map(Number).sort(function (a, b) { return a - b; });
+
+    function winnerFor(start, end) {
+      var best = null;
+      for (var i = 0; i < realRegions.length; i++) {
+        var r = realRegions[i];
+        if (r.startChar <= start && r.endChar >= end) {
+          if (!best || r.width < best.width || (r.width === best.width && (r.raw.score || 0) > (best.raw.score || 0))) best = r;
+        }
+      }
+      return best;
+    }
+    function spotlightForRange(start, end) {
+      for (var i = 0; i < spotlights.length; i++) {
+        var s = spotlights[i];
+        if (s.startChar <= start && s.endChar >= end) return s;
+      }
+      return null;
+    }
+
+    var runs = [];
+    for (var bi = 0; bi < boundaries.length - 1; bi++) {
+      var segStart = boundaries[bi], segEnd = boundaries[bi + 1];
+      if (segEnd <= segStart) continue;
+      var winner = winnerFor(segStart, segEnd);
+      var spot = spotlightForRange(segStart, segEnd);
+      runs.push({
+        start: segStart, end: segEnd,
+        regionIdx: winner ? winner.idx : null,
+        spotlightIdx: spot ? spot.idx : null,
+        isSpotlightStart: !!(spot && spot.startChar === segStart)
+      });
+    }
+    var mergedRuns = [];
+    runs.forEach(function (run) {
+      var last = mergedRuns[mergedRuns.length - 1];
+      if (last && last.regionIdx === run.regionIdx && last.spotlightIdx === run.spotlightIdx && last.end === run.start) {
+        last.end = run.end;
+      } else {
+        mergedRuns.push(run);
+      }
+    });
+
+    // Width-weighted average protection score over the resolved (deepest-
+    // region) runs -- the file tree's complexity bar, always protection-
+    // scale regardless of the code pane's active mode toggle.
+    var sumW = 0, totalW = 0;
+    mergedRuns.forEach(function (run) {
+      if (run.regionIdx == null) return;
+      var len = run.end - run.start;
+      sumW += len * (regions[run.regionIdx].raw.score || 0);
+      totalW += len;
+    });
+    var avgScore = totalW > 0 ? sumW / totalW : 0;
+
+    var displayPath = (fdoc.file && fdoc.file.path) || null;
+    var displayName = displayPath ? displayPath.split(/[\\/]+/).pop() : "(unnamed input " + (fileIdx + 1) + ")";
+    var leakCount = (fdoc.aggregate && fdoc.aggregate.leakCount) || 0;
+
+    return {
+      fileIdx: fileIdx, doc: fdoc, source: source, sourceLen: sourceLen,
+      regions: regions, realRegions: realRegions, machinery: machinery,
+      spotlights: spotlights, mergedRuns: mergedRuns,
+      avgScore: avgScore, leakCount: leakCount,
+      displayPath: displayPath, displayName: displayName
+    };
+  }
+
+  var FILES = DATA.files.map(prepareFile);
+
+  /* ============================================================
+   * 6. Recursive file tree, built from each file's `path` split on
+   *    "/". One file today; structured so a multi-file document
+   *    (many `FileEntry`-shaped docs in `files[]`) nests into real
+   *    folders without any changes to this code.
+   * ============================================================ */
+  function buildTree(files) {
+    var root = { type: "folder", name: "", key: "", depth: 0, children: [] };
+    files.forEach(function (f, fi) {
+      var parts = f.displayPath ? f.displayPath.split(/[\\/]+/).filter(Boolean) : [f.displayName];
+      var node = root;
+      var keyAcc = "";
+      for (var i = 0; i < parts.length - 1; i++) {
+        var part = parts[i];
+        keyAcc = keyAcc ? keyAcc + "/" + part : part;
+        var next = null;
+        for (var j = 0; j < node.children.length; j++) {
+          if (node.children[j].type === "folder" && node.children[j].name === part) { next = node.children[j]; break; }
+        }
+        if (!next) { next = { type: "folder", name: part, key: keyAcc, depth: node.depth + 1, children: [] }; node.children.push(next); }
+        node = next;
+      }
+      node.children.push({ type: "file", name: parts[parts.length - 1], depth: node.depth + 1, fileIdx: fi });
+    });
+    (function sortNode(node) {
+      node.children.sort(function (a, b) {
+        if (a.type !== b.type) return a.type === "folder" ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+      node.children.forEach(function (c) { if (c.type === "folder") sortNode(c); });
+    })(root);
+    return root;
+  }
+  function collectFolderKeys(node, out) {
+    node.children.forEach(function (c) {
+      if (c.type === "folder") { out.push(c.key); collectFolderKeys(c, out); }
+    });
+  }
+  var TREE = buildTree(FILES);
+  var allFolderKeys = [];
+  collectFolderKeys(TREE, allFolderKeys);
+
+  /* ============================================================
+   * 7. State + selection.
+   *    state.selection is `null` until the user interacts (renders
+   *    the file-level aggregate default); once set, it always has
+   *    both `regionIdx`/`spotlightIdx` (either may be null) --
+   *    both-null-but-non-null-selection means "clicked a span with
+   *    no more specific region", i.e. the machinery/gap panel.
+   * ============================================================ */
+  var state = {
+    activeFileIdx: FILES.length ? 0 : -1,
+    mode: "protection",
+    selection: null,
+    highlightClassOn: false,
+    expandedFolders: (function () { var s = {}; allFolderKeys.forEach(function (k) { s[k] = true; }); return s; })()
+  };
+  function activeFile() { return state.activeFileIdx >= 0 ? FILES[state.activeFileIdx] : null; }
+  function regionByIdx(file, idx) { return idx == null ? null : file.regions[idx]; }
+
+  /* ============================================================
+   * 8. Code pane painting -- heat WASH (background-color), not
+   *    outlines. Two layers: a per-line ambient wash (faint, diluted
+   *    by any uncovered chars on the line) underneath a per-token
+   *    wash (stronger, alpha scaled by score/cost). Adjacent runs
+   *    that resolve to the same region are merged upstream in
+   *    `mergedRuns`, so same-color stretches are already single DOM
+   *    spans, not one-per-character.
+   * ============================================================ */
+  var codeBody = document.getElementById("code-body");
+
+  function metricForRegion(region, mode) {
+    if (!region) return 0;
+    return mode === "cost" ? Math.round((region.costT || 0) * 100) : (region.raw.score || 0);
+  }
+
+  function paintCode(file) {
+    var heatRamp = currentRamp("heat");
+    var costRamp = currentRamp("cost");
+    var washHex = readVar("--wash");
+    var mode = state.mode;
+    var ramp = mode === "cost" ? costRamp : heatRamp;
+
+    var lineChunks = [[]];
+    var lineWSum = [0];
+    var lineWLen = [0];
+
+    file.mergedRuns.forEach(function (run) {
+      var text = file.source.slice(run.start, run.end);
+      var region = regionByIdx(file, run.regionIdx);
+      var metric = metricForRegion(region, mode);
+      var bg, dataClass = "";
+      if (!region) {
+        bg = washHex; // machinery / gap -- flat neutral wash, always
+      } else {
+        bg = hexToRgba(rampColor(ramp, metric / 100), tokenAlpha(metric));
+        dataClass = region.raw.reversalClass || "";
+      }
+      var spotlight = run.spotlightIdx != null ? file.spotlights[run.spotlightIdx] : null;
+      var cls = "tok" + (spotlight ? " spot-" + spotlight.raw.severity : "");
+
+      var titleParts = [];
+      titleParts.push(region
+        ? (CLASS_META[region.raw.reversalClass] ? CLASS_META[region.raw.reversalClass].label : region.raw.reversalClass) + " · score " + region.raw.score
+        : "engine scaffolding / un-attributable");
+      if (spotlight) titleParts.push((SEVERITY_LABEL[spotlight.raw.severity] || spotlight.raw.severity) + ": " + (spotlight.raw.reason || ""));
+
+      var attrs = 'class="' + cls + '" tabindex="0" role="button"' +
+        ' style="background:' + bg + '"' +
+        ' data-region-idx="' + (run.regionIdx == null ? "" : run.regionIdx) + '"' +
+        ' data-spotlight-idx="' + (run.spotlightIdx == null ? "" : run.spotlightIdx) + '"' +
+        (dataClass ? ' data-class="' + dataClass + '"' : "") +
+        ' title="' + escapeAttr(titleParts.join(" — ")) + '"';
+
+      var pin = run.isSpotlightStart ? '<span class="pin" aria-hidden="true">⚠</span>' : "";
+      var segments = text.split("\n");
+      segments.forEach(function (seg, si) {
+        if (seg.length) {
+          lineChunks[lineChunks.length - 1].push("<span " + attrs + ">" + pin + escapeHtml(seg) + "</span>");
+          pin = "";
+          lineWLen[lineWLen.length - 1] += seg.length;
+          lineWSum[lineWSum.length - 1] += seg.length * metric;
+        }
+        if (si < segments.length - 1) { lineChunks.push([]); lineWSum.push(0); lineWLen.push(0); }
+      });
+    });
+
+    var totalLines = file.source.split("\n").length;
+    var gutterWidth = String(totalLines).length + 1.4;
+
+    var html = lineChunks.map(function (spans, i) {
+      var lineNo = i + 1;
+      var avgMetric = lineWLen[i] > 0 ? lineWSum[i] / lineWLen[i] : 0;
+      var lineBg = avgMetric > 0 ? hexToRgba(rampColor(ramp, avgMetric / 100), lineAlpha(avgMetric)) : "transparent";
+      return '<div class="code-line" data-line="' + lineNo + '">' +
+        '<span class="ln" style="min-width:' + gutterWidth + 'ch">' + lineNo + "</span>" +
+        '<span class="lc" style="background:' + lineBg + '">' + (spans.join("") || " ") + "</span>" +
+        "</div>";
+    }).join("");
+    codeBody.innerHTML = html;
+  }
+
+  /* ============================================================
+   * 9. Left rail: file tree, KPIs, class distribution, legends.
+   * ============================================================ */
+  var treeEl = document.getElementById("file-tree");
+
+  function countFilesUnder(node) {
+    var n = 0;
+    node.children.forEach(function (c) { n += c.type === "file" ? 1 : countFilesUnder(c); });
+    return n;
+  }
+  function renderTreeChildren(node, html) {
+    node.children.forEach(function (child) {
+      var indent = 8 + child.depth * 14;
+      if (child.type === "folder") {
+        var expanded = !!state.expandedFolders[child.key];
+        html.push(
+          '<button type="button" class="tree-row tree-row-folder" data-kind="folder" data-key="' + escapeAttr(child.key) +
+          '" style="padding-left:' + indent + 'px" aria-expanded="' + (expanded ? "true" : "false") + '">' +
+          '<span class="tree-twisty" aria-hidden="true">▸</span>' +
+          '<span class="tree-icon" aria-hidden="true">' + (expanded ? "📂" : "📁") + "</span>" +
+          '<span class="tree-name">' + escapeHtml(child.name) + "</span>" +
+          '<span class="tree-count">' + countFilesUnder(child) + "</span>" +
+          "</button>"
+        );
+        if (expanded) renderTreeChildren(child, html);
+      } else {
+        var file = FILES[child.fileIdx];
+        var active = state.activeFileIdx === child.fileIdx;
+        html.push(
+          '<button type="button" class="tree-row tree-row-file' + (active ? " is-active" : "") + '" data-kind="file" data-file-idx="' + child.fileIdx +
+          '" style="padding-left:' + indent + 'px" aria-current="' + (active ? "true" : "false") + '">' +
+          '<span class="tree-twisty" aria-hidden="true"></span>' +
+          '<span class="tree-icon" aria-hidden="true">📄</span>' +
+          '<span class="tree-name" title="' + escapeAttr(file.displayPath || file.displayName) + '">' + escapeHtml(file.displayName) + "</span>" +
+          (file.leakCount > 0 ? '<span class="badge-leak">' + file.leakCount + " leak" + (file.leakCount === 1 ? "" : "s") + "</span>" : "") +
+          "</button>" +
+          '<div class="tree-file-meter" style="padding-left:' + (indent + 20) + 'px">' +
+          '<div class="meter"><i style="width:' + file.avgScore.toFixed(0) + '%;background:' + heatSolid(file.avgScore) + '"></i></div>' +
+          "</div>"
+        );
+      }
+    });
+  }
+  function renderTree() {
+    var html = [];
+    renderTreeChildren(TREE, html);
+    treeEl.innerHTML = html.join("");
+  }
+
+  function renderWorkspaceSummary() {
+    var el = document.getElementById("workspace-summary");
+    var totalLeaks = FILES.reduce(function (sum, f) { return sum + f.leakCount; }, 0);
+    el.textContent = FILES.length + " file" + (FILES.length === 1 ? "" : "s") +
+      (totalLeaks > 0 ? " · " + totalLeaks + " leak" + (totalLeaks === 1 ? "" : "s") + " total" : "");
+  }
+
+  function renderKpis(file) {
+    var f = file.doc.file || {};
+    var a = file.doc.aggregate || {};
+    var rows = [
+      ["Input → output", fmtBytes(f.inputSize) + " → " + fmtBytes(f.outputSize)],
+      ["Inflation ratio", (f.inflationRatio != null ? f.inflationRatio.toFixed(2) : "—") + "×"],
+      ["Transforms", fmtNum(a.totalTransforms)],
+      ["Leaked literals", fmtNum(a.leakCount)],
+      ["Weak regions", fmtNum(a.weakRegions)]
+    ];
+    var grid = document.getElementById("kpi-grid");
+    grid.innerHTML = rows.map(function (row) {
+      var warn = row[0] === "Leaked literals" && a.leakCount > 0;
+      return '<span class="kpi-label">' + escapeHtml(row[0]) + '</span><span class="kpi-value' + (warn ? " warn" : "") + '">' + escapeHtml(row[1]) + "</span>";
+    }).join("");
+  }
+
+  function renderClassDist(file) {
+    var raw = (file.doc.aggregate && file.doc.aggregate.classSummary) || {};
+    var adjustedPreserved = Math.max(0, (raw.preserved || 0) - (file.machinery ? 1 : 0));
+    var counts = {
+      "preserved": adjustedPreserved,
+      "renamed-encoded": raw["renamed-encoded"] || 0,
+      "flattened-fused": raw["flattened-fused"] || 0,
+      "destroyed-fused": raw["destroyed-fused"] || 0
+    };
+    var total = counts["preserved"] + counts["renamed-encoded"] + counts["flattened-fused"] + counts["destroyed-fused"];
+
+    document.getElementById("class-dist-bar").innerHTML = CLASS_ORDER.map(function (cls) {
+      var n = counts[cls];
+      if (!n) return "";
+      var pct = total > 0 ? (n / total * 100) : 0;
+      return '<i data-class="' + cls + '" style="width:' + pct.toFixed(2) + '%" title="' + escapeAttr(CLASS_META[cls].label + ": " + n) + '"></i>';
+    }).join("");
+
+    document.getElementById("class-dist-rows").innerHTML = CLASS_ORDER.map(function (cls) {
+      return '<li class="class-dist-row">' + classChipHtml(cls, counts[cls] === 0) + '<span class="class-dist-count">' + counts[cls] + "</span></li>";
+    }).join("");
+
+    var maxCls = raw.maxClassReached;
+    document.getElementById("class-reached").innerHTML = maxCls ? "Reached this build: " + classChipHtml(maxCls, false) : "";
+
+    var footnote = document.getElementById("class-dist-footnote");
+    if (file.machinery && (raw.preserved || 0) > 0 && adjustedPreserved === 0) {
+      footnote.hidden = false;
+      footnote.textContent = "No user code was left preserved in this build — the \"" + (raw.preserved) + " preserved\" the engine reports is entirely the whole-file scaffolding bucket, excluded from this count.";
+    } else {
+      footnote.hidden = true;
+    }
+  }
+
+  function renderClassLegendStatic() {
+    var totals = { "preserved": 0, "renamed-encoded": 0, "flattened-fused": 0, "destroyed-fused": 0 };
+    FILES.forEach(function (f) {
+      var cs = (f.doc.aggregate && f.doc.aggregate.classSummary) || {};
+      CLASS_ORDER.forEach(function (cls) { totals[cls] += cs[cls] || 0; });
+    });
+    document.getElementById("class-legend").innerHTML = CLASS_ORDER.map(function (cls) {
+      var reached = totals[cls] > 0;
+      return '<li class="class-legend-row">' + classChipHtml(cls, !reached) +
+        '<span class="class-legend-note">' + escapeHtml(CLASS_META[cls].note) + "</span>" +
+        (reached ? "" : '<span class="class-legend-flag">ceiling</span>') +
+        "</li>";
+    }).join("");
+  }
+
+  function renderLegend() {
+    var title = document.getElementById("legend-title");
+    var bar = document.getElementById("legend-bar");
+    var labels = document.getElementById("legend-labels");
+    var ramp = state.mode === "cost" ? currentRamp("cost") : currentRamp("heat");
+    title.textContent = "Scale · " + (state.mode === "cost" ? "Cost" : "Protection");
+    var stops = ramp.map(function (c, i) { return c + " " + ((i / (ramp.length - 1)) * 100).toFixed(1) + "%"; });
+    bar.style.background = "linear-gradient(to right, " + stops.join(", ") + ")";
+    labels.innerHTML = state.mode === "cost"
+      ? "<span>cheap</span><span>costly (est. bytes)</span>"
+      : "<span>low</span><span>high score</span>";
+  }
+
+  function renderEngineInfo(file) {
+    var e = file.doc.engine || {};
+    var rows = [
+      ["backend", e.backend], ["preset", e.preset], ["seed", e.seed],
+      ["materialize", e.materialize === true ? "on" : e.materialize === false ? "off" : "—"],
+      ["complexityTarget", e.complexityTarget], ["engine version", e.version],
+      ["schema", file.doc.schemaVersion != null ? "v" + file.doc.schemaVersion : "—"]
+    ];
+    document.getElementById("engine-info").innerHTML = rows.map(function (r) {
+      return "<dt>" + escapeHtml(r[0]) + "</dt><dd>" + escapeHtml(r[1] == null ? "—" : String(r[1])) + "</dd>";
+    }).join("");
+  }
+
+  /* ============================================================
+   * 10. Right rail: persistent "weak spots" list.
+   * ============================================================ */
+  function renderWeakSpots(file) {
+    document.getElementById("weakspots-title").textContent = "Weak spots (" + file.spotlights.length + ")";
+    var list = document.getElementById("weakspots-list");
+    if (!file.spotlights.length) {
+      list.innerHTML = '<p class="empty-note">No under-protection spotlights on this build — nothing leaked.</p>';
+      return;
+    }
+    list.innerHTML = file.spotlights.map(function (s) {
+      var sev = s.raw.severity;
+      return '<button type="button" class="weakspot-item" data-jump-spotlight="' + s.idx + '">' +
+        '<div class="weakspot-head"><span class="pill pill-' + sev + '">' + (SEVERITY_ICON[sev] || "⚠") + " " + escapeHtml(SEVERITY_LABEL[sev] || sev) + "</span></div>" +
+        '<div class="weakspot-sample">' + escapeHtml(s.raw.sample || "") + "</div>" +
+        '<div class="weakspot-reason">' + escapeHtml(s.raw.reason || "") + "</div>" +
+        "</button>";
+    }).join("");
+  }
+
+  /* ============================================================
+   * 11. Right rail: the Inspector. Leads with the reversal-class
+   *     region card (chip + tier + score + why); lineage, cost, and
+   *     the Pro-ceiling CTA are secondary sections below it.
+   *     Consecutive identical lineage steps collapse into one row
+   *     ("ScopeDeepen x19") with combined entropy/size deltas.
+   * ============================================================ */
+  function collapseLineage(lineage) {
+    var groups = [];
+    lineage.forEach(function (step) {
+      var last = groups[groups.length - 1];
+      if (last && last.transform === step.transform) {
+        last.count++;
+        last.entropyGain += step.entropyGain || 0;
+        last.sizeDeltaEst += step.sizeDeltaEst || 0;
+      } else {
+        groups.push({ transform: step.transform, category: step.category, count: 1, entropyGain: step.entropyGain || 0, sizeDeltaEst: step.sizeDeltaEst || 0 });
+      }
+    });
+    return groups;
+  }
+
+  var LINEAGE_GROUP_DISPLAY_CAP = 14;
+  function renderLineageSection(region) {
+    var lineage = region.raw.lineage || [];
+    if (!lineage.length) {
+      return '<div class="inspector-section"><h3>Lineage</h3>' +
+        '<p class="inspector-empty">No lineage — this span was never touched by the transform pipeline.</p></div>';
+    }
+    var groups = collapseLineage(lineage);
+    var shown = groups.slice(0, LINEAGE_GROUP_DISPLAY_CAP);
+    var rows = shown.map(function (g, i) {
+      var cat = CATEGORY_LABEL[g.category] || (g.category || "").toLowerCase();
+      var delta = [];
+      if (g.entropyGain) delta.push("+" + g.entropyGain + "H");
+      if (g.sizeDeltaEst) delta.push((g.sizeDeltaEst >= 0 ? "+" : "") + g.sizeDeltaEst + "B");
+      return '<div class="lineage-row">' +
+        '<span class="lineage-idx">' + (i + 1) + "</span>" +
+        '<span class="lineage-transform">' + escapeHtml(g.transform || "?") + (g.count > 1 ? ' <span class="lineage-count">×' + g.count + "</span>" : "") + "</span>" +
+        '<span class="chip">' + escapeHtml(cat) + "</span>" +
+        '<span class="lineage-delta">' + escapeHtml(delta.join(" ")) + "</span>" +
+        "</div>";
+    }).join("");
+    var hiddenGroups = groups.length - shown.length;
+    var parts = [];
+    if (hiddenGroups > 0) parts.push("+" + hiddenGroups + " more collapsed step" + (hiddenGroups === 1 ? "" : "s"));
+    if (region.raw.lineageCapped) parts.push("ledger recorded " + region.raw.lineageCapped + " raw steps total; " + lineage.length + " embedded for this demo");
+    var note = parts.length ? '<div class="lineage-more">' + escapeHtml(parts.join(" · ")) + "</div>" : "";
+    return '<div class="inspector-section"><h3>Lineage <span class="chip">' + groups.length + " collapsed step" + (groups.length === 1 ? "" : "s") +
+      (region.raw.lineageCapped ? "+" : "") + "</span></h3>" + rows + note + "</div>";
+  }
+
+  function renderStatsSection(region) {
+    var r = region.raw;
+    var perf = r.perf || {};
+    var rows = [
+      ["entropyRaw", r.entropyRaw],
+      ["transformCount", r.transformCount],
+      ["sizeDeltaEst (est. added bytes)", r.sizeDeltaEst],
+      ["decodeOps", perf.decodeOps],
+      ["callFrames", perf.callFrames],
+      ["costClass", perf.costClass],
+      ["band", r.band]
+    ];
+    return '<div class="inspector-section"><h3>Complexity &amp; cost</h3><dl class="stat-grid">' +
+      rows.map(function (row) { return "<dt>" + escapeHtml(row[0]) + "</dt><dd>" + escapeHtml(String(row[1] == null ? "—" : row[1])) + "</dd>"; }).join("") +
+      "</dl></div>";
+  }
+
+  function renderCeilingCta(region) {
+    var r = region.raw;
+    if (!r.ceiling) return "";
+    return '<div class="ceiling-box">' +
+      "<h4>⇧ Pro ceiling: " + classChipHtml(r.ceiling.class, true) + "</h4>" +
+      '<div class="sample-box">' + escapeHtml(r.ceiling.directive) + "</div>" +
+      '<div class="cta"><button type="button" class="copy-btn copy-btn-pro" data-copy="' + encodeURIComponent(r.ceiling.directive) + '">Force-protect in Pro</button></div>' +
+      '<p class="ceiling-note">Per-region control — Pro lets you pin this exact span to a stronger preset.</p>' +
+      "</div>";
+  }
+
+  function renderRegionSection(region) {
+    var r = region.raw;
+    var html = '<div class="inspector-section">';
+    html += '<div class="region-card-head">' + classChipHtml(r.reversalClass, false);
+    if (r.tier) html += '<span class="tier-pill tier-' + escapeAttr(r.tier) + '">' + escapeHtml(r.tier) + "</span>";
+    html += '<span class="region-score">' + r.score + "/100</span>";
+    html += "</div>";
+    html += '<div class="meter meter-lg"><i style="width:' + r.score + '%;background:' + heatSolid(r.score) + '"></i></div>';
+    html += '<p class="region-why">' + escapeHtml(r.why) + "</p>";
+    html += '<div class="region-meta">' + escapeHtml(r.nodeKind || "?") + " · chars " + region.startChar + "–" + region.endChar + "</div>";
+    html += "</div>";
+    html += renderLineageSection(region);
+    html += renderStatsSection(region);
+    var cta = renderCeilingCta(region);
+    if (cta) html += '<div class="inspector-section">' + cta + "</div>";
+    return html;
+  }
+
+  function renderMachineryPanel(file) {
+    var html = '<div class="inspector-section">';
+    html += '<div class="region-card-head">' + classChipHtml("preserved", true, "Engine scaffolding / un-attributable") + "</div>";
+    html += '<p class="region-why">' + escapeHtml(MACHINERY_BLURB) + "</p>";
+    html += "</div>";
+    if (file.machinery) {
+      var m = file.machinery.raw;
+      html += '<div class="inspector-section"><h3>Whole-file bucket (not per-token)</h3><dl class="stat-grid">' +
+        [["entropyRaw (file-wide)", m.entropyRaw], ["transformCount (file-wide)", m.transformCount], ["sizeDeltaEst (file-wide, est.)", m.sizeDeltaEst]]
+          .map(function (row) { return "<dt>" + escapeHtml(row[0]) + "</dt><dd>" + escapeHtml(String(row[1] == null ? "—" : row[1])) + "</dd>"; }).join("") +
+        "</dl></div>";
+    }
+    return html;
+  }
+
+  function renderSpotlightCallout(spotlight) {
+    var s = spotlight.raw;
+    var sev = s.severity;
+    var html = '<div class="callout callout-' + sev + '">';
+    html += "<h3>" + (SEVERITY_ICON[sev] || "⚠") + " " + escapeHtml(SEVERITY_LABEL[sev] || sev) + " — under-protected</h3>";
+    if (s.reversalClass) html += classChipHtml(s.reversalClass, false);
+    html += "<p>" + escapeHtml(s.reason || "") + "</p>";
+    html += '<div class="sample-box">' + escapeHtml(s.sample || "") + "</div>";
+    html += '<p style="font-size:11px;">mechanism: <strong>' + escapeHtml(s.mechanism || "—") + "</strong> · disposition: <strong>" +
+      escapeHtml(s.disposition || "—") + "</strong>" + (s.bytes != null ? " · " + s.bytes + " bytes" : "") + "</p>";
+    if (s.proHint) {
+      html += '<div class="cta"><code>' + escapeHtml(s.proHint) + "</code>" +
+        '<button type="button" class="copy-btn" data-copy="' + encodeURIComponent(s.proHint) + '">Force-protect in Pro</button></div>' +
+        '<p style="margin-top:6px;font-size:11px;">Per-region control — Pro lets you pin this exact span to a stronger preset.</p>';
+    }
+    html += "</div>";
+    return html;
+  }
+
+  function renderAggregateDefault(file) {
+    var a = file.doc.aggregate || {};
+    var perf = a.perfCostTotal || {};
+    var rows = [
+      ["avg entropy (raw hint 0–1)", a.avgEntropy], ["min / max entropy", (a.minEntropy != null ? a.minEntropy : "—") + " / " + (a.maxEntropy != null ? a.maxEntropy : "—")],
+      ["total transforms", a.totalTransforms], ["weak regions", a.weakRegions], ["leaks", a.leakCount],
+      ["decodeOps total", perf.decodeOps], ["callFrames total", perf.callFrames],
+      ["size Δ total (est.)", a.sizeDeltaEstTotal]
+    ];
+    return '<div class="inspector-section"><h3>File aggregate</h3><dl class="stat-grid">' +
+      rows.map(function (row) { return "<dt>" + row[0] + "</dt><dd>" + escapeHtml(String(row[1] == null ? "—" : row[1])) + "</dd>"; }).join("") +
+      "</dl></div>" +
+      '<div class="inspector-section"><p class="inspector-empty">Click (or focus + Enter/Space) any highlighted token in the code pane to inspect its reversal class, lineage, and cost. Uncovered spans show the engine-scaffolding note.</p></div>';
+  }
+
+  function renderInspector() {
+    var el = document.getElementById("inspector");
+    var file = activeFile();
+    var sel = state.selection;
+    if (!file) { el.innerHTML = ""; return; }
+    if (!sel) { el.innerHTML = renderAggregateDefault(file); return; }
+    var region = sel.regionIdx != null ? regionByIdx(file, sel.regionIdx) : null;
+    var spotlight = sel.spotlightIdx != null ? file.spotlights[sel.spotlightIdx] : null;
+    var html = "";
+    if (spotlight) html += renderSpotlightCallout(spotlight);
+    if (region) html += renderRegionSection(region);
+    if (!region && !spotlight) html += renderMachineryPanel(file);
+    el.innerHTML = html;
+  }
+
+  /* ============================================================
+   * 12. Selection + "highlight same class" mode.
+   *     A click always resolves to the deepest/smallest region
+   *     covering that exact token (baked into `mergedRuns` by the
+   *     sweep-line fill rule above) -- so selection never lights up
+   *     more than the one specific region a token belongs to.
+   * ============================================================ */
+  function highlightSelectionRing() {
+    codeBody.querySelectorAll(".tok.is-selected").forEach(function (t) { t.classList.remove("is-selected"); });
+    var sel = state.selection;
+    if (!sel) return;
+    if (sel.regionIdx != null) {
+      codeBody.querySelectorAll('.tok[data-region-idx="' + sel.regionIdx + '"]').forEach(function (t) { t.classList.add("is-selected"); });
+    } else if (sel.spotlightIdx != null) {
+      codeBody.querySelectorAll('.tok[data-spotlight-idx="' + sel.spotlightIdx + '"]').forEach(function (t) { t.classList.add("is-selected"); });
+    }
+  }
+
+  var highlightToggle = document.getElementById("highlight-class-toggle");
+  var highlightStatus = document.getElementById("highlight-class-status");
+  function currentSelectedRegion() {
+    var file = activeFile();
+    if (!file || !state.selection || state.selection.regionIdx == null) return null;
+    return regionByIdx(file, state.selection.regionIdx);
+  }
+  function applyHighlightClass() {
+    var region = currentSelectedRegion();
+    var cls = region ? region.raw.reversalClass : null;
+    highlightToggle.disabled = !cls;
+    var active = state.highlightClassOn && !!cls;
+    if (active) {
+      codeBody.setAttribute("data-highlight-class", cls);
+      var file = activeFile();
+      var count = file ? file.realRegions.filter(function (r) { return r.raw.reversalClass === cls; }).length : 0;
+      highlightStatus.textContent = "Highlighting " + (CLASS_META[cls] ? CLASS_META[cls].label : cls) + " · " + count + " region" + (count === 1 ? "" : "s") + " in this file";
+      highlightStatus.hidden = false;
+    } else {
+      codeBody.removeAttribute("data-highlight-class");
+      highlightStatus.hidden = true;
+    }
+  }
+
+  function selectFromRun(regionIdx, spotlightIdx) {
+    state.selection = {
+      regionIdx: regionIdx == null || isNaN(regionIdx) ? null : regionIdx,
+      spotlightIdx: spotlightIdx == null || isNaN(spotlightIdx) ? null : spotlightIdx
+    };
+    highlightSelectionRing();
+    applyHighlightClass();
+    renderInspector();
+  }
+  function handleTokActivate(tokEl) {
+    var r = tokEl.dataset.regionIdx === "" ? null : Number(tokEl.dataset.regionIdx);
+    var s = tokEl.dataset.spotlightIdx === "" ? null : Number(tokEl.dataset.spotlightIdx);
+    selectFromRun(r, s);
+  }
+  function jumpToSpotlight(idx) {
+    var file = activeFile();
+    var target = codeBody.querySelector('.tok[data-spotlight-idx="' + idx + '"]');
+    var run = file ? file.mergedRuns.filter(function (r) { return r.spotlightIdx === idx; })[0] : null;
+    if (target) {
+      target.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
+      target.focus({ preventScroll: true });
+    }
+    selectFromRun(run ? run.regionIdx : null, idx);
+  }
+
+  /* ============================================================
+   * 13. Copy-to-clipboard for Pro CTAs (ceiling directive / proHint).
+   * ============================================================ */
+  function copyText(text, btn) {
+    function ok() { var prev = btn.textContent; btn.textContent = "Copied"; setTimeout(function () { btn.textContent = prev; }, 1400); }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(ok, function () { fallbackCopy(text); ok(); });
+    } else {
+      fallbackCopy(text);
+      ok();
+    }
+  }
+  function fallbackCopy(text) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); } catch (e) { /* best effort */ }
+    document.body.removeChild(ta);
+  }
+
+  /* ============================================================
+   * 14. File switching, theme, mode, wiring, init.
+   * ============================================================ */
+  function updateSourceOriginNote(file) {
+    var noteEl = document.getElementById("source-origin-note");
+    var origin = (file.doc.file && file.doc.file.sourceOrigin) || "engineInput";
+    noteEl.textContent = origin === "engineInput"
+      ? "Colored over engine-input source — if this input was bundled, provide a source map to see pre-bundle original source."
+      : "Colored over original source (recovered via input source map).";
+  }
+
+  function onActiveFileChanged() {
+    var file = activeFile();
+    if (!file) return;
+    updateSourceOriginNote(file);
+    renderTree();
+    renderKpis(file);
+    renderClassDist(file);
+    renderEngineInfo(file);
+    paintCode(file);
+    renderWeakSpots(file);
+    highlightSelectionRing();
+    applyHighlightClass();
+    renderInspector();
+  }
+
+  var THEME_SEQUENCE = ["auto", "light", "dark"];
+  var THEME_LABEL = { auto: "🖥 Auto", light: "☀ Light", dark: "🌙 Dark" };
+  var themeBtn = document.getElementById("theme-toggle");
+
+  function applyTheme(mode, quiet) {
+    if (mode === "auto") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", mode);
+    themeBtn.dataset.theme = mode;
+    themeBtn.textContent = THEME_LABEL[mode];
+    themeBtn.setAttribute("aria-label", "Color theme: " + mode + ". Activate to cycle Auto / Light / Dark.");
+    try { localStorage.setItem("afterpack-protmap-theme", mode); } catch (e) { /* file:// storage may be unavailable */ }
+    if (!quiet) {
+      var file = activeFile();
+      if (file) { paintCode(file); renderTree(); renderLegend(); highlightSelectionRing(); }
+    }
+  }
+
+  function setMode(mode) {
+    state.mode = mode;
+    document.getElementById("mode-protection").setAttribute("aria-pressed", String(mode === "protection"));
+    document.getElementById("mode-cost").setAttribute("aria-pressed", String(mode === "cost"));
+    var file = activeFile();
+    if (file) paintCode(file);
+    highlightSelectionRing();
+    renderLegend();
+  }
+
+  function wireEvents() {
+    document.getElementById("mode-protection").addEventListener("click", function () { setMode("protection"); });
+    document.getElementById("mode-cost").addEventListener("click", function () { setMode("cost"); });
+    themeBtn.addEventListener("click", function () {
+      var cur = themeBtn.dataset.theme || "auto";
+      var next = THEME_SEQUENCE[(THEME_SEQUENCE.indexOf(cur) + 1) % THEME_SEQUENCE.length];
+      applyTheme(next);
+    });
+    codeBody.addEventListener("click", function (e) {
+      var t = e.target.closest(".tok");
+      if (t) handleTokActivate(t);
+    });
+    codeBody.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      var t = e.target.closest(".tok");
+      if (!t) return;
+      e.preventDefault();
+      handleTokActivate(t);
+    });
+    document.getElementById("weakspots-list").addEventListener("click", function (e) {
+      var btn = e.target.closest("[data-jump-spotlight]");
+      if (btn) jumpToSpotlight(Number(btn.dataset.jumpSpotlight));
+    });
+    document.getElementById("inspector").addEventListener("click", function (e) {
+      var btn = e.target.closest("[data-copy]");
+      if (btn) copyText(decodeURIComponent(btn.dataset.copy), btn);
+    });
+    treeEl.addEventListener("click", function (e) {
+      var row = e.target.closest(".tree-row");
+      if (!row) return;
+      if (row.dataset.kind === "folder") {
+        var key = row.dataset.key;
+        state.expandedFolders[key] = !state.expandedFolders[key];
+        renderTree();
+      } else {
+        var fi = Number(row.dataset.fileIdx);
+        if (fi === state.activeFileIdx) return;
+        state.activeFileIdx = fi;
+        state.selection = null;
+        onActiveFileChanged();
+      }
+    });
+    highlightToggle.addEventListener("change", function () {
+      state.highlightClassOn = highlightToggle.checked;
+      applyHighlightClass();
+    });
+  }
+
+  function init() {
+    var restoredTheme = "auto";
+    try { restoredTheme = localStorage.getItem("afterpack-protmap-theme") || "auto"; } catch (e) { /* ignore */ }
+    applyTheme(restoredTheme, true);
+
+    renderClassLegendStatic();
+    renderWorkspaceSummary();
+    wireEvents();
+
+    var file = activeFile();
+    if (!file) {
+      document.getElementById("code-body").textContent = "No files in this Protection Map document.";
+      return;
+    }
+
+    updateSourceOriginNote(file);
+    renderTree();
+    renderKpis(file);
+    renderClassDist(file);
+    renderLegend();
+    renderEngineInfo(file);
+    paintCode(file);
+    renderWeakSpots(file);
+    applyHighlightClass();
+    renderInspector();
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
