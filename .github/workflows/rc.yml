@@ -1,0 +1,88 @@
+name: RC
+
+# Every push to main publishes every package as a timestamp release
+# candidate to registry.npmjs.org under the `rc` dist-tag, installable as
+# `npx afterpack@rc`. No secrets are needed to get here: the checks are
+# exactly the contributor lane's, run again on main before the publish.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    name: Test and publish a release candidate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm install --frozen-lockfile
+          else
+            pnpm install --no-frozen-lockfile
+          fi
+
+      - name: Repo hygiene
+        run: pnpm hygiene
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Compute the release-candidate version
+        run: |
+          BASE=$(node -p "require('./package.json').version")
+          BASE=${BASE%%-*}
+          echo "RC_VERSION=${BASE}-rc.$(date -u +%Y%m%dT%H%M)" >> "$GITHUB_ENV"
+
+      - name: Set the version across every package
+        run: pnpm version:set --version "$RC_VERSION"
+
+      # `pnpm -r publish` skips every package marked private, so the workspace
+      # root is never published.
+      - name: Publish to the rc dist-tag
+        run: pnpm -r publish --tag rc --provenance --access public --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # The tag names the SOURCE commit, not the version bump, which is never
+      # committed. promote.yml checks this tag out and re-derives a clean
+      # version from it.
+      - name: Tag the release candidate
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "rc-$RC_VERSION"
+          git push origin "rc-$RC_VERSION"
+
+      - name: Summary
+        run: |
+          echo "Published \`$RC_VERSION\` to the \`rc\` dist-tag." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Try it: \`npx afterpack@rc --version\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Promote it: run the Promote workflow with \`rc_version: $RC_VERSION\`." >> "$GITHUB_STEP_SUMMARY"

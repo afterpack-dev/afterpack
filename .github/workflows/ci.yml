@@ -1,52 +1,105 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - "**/*.md"
-      - LICENSE
   pull_request:
-    branches: [main]
+  push:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
-  # Pure TypeScript, no native code, nothing OS/Node-version-specific under
-  # test -- Node's cross-platform guarantees already cover this, so a
-  # 3-OS x 2-Node-version matrix (6 redundant jobs) was paying for signal
-  # this package can't actually produce. One combination (current LTS, the
-  # cheapest runner) is enough; widen back to a real matrix only if a real
-  # platform- or Node-version-specific bug is ever suspected.
-  test:
-    name: Test - Node ${{ matrix.node }} - ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest]
-        node: [22]
+  check:
+    name: Hygiene, lint, build, typecheck, test
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 9
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: ${{ matrix.node }}
-          cache: 'pnpm'
+          node-version: 22
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm install --frozen-lockfile
+          else
+            pnpm install --no-frozen-lockfile
+          fi
+
+      - name: Public hygiene
+        run: pnpm hygiene
+
+      - name: Comment ban
+        run: pnpm check:comments
+
+      - name: Lint
+        run: pnpm lint
 
       - name: Build
-        run: pnpm run build
+        run: pnpm build
 
-      - name: Run tests
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
         run: pnpm test
+
+  e2e:
+    # Red until @afterpack/core 0.1.x is published to registry.npmjs.org, which every fixture resolves.
+    name: End-to-end (Playwright)
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm install --frozen-lockfile
+          else
+            pnpm install --no-frozen-lockfile
+          fi
+
+      - name: Build every package
+        run: pnpm -r build
+
+      - name: Install the e2e fixtures
+        run: pnpm e2e:install
+
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run the end-to-end suite
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GIT_REF: ${{ github.ref }}
+        run: |
+          if [ "$EVENT_NAME" = "push" ] && [ "$GIT_REF" = "refs/heads/main" ]; then
+            pnpm e2e
+          else
+            pnpm e2e:quick
+          fi
+
+      - name: Upload the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playwright-report
+          path: |
+            .afterpack/e2e/playwright-report/**
+            .afterpack/e2e/test-results/**
+          if-no-files-found: ignore
+          retention-days: 7

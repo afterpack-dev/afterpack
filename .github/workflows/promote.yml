@@ -1,0 +1,162 @@
+name: Promote
+
+# Two jobs, two triggers.
+#
+#  * `workflow_dispatch` promotes one release candidate to `latest`. The manual
+#    dispatch IS the gate — nothing reaches `latest` without a maintainer
+#    naming the RC that has been tried.
+#  * `repository_dispatch` type `core-published` reacts to a STABLE engine
+#    release by bumping the `@afterpack/core` pin across every package. The
+#    resulting push to main runs rc.yml, which cuts the RC to promote.
+on:
+  workflow_dispatch:
+    inputs:
+      rc_version:
+        description: "The release candidate to promote, e.g. 0.1.0-rc.20260908T1530"
+        required: true
+        type: string
+  repository_dispatch:
+    types: [core-published]
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  promote:
+    name: Promote a release candidate to latest
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      # Promote-by-republish: the tree that publishes to `latest` is byte for
+      # byte the tree that was published as the RC, not a fresh build of main.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: rc-${{ inputs.rc_version }}
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Derive the stable version
+        id: version
+        run: |
+          RC="${{ inputs.rc_version }}"
+          VERSION="${RC%%-rc.*}"
+          if [ "$VERSION" = "$RC" ]; then
+            echo "::error::'$RC' is not a release-candidate version"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm install --frozen-lockfile
+          else
+            pnpm install --no-frozen-lockfile
+          fi
+
+      - name: Set the version across every package
+        run: pnpm version:set --version "$VERSION"
+
+      - name: Build
+        run: pnpm build
+
+      - name: Publish to the latest dist-tag
+        run: pnpm -r publish --tag latest --provenance --access public --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Tag the release
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "v$VERSION"
+          git push origin "v$VERSION"
+
+  verify:
+    name: Verify the published release
+    needs: promote
+    runs-on: ubuntu-latest
+    steps:
+      # A clean runner with nothing from this repository checked out: the only
+      # thing under test is what a user gets from npm.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Install from npm and run it
+        run: |
+          INSTALLED=$(npx --yes afterpack@latest --version)
+          echo "afterpack@latest reports $INSTALLED"
+          if [ "$INSTALLED" != "${{ needs.promote.outputs.version }}" ]; then
+            echo "::error::expected ${{ needs.promote.outputs.version }}, got $INSTALLED"
+            exit 1
+          fi
+
+  bump-engine:
+    name: Bump the engine pin
+    if: github.event_name == 'repository_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: main
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      # A MAJOR engine bump is a deliberate migration, never an automatic
+      # commit: it fails here so a human does it.
+      - name: Repin @afterpack/core across every package
+        run: |
+          NEXT="${{ github.event.client_payload.version }}"
+          NEXT="${NEXT#v}"
+          node - "$NEXT" <<'NODE'
+          const fs = require("node:fs");
+          const next = process.argv[2];
+          if (!/^\d+\.\d+\.\d+$/.test(next)) {
+            console.error(`::error::'${next}' is not a stable version`);
+            process.exit(1);
+          }
+          const nextMajor = next.split(".")[0];
+          let changed = 0;
+          for (const dir of fs.readdirSync("packages")) {
+            const file = `packages/${dir}/package.json`;
+            const pkg = JSON.parse(fs.readFileSync(file, "utf8"));
+            const current = pkg.dependencies?.["@afterpack/core"];
+            if (!current) continue;
+            const currentMajor = current.replace(/^[~^]/, "").split(".")[0];
+            if (currentMajor !== nextMajor) {
+              console.error(`::error::${file} pins ${current}; ${next} is a major change`);
+              process.exit(1);
+            }
+            pkg.dependencies["@afterpack/core"] = `~${next}`;
+            fs.writeFileSync(file, `${JSON.stringify(pkg, null, 2)}\n`);
+            changed++;
+          }
+          console.log(`repinned ${changed} package(s) to ~${next}`);
+          NODE
+          echo "ENGINE_VERSION=$NEXT" >> "$GITHUB_ENV"
+
+      # Pushing to main is the point: it triggers rc.yml, which tests against
+      # the new engine and cuts the RC a maintainer then promotes.
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "::notice::already pinned to $ENGINE_VERSION"
+            exit 0
+          fi
+          git add packages/*/package.json
+          git commit -m "chore(deps): bump @afterpack/core to $ENGINE_VERSION"
+          git push origin main
