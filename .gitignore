@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+
+# Misc
+*.tgz
+.turbo
+
+# Local development override (use `pnpm link` for local dev)
+.pnpmfile.cjs
+pnpm-workspace.yaml
+
+# Misc
+local/

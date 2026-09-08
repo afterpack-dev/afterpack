@@ -1,0 +1,60 @@
+{
+  "name": "afterpack",
+  "version": "0.0.15",
+  "description": "A high-performance post-build JavaScript obfuscator and minifier",
+  "type": "module",
+  "main": "./dist/cli.js",
+  "bin": {
+    "afterpack": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown src/cli.ts --format esm --dts",
+    "dev": "tsdown src/cli.ts --format esm --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "pnpm build",
+    "prepack": "tsx scripts/prepack.ts",
+    "postpack": "tsx scripts/postpack.ts",
+    "release": "npm version patch && git push && git push --tags",
+    "release:minor": "npm version minor && git push && git push --tags",
+    "release:major": "npm version major && git push && git push --tags",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "rc": "npm version prerelease --preid rc && git push && git push --tags"
+  },
+  "keywords": [
+    "obfuscator",
+    "minifier",
+    "javascript",
+    "protection",
+    "security",
+    "afterpack"
+  ],
+  "author": "AfterPack <hello@afterpack.dev>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/afterpack-dev/afterpack.git"
+  },
+  "homepage": "https://afterpack.dev",
+  "bugs": {
+    "url": "https://github.com/afterpack-dev/afterpack/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@afterpack/core": "~0.0.9"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.4",
+    "@types/node": "^25.0.9",
+    "tsdown": "^0.11.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
+  }
+}
