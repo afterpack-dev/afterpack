@@ -1,0 +1,40 @@
+{
+  "framework": "esbuild-app",
+  "frameworkClass": "spa",
+  "description": "A minimal app bundled with esbuild + @afterpack/esbuild (single ESM outfile). Proves the esbuild bundle survives obfuscation: the page renders and the counter interaction (obfuscated #private-field class) still works in chromium.",
+  "seed": 284619375,
+  "deterministicOutput": true,
+  "build": {
+    "outputDir": "dist",
+    "bundles": ["client"],
+    "note": "node build.mjs bundles src/main.js -> dist/app.js, obfuscated by @afterpack/esbuild's onEnd hook (build.backup:false)"
+  },
+  "obfuscation": {
+    "minFiles": 1,
+    "passes": 1,
+    "minRatioPercent": 100
+  },
+  "smoke": {
+    "routes": [
+      {
+        "path": "/",
+        "status": 200,
+        "textContains": ["esbuild app fixture"],
+        "selectors": {
+          "[data-testid=\"title\"]": "esbuild app fixture",
+          "[data-testid=\"intro\"]": "AfterPack framework-integration smoke fixture.",
+          "[data-testid=\"counter\"]": "count is 0 (even)"
+        }
+      }
+    ],
+    "interactions": [
+      {
+        "route": "/",
+        "description": "Clicking the counter runs the obfuscated bundle's #private-field class and re-renders.",
+        "click": "[data-testid=\"counter\"]",
+        "expectTextContains": ["count is 1 (odd)"]
+      }
+    ],
+    "consoleErrors": "none"
+  }
+}

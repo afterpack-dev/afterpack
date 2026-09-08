@@ -1,0 +1,64 @@
+{
+  "framework": "electron",
+  "frameworkClass": "desktop",
+  "description": "electron-vite app with all THREE legs (main, preload, renderer) obfuscated by @afterpack/electron in one call. The point of the fixture is the cross-bundle seed contract: every leg of one build must obfuscate with ONE seed. No browser-served surface, so `smoke` is deliberately absent -- the obfuscated main + preload bundles are EXECUTED under node against a stub `electron` module (crossing the real ipcMain/ipcRenderer boundary) and the obfuscated renderer bundle is EXECUTED in headless Chromium over file://, which needs no display server.",
+  "seed": 815273649,
+  "deterministicOutput": true,
+  "build": {
+    "outputDir": "out",
+    "bundles": [
+      "main",
+      "preload",
+      "renderer"
+    ],
+    "note": "obfuscation runs automatically via @afterpack/electron (electron.vite.config.ts) -- no separate step"
+  },
+  "obfuscation": {
+    "minFiles": 3,
+    "passes": 3,
+    "minRatioPercent": 100
+  },
+  "electron": {
+    "legs": {
+      "main": "out/main/index.js",
+      "preload": "out/preload/index.mjs",
+      "rendererEntry": "out/renderer/index.html",
+      "rendererDir": "out/renderer"
+    },
+    "bridge": {
+      "entries": [
+        [
+          "a",
+          2
+        ],
+        [
+          "b",
+          3
+        ],
+        [
+          "c",
+          4
+        ]
+      ],
+      "expectSummary": {
+        "owner": "main",
+        "total": 9,
+        "largest": "c"
+      },
+      "expectInfo": {
+        "channel": "fixture",
+        "version": "1.4.2"
+      },
+      "expectLabel": {
+        "input": 35,
+        "output": "entry-z"
+      },
+      "expectThrow": "not a number: bad"
+    },
+    "renderer": {
+      "title": "AfterPack Electron fixture",
+      "counterAfterClick": "count is 1 (odd)",
+      "bridgeText": "fixture/1.4.2 total 9 largest c entry-z"
+    }
+  }
+}

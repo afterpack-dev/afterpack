@@ -1,0 +1,45 @@
+{
+  "framework": "svelte",
+  "frameworkClass": "spa",
+  "description": "Plain Svelte 5 + Vite SPA (NOT SvelteKit -- ../sveltekit/ covers that), obfuscated automatically via @afterpack/svelte, the thin wrapper over @afterpack/vite. The wrapper's only unit test mocks @afterpack/vite outright, so this fixture is what proves a real Svelte compiler output survives the real pass: the app mounts and the $state/$derived rune counter still re-renders in chromium.",
+  "seed": 730194582,
+  "deterministicOutput": true,
+  "build": {
+    "outputDir": "dist",
+    "bundles": [
+      "client"
+    ],
+    "note": "obfuscation runs automatically via @afterpack/svelte's closeBundle hook (vite.config.ts) -- no separate step"
+  },
+  "obfuscation": {
+    "minFiles": 1,
+    "passes": 1,
+    "minRatioPercent": 100
+  },
+  "smoke": {
+    "routes": [
+      {
+        "path": "/",
+        "status": 200,
+        "textContains": [
+          "Svelte fixture"
+        ],
+        "selectors": {
+          "[data-testid=\"title\"]": "Svelte fixture",
+          "[data-testid=\"intro\"]": "AfterPack framework-integration smoke fixture."
+        }
+      }
+    ],
+    "interactions": [
+      {
+        "route": "/",
+        "description": "The obfuscated rune-based counter increments and re-renders on click.",
+        "click": "[data-testid=\"counter\"]",
+        "expectTextContains": [
+          "count is 1 (odd)"
+        ]
+      }
+    ],
+    "consoleErrors": "none"
+  }
+}

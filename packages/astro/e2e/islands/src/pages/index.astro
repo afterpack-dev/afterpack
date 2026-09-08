@@ -1,0 +1,11 @@
+---
+import Counter from "../components/Counter.tsx";
+import Base from "../layouts/Base.astro";
+---
+
+<Base title="Astro islands fixture">
+  <h1 data-testid="title">Astro islands fixture</h1>
+  <p data-testid="intro">AfterPack framework-integration smoke fixture.</p>
+  <Counter client:load />
+  <p><a href="/about">About</a></p>
+</Base>

@@ -1,0 +1,108 @@
+{
+  "framework": "next-16",
+  "frameworkClass": "ssr",
+  "description": "Next.js 16 App Router + Turbopack. Dual-bundle SSR: client (.next/static/chunks) + server (.next/server) share a hydration contract (docs/testing.md §7.4, docs/framework-integration.md §9.2 Next.js row).",
+  "seed": 184650293,
+  "deterministicOutput": true,
+  "dualBundle": true,
+  "build": {
+    "outputDir": ".next",
+    "bundles": [
+      "client",
+      "server"
+    ],
+    "note": "obfuscation runs INSIDE `next build`, via @afterpack/next's compiler.runAfterProductionCompile hook -- no postbuild script and no separate step; the build also writes .next/.afterpack-protection.json"
+  },
+  "obfuscation": {
+    "minFiles": 21,
+    "passes": 1,
+    "minRatioPercent": 100
+  },
+  "smoke": {
+    "routes": [
+      {
+        "path": "/",
+        "status": 200,
+        "textContains": [
+          "Next.js fixture"
+        ],
+        "selectors": {
+          "[data-testid=\"title\"]": "Next.js fixture",
+          "[data-testid=\"intro\"]": "AfterPack framework-integration smoke fixture."
+        }
+      },
+      {
+        "path": "/about",
+        "status": 200,
+        "textContains": [
+          "About AfterPack"
+        ],
+        "selectors": {
+          "[data-testid=\"title\"]": "About AfterPack"
+        }
+      },
+      {
+        "path": "/dynamic",
+        "status": 200,
+        "textContains": [
+          "Dynamic route",
+          "data-testid=\"dynamic-timestamp\""
+        ],
+        "selectors": {
+          "[data-testid=\"title\"]": "Dynamic route"
+        }
+      },
+      {
+        "path": "/legacy",
+        "status": 200,
+        "textContains": [
+          "Legacy Pages Router page",
+          "data-testid=\"legacy-timestamp\""
+        ],
+        "selectors": {
+          "[data-testid=\"legacy-title\"]": "Legacy Pages Router page"
+        }
+      }
+    ],
+    "apiRoutes": [
+      {
+        "path": "/api/health",
+        "status": 200,
+        "jsonEquals": {
+          "status": "ok"
+        }
+      },
+      {
+        "path": "/api/legacy-health",
+        "status": 200,
+        "jsonEquals": {
+          "status": "ok",
+          "router": "pages"
+        }
+      }
+    ],
+    "interactions": [
+      {
+        "route": "/",
+        "description": "Client island hydrates; counter increments on click.",
+        "click": "[data-testid=\"counter\"]",
+        "expectTextContains": [
+          "clicked 1 times (odd)"
+        ]
+      },
+      {
+        "route": "/",
+        "description": "Server Action RPC round-trip: click invokes echo() (app/actions.ts) and renders the server response.",
+        "click": "[data-testid=\"action-button\"]",
+        "expectTextContains": [
+          "server received: hello from client"
+        ]
+      }
+    ],
+    "hydration": {
+      "assertNoMismatch": true,
+      "note": "docs/testing.md §7.4 — server-rendered HTML must agree with the client-hydrated DOM; a hydration-mismatch console error is a server-bundle-class failure."
+    },
+    "consoleErrors": "none"
+  }
+}

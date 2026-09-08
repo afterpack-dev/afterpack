@@ -1,0 +1,15 @@
+# requirejs-amd fixture -- app SOURCE (src/, including the vendored require.js,
+# and the control files) is committed; installed deps + build output are not.
+# The shared ../.gitignore also covers these; they are repeated here so
+# ensureGitignore() (run by the CLI at build time) finds every managed entry
+# already present and leaves this file untouched.
+node_modules/
+dist/
+.afterpack-baseline/
+
+# AfterPack artifacts (the exact set ensureGitignore appends).
+.afterpack/
+*.protectionMap.html
+protectionMap.html
+*.backup.*
+*.map

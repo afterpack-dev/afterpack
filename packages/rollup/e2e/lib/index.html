@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Rollup lib host</title>
+  </head>
+  <body>
+    <h1 data-testid="title">Rollup lib host</h1>
+    <p data-testid="intro">AfterPack framework-integration smoke fixture.</p>
+    <pre data-testid="result">pending</pre>
+    <button type="button" data-testid="counter">count is 0 (even)</button>
+
+    <!-- Imports the OBFUSCATED ESM library and drives its exported API. If the
+         obfuscation broke export names or behavior, these assertions fail. -->
+    <script type="module">
+      import { add, Counter, greet } from "./dist/esm/lib.js";
+
+      const result = document.querySelector('[data-testid="result"]');
+      result.textContent = `${greet("AfterPack")} | ${add(2, 3)}`;
+
+      const counter = document.querySelector('[data-testid="counter"]');
+      const c = new Counter();
+      counter.addEventListener("click", () => {
+        const n = c.increment();
+        counter.textContent = `count is ${n} (${n % 2 === 0 ? "even" : "odd"})`;
+      });
+    </script>
+  </body>
+</html>

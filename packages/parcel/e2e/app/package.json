@@ -1,0 +1,28 @@
+{
+  "name": "parcel-app",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "targets": {
+    "app": {
+      "distDir": "dist",
+      "context": "browser"
+    },
+    "legacy": {
+      "distDir": "dist-legacy",
+      "context": "browser",
+      "engines": {
+        "browsers": "chrome 60"
+      }
+    }
+  },
+  "scripts": {
+    "build": "parcel build index.html --target app",
+    "build:legacy": "parcel build index.html --target legacy",
+    "serve": "node serve.mjs"
+  },
+  "devDependencies": {
+    "@afterpack/parcel-optimizer": "file:../../",
+    "parcel": "^2.16.0"
+  }
+}

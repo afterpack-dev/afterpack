@@ -1,0 +1,17 @@
+{
+  "name": "electron-fixture",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "out/main/index.js",
+  "scripts": {
+    "build": "electron-vite build"
+  },
+  "devDependencies": {
+    "@afterpack/electron": "file:../../",
+    "electron": "file:./electron-stub",
+    "electron-vite": "^5.0.0",
+    "typescript": "~5.9.2",
+    "vite": "^7.3.6"
+  }
+}

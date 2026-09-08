@@ -1,0 +1,46 @@
+{
+  "framework": "webpack-react",
+  "frameworkClass": "spa",
+  "description": "A minimal React 18 SPA bundled with webpack 5 + @afterpack/webpack (real webpack.config using AfterpackWebpackPlugin). Proves the webpack bundle survives obfuscation: the page renders and the React useState counter interaction still works in chromium.",
+  "seed": 671903482,
+  "deterministicOutput": true,
+  "build": {
+    "outputDir": "dist",
+    "bundles": [
+      "client"
+    ],
+    "note": "webpack bundles src/index.jsx -> dist/[name].[contenthash].js, obfuscated by @afterpack/webpack's processAssets tap, before webpack writes"
+  },
+  "obfuscation": {
+    "minFiles": 1,
+    "passes": 1,
+    "minRatioPercent": 100
+  },
+  "smoke": {
+    "routes": [
+      {
+        "path": "/",
+        "status": 200,
+        "textContains": [
+          "webpack + React fixture"
+        ],
+        "selectors": {
+          "[data-testid=\"title\"]": "webpack + React fixture",
+          "[data-testid=\"intro\"]": "AfterPack framework-integration smoke fixture.",
+          "[data-testid=\"counter\"]": "count is 0 (even)"
+        }
+      }
+    ],
+    "interactions": [
+      {
+        "route": "/",
+        "description": "Clicking the counter runs the obfuscated React useState bundle and re-renders.",
+        "click": "[data-testid=\"counter\"]",
+        "expectTextContains": [
+          "count is 1 (odd)"
+        ]
+      }
+    ],
+    "consoleErrors": "none"
+  }
+}

@@ -1,0 +1,14 @@
+# angular fixture -- app SOURCE (src/, angular.json, tsconfig*, build.mjs) is
+# committed; installed deps + build output are not. The shared ../.gitignore also
+# covers these; repeated here so the AfterPack gitignore guard finds them present.
+node_modules/
+dist/
+.angular/
+.afterpack-baseline/
+
+# AfterPack artifacts.
+.afterpack/
+*.protectionMap.html
+protectionMap.html
+*.backup.*
+*.map

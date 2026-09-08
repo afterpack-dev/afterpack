@@ -1,0 +1,45 @@
+{
+  "framework": "vite-react",
+  "frameworkClass": "spa",
+  "description": "Vite 8 + React 19 SPA. Pure-bundler, single client bundle (docs/framework-integration.md §9.2 Vite row).",
+  "seed": 472938102,
+  "deterministicOutput": true,
+  "build": {
+    "outputDir": "dist",
+    "bundles": [
+      "client"
+    ],
+    "note": "obfuscation runs automatically via @afterpack/vite's closeBundle hook (vite.config.ts) -- no separate step"
+  },
+  "obfuscation": {
+    "minFiles": 1,
+    "passes": 1,
+    "minRatioPercent": 100
+  },
+  "smoke": {
+    "routes": [
+      {
+        "path": "/",
+        "status": 200,
+        "textContains": [
+          "Vite + React fixture"
+        ],
+        "selectors": {
+          "[data-testid=\"title\"]": "Vite + React fixture",
+          "[data-testid=\"intro\"]": "AfterPack framework-integration smoke fixture."
+        }
+      }
+    ],
+    "interactions": [
+      {
+        "route": "/",
+        "description": "Counter island increments and re-renders on click.",
+        "click": "[data-testid=\"counter\"]",
+        "expectTextContains": [
+          "count is 1 (odd)"
+        ]
+      }
+    ],
+    "consoleErrors": "none"
+  }
+}

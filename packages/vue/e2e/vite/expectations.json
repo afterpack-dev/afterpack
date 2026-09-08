@@ -1,0 +1,45 @@
+{
+  "framework": "vue3-vite",
+  "frameworkClass": "spa",
+  "description": "Vue 3 + Vite SPA, obfuscated automatically via @afterpack/vue (the thin wrapper over @afterpack/vite). Proves a Vue single-file-component build survives obfuscation: renders + the reactive counter interaction works in chromium.",
+  "seed": 903841276,
+  "deterministicOutput": true,
+  "build": {
+    "outputDir": "dist",
+    "bundles": [
+      "client"
+    ],
+    "note": "obfuscation runs automatically via @afterpack/vue's closeBundle hook (vite.config.ts) -- no separate step"
+  },
+  "obfuscation": {
+    "minFiles": 1,
+    "passes": 1,
+    "minRatioPercent": 100
+  },
+  "smoke": {
+    "routes": [
+      {
+        "path": "/",
+        "status": 200,
+        "textContains": [
+          "Vue 3 + Vite fixture"
+        ],
+        "selectors": {
+          "[data-testid=\"title\"]": "Vue 3 + Vite fixture",
+          "[data-testid=\"intro\"]": "AfterPack framework-integration smoke fixture."
+        }
+      }
+    ],
+    "interactions": [
+      {
+        "route": "/",
+        "description": "Reactive counter increments and re-renders on click.",
+        "click": "[data-testid=\"counter\"]",
+        "expectTextContains": [
+          "count is 1 (odd)"
+        ]
+      }
+    ],
+    "consoleErrors": "none"
+  }
+}

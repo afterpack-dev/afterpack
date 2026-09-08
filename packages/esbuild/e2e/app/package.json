@@ -1,0 +1,14 @@
+{
+  "name": "esbuild-app",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "serve": "node serve.mjs"
+  },
+  "devDependencies": {
+    "@afterpack/esbuild": "file:../../",
+    "esbuild": "^0.24.0"
+  }
+}

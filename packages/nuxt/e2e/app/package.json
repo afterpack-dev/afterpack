@@ -1,0 +1,17 @@
+{
+  "name": "nuxt-fixture",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "build": "nuxt generate",
+    "serve": "node serve.mjs"
+  },
+  "dependencies": {
+    "nuxt": "3.21.11",
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "@afterpack/nuxt": "file:../../"
+  }
+}

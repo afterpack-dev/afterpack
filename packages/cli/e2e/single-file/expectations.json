@@ -1,0 +1,83 @@
+{
+  "framework": "single-file-cli",
+  "frameworkClass": "cli",
+  "description": "One self-contained Node CLI module (no imports, no bundler) obfuscated by the `afterpack` CLI over a dist/ holding EXACTLY ONE .js file. Every other CLI fixture (vanilla-esm, requirejs-amd) points the pass at a multi-file tree, so the single-file shape -- the one per-file CLI directive capture will be built on -- had no coverage. No browser surface: the proof is that the obfuscated program still RUNS under node, so `smoke` is deliberately absent and cli-single-file.spec.ts asserts on stdout/exit codes instead.",
+  "seed": 611274093,
+  "deterministicOutput": true,
+  "build": {
+    "outputDir": "dist",
+    "bundles": [
+      "cli"
+    ],
+    "note": "build.mjs copies src/cli.js -> dist/cli.js then runs `afterpack ./dist --seed=<seed> --build.backup=false`; honors AFTERPACK_build_autorun=false for the un-obfuscated baseline"
+  },
+  "obfuscation": {
+    "minFiles": 1,
+    "passes": 1,
+    "minRatioPercent": 100
+  },
+  "cli": {
+    "entry": "dist/cli.js",
+    "cases": [
+      {
+        "description": "--version prints the embedded version string",
+        "args": [
+          "--version"
+        ],
+        "exitCode": 0,
+        "stdout": "1.4.2\n"
+      },
+      {
+        "description": "sum runs the #private-field Ledger class and serializes it",
+        "args": [
+          "sum",
+          "2",
+          "3",
+          "4"
+        ],
+        "exitCode": 0,
+        "stdout": "{\"entries\":[{\"label\":\"arg0\",\"amount\":2},{\"label\":\"arg1\",\"amount\":3},{\"label\":\"arg2\",\"amount\":4}],\"total\":9}\n"
+      },
+      {
+        "description": "describe defaults its optional positional and reports argc",
+        "args": [
+          "describe"
+        ],
+        "exitCode": 0,
+        "stdout": "{\"greeting\":\"hello, world\",\"argc\":0}\n"
+      },
+      {
+        "description": "describe echoes the given name",
+        "args": [
+          "describe",
+          "AfterPack"
+        ],
+        "exitCode": 0,
+        "stdout": "{\"greeting\":\"hello, AfterPack\",\"argc\":1}\n"
+      },
+      {
+        "description": "an unknown command still fails closed with exit 1 + usage on stderr",
+        "args": [
+          "bogus"
+        ],
+        "exitCode": 1,
+        "stderrContains": [
+          "unknown command: bogus",
+          "usage:"
+        ]
+      },
+      {
+        "description": "a non-numeric operand still fails closed with exit 1",
+        "args": [
+          "sum",
+          "2",
+          "nope"
+        ],
+        "exitCode": 1,
+        "stderrContains": [
+          "not a number: nope"
+        ]
+      }
+    ]
+  }
+}

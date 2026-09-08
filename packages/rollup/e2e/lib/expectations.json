@@ -1,0 +1,41 @@
+{
+  "framework": "rollup-lib",
+  "frameworkClass": "library",
+  "description": "A small ESM/CJS library bundled with Rollup + @afterpack/rollup. The smoke serves a tiny host page that imports the OBFUSCATED ESM build and asserts its exported functions/class return the right values in chromium -- proving library builds survive obfuscation (export names + behavior preserved). The CJS build is additionally require()'d in node (see rollup-lib.spec.ts).",
+  "seed": 611729384,
+  "deterministicOutput": true,
+  "build": {
+    "outputDir": "dist",
+    "bundles": ["esm", "cjs"],
+    "note": "rollup -c emits dist/esm/lib.js + dist/cjs/lib.cjs, each obfuscated by @afterpack/rollup's writeBundle hook (build.backup:false)"
+  },
+  "obfuscation": {
+    "minFiles": 2,
+    "passes": 2,
+    "minRatioPercent": 100
+  },
+  "smoke": {
+    "routes": [
+      {
+        "path": "/",
+        "status": 200,
+        "textContains": ["Rollup lib host"],
+        "selectors": {
+          "[data-testid=\"title\"]": "Rollup lib host",
+          "[data-testid=\"intro\"]": "AfterPack framework-integration smoke fixture.",
+          "[data-testid=\"result\"]": "Hello, AfterPack! | 5",
+          "[data-testid=\"counter\"]": "count is 0 (even)"
+        }
+      }
+    ],
+    "interactions": [
+      {
+        "route": "/",
+        "description": "Clicking the counter drives the obfuscated library's #private-field class and re-renders.",
+        "click": "[data-testid=\"counter\"]",
+        "expectTextContains": ["count is 1 (odd)"]
+      }
+    ],
+    "consoleErrors": "none"
+  }
+}

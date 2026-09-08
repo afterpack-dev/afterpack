@@ -1,0 +1,74 @@
+{
+  "framework": "next-16-pages",
+  "frameworkClass": "ssr",
+  "description": "Next.js 16 with a PURE Pages Router app -- no app/ directory at all. ../next-16/ is a hybrid (App Router with two pages/ routes bolted on), which is Next's incremental-adoption shape, NOT an un-migrated app: a hybrid project still emits the App Router runtime, so a Pages-only build's chunk set (pages/_app, getStaticProps/getServerSideProps payload wiring, the (req,res) API dialect, zero RSC) had never been obfuscated end to end. Dual-bundle: client (.next/static/chunks) + server (.next/server).",
+  "seed": 184650295,
+  "deterministicOutput": true,
+  "dualBundle": true,
+  "build": {
+    "outputDir": ".next",
+    "bundles": [
+      "client",
+      "server"
+    ],
+    "note": "obfuscation runs INSIDE `next build`, via @afterpack/next's compiler.runAfterProductionCompile hook -- no postbuild script and no separate step; the build also writes .next/.afterpack-protection.json"
+  },
+  "obfuscation": {
+    "minFiles": 9,
+    "passes": 1,
+    "minRatioPercent": 100
+  },
+  "smoke": {
+    "routes": [
+      {
+        "path": "/",
+        "status": 200,
+        "textContains": [
+          "Next.js Pages Router fixture"
+        ],
+        "selectors": {
+          "[data-testid=\"title\"]": "Next.js Pages Router fixture",
+          "[data-testid=\"intro\"]": "AfterPack framework-integration smoke fixture.",
+          "[data-testid=\"app-shell\"]": "pages/_app.tsx shell",
+          "[data-testid=\"built-with\"]": "getStaticProps"
+        }
+      },
+      {
+        "path": "/ssr",
+        "status": 200,
+        "textContains": [
+          "Server-rendered page",
+          "data-testid=\"ssr-timestamp\""
+        ],
+        "selectors": {
+          "[data-testid=\"ssr-title\"]": "Server-rendered page"
+        }
+      }
+    ],
+    "apiRoutes": [
+      {
+        "path": "/api/health",
+        "status": 200,
+        "jsonEquals": {
+          "status": "ok",
+          "router": "pages"
+        }
+      }
+    ],
+    "interactions": [
+      {
+        "route": "/",
+        "description": "The obfuscated Pages-Router client bundle hydrates; the counter increments on click.",
+        "click": "[data-testid=\"counter\"]",
+        "expectTextContains": [
+          "clicked 1 times (odd)"
+        ]
+      }
+    ],
+    "hydration": {
+      "assertNoMismatch": true,
+      "note": "server-rendered HTML must agree with the client-hydrated DOM."
+    },
+    "consoleErrors": "none"
+  }
+}

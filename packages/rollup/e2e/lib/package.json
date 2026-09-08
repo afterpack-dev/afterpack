@@ -1,0 +1,14 @@
+{
+  "name": "rollup-lib",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "build": "rollup -c",
+    "serve": "node serve.mjs"
+  },
+  "devDependencies": {
+    "@afterpack/rollup": "file:../../",
+    "rollup": "^4.0.0"
+  }
+}

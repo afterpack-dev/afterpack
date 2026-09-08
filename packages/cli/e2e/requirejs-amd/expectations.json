@@ -1,0 +1,46 @@
+{
+  "framework": "requirejs-amd",
+  "frameworkClass": "vanilla",
+  "description": "Legacy AMD app: vendored require.js (2.3.7) loads define()/require() modules at runtime, no bundler. The `afterpack` CLI obfuscates dist/modules/ (docs/framework-integration.md -- CLI universal-fallback row). Proves AfterPack preserves AMD define/require semantics (globals + encoded module ids still resolve).",
+  "seed": 641928375,
+  "deterministicOutput": true,
+  "build": {
+    "outputDir": "dist/modules",
+    "bundles": [
+      "client"
+    ],
+    "note": "no bundler: build.mjs stages src/ -> dist/ then runs `afterpack ./dist/modules` (require.js itself is left pristine) -- a plain `npm run build` already emits obfuscated AMD modules"
+  },
+  "obfuscation": {
+    "minFiles": 3,
+    "passes": 1,
+    "minRatioPercent": 100
+  },
+  "smoke": {
+    "routes": [
+      {
+        "path": "/",
+        "status": 200,
+        "textContains": [
+          "RequireJS AMD fixture"
+        ],
+        "selectors": {
+          "[data-testid=\"title\"]": "RequireJS AMD fixture",
+          "[data-testid=\"intro\"]": "AfterPack framework-integration smoke fixture.",
+          "[data-testid=\"amd-output\"]": "Hello, AMD! sum=5 product=20"
+        }
+      }
+    ],
+    "interactions": [
+      {
+        "route": "/",
+        "description": "Clicking the counter calls the obfuscated AMD calc module's add() and re-renders.",
+        "click": "[data-testid=\"counter\"]",
+        "expectTextContains": [
+          "count is 1 (odd)"
+        ]
+      }
+    ],
+    "consoleErrors": "none"
+  }
+}

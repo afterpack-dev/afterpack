@@ -1,0 +1,40 @@
+{
+  "framework": "parcel-app",
+  "frameworkClass": "spa",
+  "description": "A code-split app bundled with Parcel 2 + @afterpack/parcel-optimizer (an Optimizer, so the bundle is obfuscated IN MEMORY and never hits disk in cleartext). Proves the obfuscated Parcel bundle survives: the page renders, and the counter interaction resolves and executes a LAZILY IMPORTED, content-hashed chunk whose #private-field class was obfuscated.",
+  "seed": 284619376,
+  "deterministicOutput": true,
+  "build": {
+    "outputDir": "dist",
+    "bundles": ["client"],
+    "note": "`parcel build index.html --target app` emits dist/, obfuscated by @afterpack/parcel-optimizer during packaging. The seed is pinned in afterpack.json (the plugin's only config channel -- .parcelrc entries carry no inline options) and asserted to match `seed` above."
+  },
+  "obfuscation": {
+    "minFiles": 2,
+    "passes": 2,
+    "minRatioPercent": 100
+  },
+  "smoke": {
+    "routes": [
+      {
+        "path": "/",
+        "status": 200,
+        "textContains": ["parcel app fixture"],
+        "selectors": {
+          "[data-testid=\"title\"]": "parcel app fixture",
+          "[data-testid=\"intro\"]": "AfterPack framework-integration smoke fixture.",
+          "[data-testid=\"counter\"]": "count is 0 (even)"
+        }
+      }
+    ],
+    "interactions": [
+      {
+        "route": "/",
+        "description": "Clicking the counter dynamically imports a SEPARATE content-hashed chunk and runs its obfuscated #private-field class. This is the regression test for Parcel's HASH_REF content-hash placeholders: if AfterPack obfuscated the chunk URL away, this chunk would 404 and the text would never change.",
+        "click": "[data-testid=\"counter\"]",
+        "expectTextContains": ["count is 1 (odd)"]
+      }
+    ],
+    "consoleErrors": "none"
+  }
+}

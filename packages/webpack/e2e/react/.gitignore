@@ -1,0 +1,13 @@
+# webpack-react fixture -- app SOURCE (src/, webpack.config.js) is committed;
+# installed deps + build output are not. The shared ../.gitignore also covers
+# these; repeated here so the AfterPack gitignore guard finds them already present.
+node_modules/
+dist/
+.afterpack-baseline/
+
+# AfterPack artifacts.
+.afterpack/
+*.protectionMap.html
+protectionMap.html
+*.backup.*
+*.map

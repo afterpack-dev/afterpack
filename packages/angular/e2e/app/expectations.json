@@ -1,0 +1,46 @@
+{
+  "framework": "angular",
+  "frameworkClass": "spa",
+  "description": "A minimal Angular 18 standalone app built with the SEALED @angular-devkit/build-angular:application (esbuild) builder, then obfuscated by @afterpack/angular's afterpackAngular() postbuild helper over dist/<app>/browser -- the canonical Angular path (the modern builder exposes no plugin hook). The helper auto-locates the browser output (findAngularBrowserDir), so this fixture is what exercises that published code against real `ng build` output. Proves the Angular bundle survives obfuscation: the app bootstraps + renders and the signal-based counter interaction still works in chromium.",
+  "seed": 428170593,
+  "deterministicOutput": true,
+  "build": {
+    "outputDir": "dist/angular-fixture/browser",
+    "bundles": [
+      "client"
+    ],
+    "note": "build.mjs runs `ng build --configuration production` then calls afterpackAngular({ cwd, seed, protectionMap: true }) -- no browserDir, so findAngularBrowserDir locates dist/angular-fixture/browser itself, and the combined Protection Map lands in the gitignored .afterpack/; honors AFTERPACK_build_autorun=false for the un-obfuscated baseline"
+  },
+  "obfuscation": {
+    "minFiles": 2,
+    "passes": 1,
+    "minRatioPercent": 100
+  },
+  "smoke": {
+    "routes": [
+      {
+        "path": "/",
+        "status": 200,
+        "textContains": [
+          "Angular fixture"
+        ],
+        "selectors": {
+          "[data-testid=\"title\"]": "Angular fixture",
+          "[data-testid=\"intro\"]": "AfterPack framework-integration smoke fixture.",
+          "[data-testid=\"counter\"]": "count is 0 (even)"
+        }
+      }
+    ],
+    "interactions": [
+      {
+        "route": "/",
+        "description": "Clicking the counter runs the obfuscated Angular signal update and re-renders.",
+        "click": "[data-testid=\"counter\"]",
+        "expectTextContains": [
+          "count is 1 (odd)"
+        ]
+      }
+    ],
+    "consoleErrors": "none"
+  }
+}

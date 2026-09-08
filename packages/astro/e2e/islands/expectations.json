@@ -1,0 +1,55 @@
+{
+  "framework": "astro-islands",
+  "frameworkClass": "ssg",
+  "description": "Astro 6 with a React island. Compiler-based: the .astro compiler regenerates code, so directives in .astro files need pre-compile capture (docs/framework-integration.md §9.2 Astro row, §4.5). This fixture builds in static (SSG) mode.",
+  "seed": 730185264,
+  "deterministicOutput": true,
+  "build": {
+    "outputDir": "dist",
+    "bundles": [
+      "client"
+    ],
+    "note": "obfuscation runs automatically via @afterpack/astro (a real Astro integration that injects @afterpack/vite's closeBundle hook through astro:config:setup) -- no separate step"
+  },
+  "obfuscation": {
+    "minFiles": 3,
+    "passes": 1,
+    "minRatioPercent": 100
+  },
+  "smoke": {
+    "routes": [
+      {
+        "path": "/",
+        "status": 200,
+        "textContains": [
+          "Astro islands fixture"
+        ],
+        "selectors": {
+          "[data-testid=\"title\"]": "Astro islands fixture",
+          "[data-testid=\"intro\"]": "AfterPack framework-integration smoke fixture."
+        }
+      },
+      {
+        "path": "/about",
+        "status": 200,
+        "textContains": [
+          "About AfterPack"
+        ],
+        "selectors": {
+          "[data-testid=\"title\"]": "About AfterPack"
+        }
+      }
+    ],
+    "interactions": [
+      {
+        "route": "/",
+        "description": "React island hydrates via client:load; counter increments on click.",
+        "click": "[data-testid=\"counter\"]",
+        "expectTextContains": [
+          "island count is 1 (odd)"
+        ]
+      }
+    ],
+    "consoleErrors": "none"
+  }
+}

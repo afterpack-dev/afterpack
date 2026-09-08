@@ -1,0 +1,48 @@
+{
+  "framework": "nuxt",
+  "frameworkClass": "ssg",
+  "description": "A minimal Nuxt 3 static/prerendered app, obfuscated via @afterpack/nuxt (a real defineNuxtModule that registers @afterpack/vite on Nuxt's Vite config). @afterpack runs on Vite's closeBundle, so the client bundle is obfuscated before nitro prerenders into .output/public. Proves a prerendered Nuxt page hydrates + the reactive counter interaction works in chromium with the obfuscated client.",
+  "seed": 750318264,
+  "deterministicOutput": true,
+  "build": {
+    "outputDir": ".output/public/_nuxt",
+    "bundles": [
+      "client"
+    ],
+    "note": "nuxt generate obfuscates the client bundle on closeBundle (via @afterpack/nuxt -> @afterpack/vite); buildId pinned in nuxt.config.ts for determinism"
+  },
+  "obfuscation": {
+    "minFiles": 13,
+    "passes": 2,
+    "minRatioPercent": 100
+  },
+  "smoke": {
+    "routes": [
+      {
+        "path": "/",
+        "status": 200,
+        "textContains": [
+          "Nuxt 3 fixture"
+        ],
+        "selectors": {
+          "[data-testid=\"title\"]": "Nuxt 3 fixture",
+          "[data-testid=\"intro\"]": "AfterPack framework-integration smoke fixture."
+        }
+      }
+    ],
+    "interactions": [
+      {
+        "route": "/",
+        "description": "The obfuscated client hydrates the prerendered page; the reactive counter increments on click.",
+        "click": "[data-testid=\"counter\"]",
+        "expectTextContains": [
+          "count is 1 (odd)"
+        ]
+      }
+    ],
+    "hydration": {
+      "assertNoMismatch": true
+    },
+    "consoleErrors": "none"
+  }
+}

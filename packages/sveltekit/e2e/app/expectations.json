@@ -1,0 +1,48 @@
+{
+  "framework": "sveltekit",
+  "frameworkClass": "ssg",
+  "description": "Minimal SvelteKit app with the static adapter (SSG), obfuscated via @afterpack/sveltekit (over @afterpack/vite). @afterpack runs on Vite's closeBundle, so the client bundle is obfuscated before the static adapter copies it into build/. Proves a prerendered SvelteKit page hydrates + the counter interaction works in chromium with the obfuscated client.",
+  "seed": 517293846,
+  "deterministicOutput": true,
+  "build": {
+    "outputDir": "build",
+    "bundles": [
+      "client"
+    ],
+    "note": "vite build (via SvelteKit) obfuscates the client bundle on closeBundle; adapter-static copies it into build/. version.name pinned in svelte.config.js for determinism."
+  },
+  "obfuscation": {
+    "minFiles": 27,
+    "passes": 2,
+    "minRatioPercent": 100
+  },
+  "smoke": {
+    "routes": [
+      {
+        "path": "/",
+        "status": 200,
+        "textContains": [
+          "SvelteKit fixture"
+        ],
+        "selectors": {
+          "[data-testid=\"title\"]": "SvelteKit fixture",
+          "[data-testid=\"intro\"]": "AfterPack framework-integration smoke fixture."
+        }
+      }
+    ],
+    "interactions": [
+      {
+        "route": "/",
+        "description": "The obfuscated client hydrates the prerendered page; the counter increments on click.",
+        "click": "[data-testid=\"counter\"]",
+        "expectTextContains": [
+          "count is 1 (odd)"
+        ]
+      }
+    ],
+    "hydration": {
+      "assertNoMismatch": true
+    },
+    "consoleErrors": "none"
+  }
+}
