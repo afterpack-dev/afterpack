@@ -1,0 +1,58 @@
+{
+  "name": "afterpack",
+  "version": "0.1.0",
+  "description": "AfterPack CLI - obfuscate any build output; the universal fallback and zero-install demo",
+  "type": "module",
+  "bin": {
+    "afterpack": "./dist/cli.js"
+  },
+  "main": "./dist/cli.js",
+  "files": [
+    "LICENSE",
+    "NOTICE",
+    "SKILL.md",
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown src/cli.ts --format esm",
+    "dev": "tsdown src/cli.ts --format esm --watch",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@afterpack/core": "~0.1.0",
+    "@afterpack/integration-utils": "workspace:*"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.4",
+    "@types/node": "^22.0.0",
+    "tsdown": "^0.11.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/afterpack-dev/afterpack.git",
+    "directory": "packages/cli"
+  },
+  "keywords": [
+    "obfuscator",
+    "javascript",
+    "cli",
+    "code-protection",
+    "afterpack"
+  ],
+  "license": "Apache-2.0",
+  "homepage": "https://www.afterpack.dev",
+  "bugs": {
+    "url": "https://github.com/afterpack-dev/afterpack/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
