@@ -1,5 +1,10 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.4.4/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
   "assist": {
     "actions": {
       "source": {
@@ -16,15 +21,22 @@
   "formatter": {
     "enabled": true,
     "indentStyle": "space",
-    "indentWidth": 2
+    "lineWidth": 100
   },
   "javascript": {
     "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always",
       "trailingCommas": "all"
     }
   },
   "files": {
-    "includes": ["**"],
+    "includes": [
+      "**",
+      "!packages/protection-map/demo",
+      "!packages/protection-map/template.html",
+      "!packages/*/e2e"
+    ],
     "ignoreUnknown": true
   }
 }

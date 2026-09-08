@@ -1,52 +1,69 @@
 # [AfterPack](https://www.afterpack.dev)
 
-High-performance JavaScript obfuscator and audit tool — find leaked secrets, seal your production code.
+AfterPack obfuscates the JavaScript your build already emitted. It runs after the bundler, over the
+output directory, and rewrites every emitted file in place — so what ships is not your source.
 
-[www.afterpack.dev](https://www.afterpack.dev)
+This repository holds the **CLI**, the **framework integrations** and the shared helpers they build
+on, all under Apache-2.0. The obfuscation engine is `@afterpack/core`: a proprietary native engine,
+free to use, installed as an ordinary npm dependency. Its source is not here.
 
-## Installation
-
-```bash
-npx afterpack
-```
-
-## Commands
-
-| Command | Description |
-| --- | --- |
-| `npx afterpack audit <url>` | Scan a live URL for leaked secrets and sensitive data |
-| `npx afterpack` | Obfuscate JavaScript build artifacts _(coming soon)_ |
-
-## Security Audit
-
-Scan any live frontend for leaked secrets, exposed source code, and sensitive data — powered by the [AfterPack API](https://www.afterpack.dev).
+## Try it
 
 ```bash
-npx afterpack audit <url>
+npx afterpack@latest dist/
 ```
 
-**Example:**
+Point it at your output directory (`dist/`, `build/`, `out/`, …) or at a single `.js`/`.mjs`/`.cjs`
+file. A directory is walked recursively.
 
 ```bash
-npx afterpack audit example.com
+npx afterpack@latest dist/ --preset=hard --seed=git
+npx afterpack@latest verify .            # re-check a build against its protection receipt
+npx afterpack@latest --help              # every option, with its type and default
 ```
 
-- **Security score** — 0-100 rating based on exposed secrets, source maps, and unprotected resources
-- **Resource analysis** — counts total, unprotected, and source-exposed JavaScript files
-- **Tech stack detection** — identifies frameworks and libraries in use
-- **Web report** — outputs a link to the full interactive report on afterpack.dev
+Presets run `minify` → `light` → `medium` → `hard` → `extreme`. Every option is spelled identically
+in all four places it can be written: `--preset=hard` on the command line, `AFTERPACK_preset` in the
+environment, `"preset": "hard"` in `afterpack.json`, and `preset` in a plugin's options object.
 
-## Obfuscation
+## Framework integrations
 
-- **Free & Production-Ready** — Full obfuscation at no cost. Pro unlocks multi-file and edge features
-- **Rust-Powered** — Native Rust engine built on SWC, not a JavaScript AST walker
-- **Per-Build Polymorphism** — Every build is structurally different, so there's no reusable deobfuscator: reversing one release teaches an attacker nothing about the next
-- **Any Complexity** — From minimal to extreme protection with `--inflate`
-- **Deterministic** — Same input = same output. Works with Turborepo, Nx, Bazel
-- **Source Maps** — Generate and chain for Sentry/Datadog error tracking
-- **Framework Presets** — Safe defaults for Next.js, Vite, Astro
-- **Dual Runtime** — Native bindings + WASM for edge deployment
+The CLI is the universal fallback and works on any output. A plugin is better where one exists: it
+hooks the bundler directly, so the cleartext bundle is never written to disk at all.
+
+| Package | Targets | Entry point |
+| --- | --- | --- |
+| [`@afterpack/vite`](packages/vite) | Vite 5–8 | `afterpackVite()` plugin |
+| [`@afterpack/next`](packages/next) | Next.js 14+ | `withAfterpackNext()` config wrapper |
+| [`@afterpack/webpack`](packages/webpack) | webpack 5 | `AfterpackWebpackPlugin` |
+| [`@afterpack/rollup`](packages/rollup) | Rollup 3–4 | `afterpackRollup()` plugin |
+| [`@afterpack/esbuild`](packages/esbuild) | esbuild 0.17+ | `afterpackEsbuild()` plugin |
+| [`@afterpack/astro`](packages/astro) | Astro 4–6 | `afterpackAstro()` integration |
+| [`@afterpack/svelte`](packages/svelte) | Svelte 4–5 on Vite | `afterpackSvelte()` plugin |
+| [`@afterpack/sveltekit`](packages/sveltekit) | SvelteKit 1–2 | `afterpackSveltekit()` plugin |
+| [`@afterpack/vue`](packages/vue) | Vue 3 on Vite | `afterpackVue()` plugin |
+| [`@afterpack/nuxt`](packages/nuxt) | Nuxt 3 | Nuxt module |
+| [`@afterpack/angular`](packages/angular) | Angular 17+ | `afterpackAngular()` postbuild pass |
+| [`@afterpack/electron`](packages/electron) | Electron (electron-vite, Forge) | `afterpackElectron()` — one seed for main, preload and renderer |
+| [`@afterpack/parcel-optimizer`](packages/parcel) | Parcel 2.9+ | Parcel optimizer |
+
+Two packages are shared machinery rather than an integration:
+[`@afterpack/integration-utils`](packages/integration-utils) owns the configuration registry, source
+map discovery and the obfuscation pass every front door runs, and
+[`@afterpack/protection-map`](packages/protection-map) renders the local HTML report that shows what
+was protected and how heavily.
+
+## Documentation
+
+Full documentation — configuration reference, per-framework guides, the Protection Map, and the
+Pro features — is at [www.afterpack.dev/docs](https://www.afterpack.dev/docs).
+
+## Contributing
+
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the setup, the
+release channels and the conventions this repository enforces.
 
 ## License
 
-[MIT](./LICENSE) (c) AfterPack
+[Apache-2.0](LICENSE). The `@afterpack/core` engine is a separate, proprietary package under its
+own licence.

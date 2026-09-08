@@ -1,60 +1,39 @@
 {
-  "name": "afterpack",
-  "version": "0.0.15",
-  "description": "A high-performance post-build JavaScript obfuscator and minifier",
+  "name": "afterpack-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The AfterPack CLI, its framework integrations, and the shared helpers they build on",
   "type": "module",
-  "main": "./dist/cli.js",
-  "bin": {
-    "afterpack": "./dist/cli.js"
-  },
-  "files": [
-    "dist"
-  ],
+  "packageManager": "pnpm@9.15.0",
   "scripts": {
-    "build": "tsdown src/cli.ts --format esm --dts",
-    "dev": "tsdown src/cli.ts --format esm --watch",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "prepublishOnly": "pnpm build",
-    "prepack": "tsx scripts/prepack.ts",
-    "postpack": "tsx scripts/postpack.ts",
-    "release": "npm version patch && git push && git push --tags",
-    "release:minor": "npm version minor && git push && git push --tags",
-    "release:major": "npm version major && git push && git push --tags",
+    "build": "pnpm -r build",
+    "test": "pnpm -r --if-present test",
+    "e2e": "playwright test",
+    "e2e:quick": "playwright test --grep @quick",
+    "e2e:install": "tsx e2e/install.ts",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "rc": "npm version prerelease --preid rc && git push && git push --tags"
+    "typecheck": "pnpm -r --if-present typecheck",
+    "hygiene": "node scripts/check-public-hygiene.mjs",
+    "check:comments": "node scripts/check-comments.mjs",
+    "version:set": "tsx scripts/set-version.ts"
   },
-  "keywords": [
-    "obfuscator",
-    "minifier",
-    "javascript",
-    "protection",
-    "security",
-    "afterpack"
-  ],
-  "author": "AfterPack <hello@afterpack.dev>",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/afterpack-dev/afterpack.git"
-  },
-  "homepage": "https://afterpack.dev",
-  "bugs": {
-    "url": "https://github.com/afterpack-dev/afterpack/issues"
+  "devDependencies": {
+    "@biomejs/biome": "2.4.4",
+    "@playwright/test": "1.63.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.0.0"
   },
   "engines": {
     "node": ">=18"
   },
-  "dependencies": {
-    "@afterpack/core": "~0.0.9"
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/afterpack-dev/afterpack.git"
   },
-  "devDependencies": {
-    "@biomejs/biome": "^2.4.4",
-    "@types/node": "^25.0.9",
-    "tsdown": "^0.11.0",
-    "tsx": "^4.21.0",
-    "typescript": "^5.0.0",
-    "vitest": "^2.0.0"
+  "homepage": "https://www.afterpack.dev",
+  "bugs": {
+    "url": "https://github.com/afterpack-dev/afterpack/issues"
   }
 }
