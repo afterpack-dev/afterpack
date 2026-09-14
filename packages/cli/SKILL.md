@@ -71,7 +71,7 @@ recorded a sha256 per shipped file in the protection receipt it left there. Ever
 - `.afterpack/protectionMap.html` — one combined, self-contained report for the whole run, in a
   gitignored directory rather than in your output.
 
-Add these to `.gitignore` (AfterPack adds them itself if they are missing):
+Add these to `.gitignore` (AfterPack adds any that are missing to the nearest `.gitignore` above the build output, when one exists):
 
 ```gitignore
 .afterpack/

@@ -1,7 +1,7 @@
 {
   "framework": "astro-islands",
   "frameworkClass": "ssg",
-  "description": "Astro 6 with a React island. Compiler-based: the .astro compiler regenerates code, so directives in .astro files need pre-compile capture (docs/framework-integration.md §9.2 Astro row, §4.5). This fixture builds in static (SSG) mode.",
+  "description": "Astro 6 with a React island. Compiler-based: the .astro compiler regenerates code, so directives in .astro files need pre-compile capture, before the compiler discards the original source. This fixture builds in static (SSG) mode.",
   "seed": 730185264,
   "deterministicOutput": true,
   "build": {

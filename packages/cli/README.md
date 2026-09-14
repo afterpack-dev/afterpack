@@ -52,7 +52,7 @@ Every one of those contains your original source. Never serve, publish or commit
 *.backup.*.js
 ```
 
-The CLI adds these globs to the working directory's `.gitignore` itself if they are missing, and
+The CLI adds any of these globs that are missing to the nearest `.gitignore` above the build output, when one exists, and
 warns once if an artifact lands under a served path segment.
 
 ## `afterpack verify [dir]`
@@ -204,3 +204,7 @@ that cannot reach the cloud **fails closed** at exit `1`; it never falls back to
 
 Every non-zero exit prints one actionable line naming the fix. Fail-closed: nothing ships partially
 obfuscated, and a failed run leaves your build output exactly as your bundler wrote it.
+
+## Feedback
+
+Questions and proposals: https://github.com/afterpack-dev/afterpack/discussions · Bugs: https://github.com/afterpack-dev/afterpack/issues

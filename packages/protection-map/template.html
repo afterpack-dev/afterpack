@@ -1846,8 +1846,8 @@ async function afterpackInflateBase64Gzip(b64) {
    *    base64. We inflate it with the native DecompressionStream and decode it
    *    back to the rich `{ files: [ProtectionMapData, ...] }` shape the rest of
    *    this viewer renders. A payload that begins with `{` is instead read as
-   *    raw JSON -- the legacy/uncompressed embed (e.g. the Rust test mirror),
-   *    kept working so every artifact renders in one viewer.
+   *    raw JSON -- the uncompressed embed, kept so every artifact renders in
+   *    one viewer.
    * ============================================================ */
   var dataEl = document.getElementById("afterpack-data");
   var DATA = null;

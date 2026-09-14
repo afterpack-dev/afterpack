@@ -1,8 +1,3 @@
-// Minimal, dependency-free static server rooted at the BUILT dist/ dir: Parcel
-// emits its own index.html there and references every bundle by an ABSOLUTE
-// url (`/app.<hash>.js`, and an importmap for lazy chunks), so the dist dir has
-// to be the server root. Correct JS MIME so <script type="module"> loads.
-// `node serve.mjs <port>`. Hermetic (no npm deps).
 import { readFile, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, join, normalize } from "node:path";

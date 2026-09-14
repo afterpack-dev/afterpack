@@ -1,7 +1,3 @@
-// Minimal, dependency-free static server rooted at the webpack output (dist/), so
-// `/` serves the HtmlWebpackPlugin-emitted index.html and the hashed bundle
-// resolves beside it. Correct JS MIME so <script> loads and React renders.
-// `node serve.mjs <port>`. Hermetic (no npm deps).
 import { readFile, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, join, normalize } from "node:path";

@@ -1,13 +1,3 @@
-/**
- * Executes the OBFUSCATED main and preload bundles under plain node, against the
- * fixture's stub `electron` module, and asserts the app still behaves. The stub
- * routes `ipcRenderer.invoke` to whatever `ipcMain.handle` registered, so the
- * preload bundle's calls really reach the main bundle's handlers -- the same
- * boundary the real runtime crosses, minus the display server CI does not have.
- *
- * Standalone by design (spawned by electron-app.spec.ts): a fresh process per run means
- * no ESM module cache carrying a previous build's bundles.
- */
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -31,7 +21,6 @@ const stub = (globalThis.__ELECTRON_STUB__ = {
 });
 
 await import(pathToFileURL(join(FIXTURE, spec.legs.main)).href);
-// `app.whenReady().then(...)` is a microtask; let it settle before asserting.
 await Promise.resolve();
 
 if (stub.windows.length !== 1) {
@@ -49,8 +38,6 @@ assertEqual(
   "preload path handed to BrowserWindow",
 );
 
-// The `activate` handler must re-create a window only when none are open --
-// obfuscated control flow over `BrowserWindow.getAllWindows()`.
 const activate = stub.events.find((e) => e.event === "activate");
 if (!activate) throw new Error("main leg registered no `activate` handler");
 activate.handler();
@@ -73,8 +60,6 @@ assertEqual(summary.entries.length, spec.bridge.entries.length, "ledger entry co
 assertEqual(await bridge.info(), spec.bridge.expectInfo, "app:info over the IPC bridge");
 assertEqual(bridge.label(spec.bridge.expectLabel.input), spec.bridge.expectLabel.output, "label()");
 
-// The fail path must survive obfuscation too: a non-finite amount throws out of
-// the main handler and rejects the invoke.
 let threw = "";
 try {
   await bridge.total([["bad", Number.NaN]]);

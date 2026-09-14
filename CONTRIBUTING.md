@@ -25,11 +25,30 @@ Run `pnpm build` before `pnpm typecheck`: the plugins resolve
 
 ## How tests run
 
-Every package's unit tests replace `@afterpack/core` with a test double, so the suite needs no
-native binary and runs the same everywhere — against `@afterpack/core@latest` from npm, the engine a
-user actually installs. `e2e` builds each `packages/*/e2e` fixture for real with its own
-bundler, obfuscates it with the real plugin, and drives the result with Playwright — the class of
-bug a correct-looking bundle can still fail at, which no unit test can catch.
+Every package's unit tests replace `@afterpack/core` with `test/core-fake.ts`, a shared test double
+aliased in by every `vitest.config.ts`, so the suite needs no native binary and runs the same
+everywhere. `pnpm test` is the contribution path that works without the engine.
+
+`pnpm e2e` builds each `packages/*/e2e` fixture for real with its own bundler, obfuscates it with the
+real plugin against the published `@afterpack/core`, and drives the result with Playwright — the
+class of bug a correct-looking bundle can still fail at, which no unit test can catch. It needs
+`@afterpack/core` to resolve from the npm registry, and fails until it does.
+
+## Reproduce a bug as a failing e2e test
+
+1. Create `packages/<fw>/e2e/<fixture>/`: a minimal app for the framework, with its own
+   `package.json` and a committed `package-lock.json`.
+2. Register it in `e2e/helpers/registry.ts`'s `SPECS` array: a name, its directory, the build
+   command, the build's output targets, and — if it serves a browser surface — a port and a serve
+   command. `playwright.config.ts` turns every entry into a Playwright project automatically.
+3. Add `packages/<fw>/e2e/<fixture>/expectations.json` describing what the build must produce.
+4. Add `<fixture>.spec.ts` beside the fixture, using the helpers in `e2e/helpers/`:
+   `expectObfuscationPass` and `expectObfuscatedAndDeterministic` assert the pass actually ran and
+   is deterministic; `runSmoke` drives the built app with Playwright.
+5. Run just that project: `pnpm e2e --project=<name>`.
+
+Tag the fastest, most representative test `@quick` — that tag is the PR lane (`pnpm e2e:quick`); the
+full suite runs on push to `main`.
 
 ## Release channels
 
@@ -56,6 +75,9 @@ This repository must stay self-contained. `pnpm hygiene` runs in CI and fails on
 - an absolute path into a particular machine's filesystem;
 - a `file:` reference that resolves outside this repository, or points at a packed tarball;
 - any other relative path that escapes this repository's root.
+
+The patterns in `check-hygiene.mjs` are split with `(?:)` so the script does not match itself; keep
+that when editing them.
 
 ## Conventions
 

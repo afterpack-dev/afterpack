@@ -1,7 +1,3 @@
-// Minimal, dependency-free static server for the adapter-static output (build/).
-// `/` serves build/index.html; hashed client chunks under /_app/ resolve
-// relative to build/. Correct JS MIME so the obfuscated modules load and the
-// page hydrates. `node serve.mjs <port>`. Hermetic (no npm deps).
 import { readFile, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, join, normalize } from "node:path";

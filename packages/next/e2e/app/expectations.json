@@ -1,7 +1,7 @@
 {
   "framework": "next-16",
   "frameworkClass": "ssr",
-  "description": "Next.js 16 App Router + Turbopack. Dual-bundle SSR: client (.next/static/chunks) + server (.next/server) share a hydration contract (docs/testing.md §7.4, docs/framework-integration.md §9.2 Next.js row).",
+  "description": "Next.js 16 App Router + Turbopack. Dual-bundle SSR: the client chunks under .next/static/chunks and the server bundle under .next/server must agree on the hydration contract.",
   "seed": 184650293,
   "deterministicOutput": true,
   "dualBundle": true,
@@ -101,7 +101,7 @@
     ],
     "hydration": {
       "assertNoMismatch": true,
-      "note": "docs/testing.md §7.4 — server-rendered HTML must agree with the client-hydrated DOM; a hydration-mismatch console error is a server-bundle-class failure."
+      "note": "server-rendered HTML must agree with the client-hydrated DOM; a hydration-mismatch console error is a server-bundle-class failure."
     },
     "consoleErrors": "none"
   }

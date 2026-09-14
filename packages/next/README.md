@@ -102,3 +102,7 @@ options always win.
 // Generate the Protection Map for a build (writes to gitignored .afterpack/):
 withAfterpackNext(nextConfig, { protectionMap: true });
 ```
+
+## Feedback
+
+Questions and proposals: https://github.com/afterpack-dev/afterpack/discussions · Bugs: https://github.com/afterpack-dev/afterpack/issues

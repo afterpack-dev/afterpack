@@ -1,9 +1,3 @@
-/**
- * A no-dependency static file server for the built renderer. Chromium refuses
- * `<script type="module" crossorigin>` over `file://`, so the obfuscated
- * renderer bundle has to be served over http to run at all.
- */
-
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { extname, join, normalize } from "node:path";

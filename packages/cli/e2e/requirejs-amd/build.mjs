@@ -1,8 +1,3 @@
-// Build step for the legacy require.js/AMD fixture: stage src/ into dist/, then
-// run the `afterpack` CLI over dist/modules/ ONLY (the app's AMD modules) --
-// require.js itself stays pristine (vendored, served from dist/require.js).
-// --build.backup=false keeps original source out of the served tree. Honors
-// AFTERPACK_build_autorun=false (the smoke test's un-obfuscated baseline).
 import { execFileSync } from "node:child_process";
 import { cpSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";

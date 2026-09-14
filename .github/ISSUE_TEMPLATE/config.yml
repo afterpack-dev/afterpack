@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and proposals
+    url: https://github.com/afterpack-dev/afterpack/discussions
+    about: Ask a question or propose a change before opening an issue.
+  - name: Report a security vulnerability
+    url: mailto:security@afterpack.dev
+    about: Report vulnerabilities privately — never in a public issue.

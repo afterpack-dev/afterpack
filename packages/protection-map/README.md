@@ -7,7 +7,8 @@ lineage, weak-spot, and cost detail on click.
 
 **This is a dev-only local artifact. It embeds your original source code and surviving literal
 samples. Never ship it, never publish it, never commit it to a public repo.** Add
-`*.protmap.html` / `*.protmap.json` to `.gitignore` in any project that generates one.
+`*.protectionMap.html` / `protectionMap.html` to `.gitignore` in any project that generates one —
+the AfterPack plugins add these entries for you the first time they run.
 
 Frontend only — no engine dependency, no build step, no gates. Two files do all the work:
 
@@ -25,7 +26,7 @@ Frontend only — no engine dependency, no build step, no gates. Two files do al
 2. Render it:
 
    ```bash
-   node packages/protection-map/render.mjs path/to/your.protmap.json \
+   node packages/protection-map/render.mjs path/to/your-report.json \
      packages/protection-map/template.html \
      path/to/output/protection-map.html
    ```
@@ -250,3 +251,7 @@ own `reversalClass` is always `"preserved"` (a spotlight *is* a surviving readab
 literal, by definition); `flattened-fused`/`destroyed-fused` are documented enum values the viewer
 renders as dashed ceiling chips rather than achieved classes whenever `aggregate.classSummary`
 reports a zero count for them.
+
+## Feedback
+
+Questions and proposals: https://github.com/afterpack-dev/afterpack/discussions · Bugs: https://github.com/afterpack-dev/afterpack/issues

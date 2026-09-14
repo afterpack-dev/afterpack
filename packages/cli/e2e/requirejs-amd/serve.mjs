@@ -1,6 +1,3 @@
-// Minimal, dependency-free static file server for the built dist/ -- keeps the
-// fixture hermetic (no `serve`/`http-server` npm dep). Serves with correct JS
-// MIME so require.js + its AMD modules load. `node serve.mjs <port>`.
 import { readFile, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, join, normalize } from "node:path";

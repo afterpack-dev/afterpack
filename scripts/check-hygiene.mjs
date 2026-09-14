@@ -29,9 +29,13 @@ const LIFECYCLE = ["postinstall", "preinstall", "prepare", "install"];
 const ABSOLUTE_PATH = [
   { re: /(?<![\w.-])\/Users\//, why: "absolute machine path" },
   { re: /(?<![\w.-])\/home\//, why: "absolute machine path" },
-  { re: /(?<![\w.-])\/private\/tmp\b/, why: "absolute machine path" },
-  { re: /(?<![\w.-])\/tmp\//, why: "absolute machine path" },
   { re: /(?<![\w.-])[A-Za-z]:\\/, why: "absolute machine path" },
+];
+
+const TEMP_PATH = [
+  { re: /(?<![\w.-])\/(?:private\/)?tmp\//, why: "system temporary-directory path" },
+  { re: /(?<![\w.-])\/var\/folders\//, why: "system temporary-directory path" },
+  { re: /\\(?:)Temp\\/, why: "system temporary-directory path" },
 ];
 
 const CREDENTIAL = [
@@ -92,6 +96,9 @@ function isFullLineComment(line) {
 function scanLine(relFile, dir, lineNo, line, skipAbsolute) {
   if (!skipAbsolute) {
     for (const { re, why } of ABSOLUTE_PATH) {
+      if (re.test(line)) report(relFile, lineNo, `${why} — ${trim(line)}`);
+    }
+    for (const { re, why } of TEMP_PATH) {
       if (re.test(line)) report(relFile, lineNo, `${why} — ${trim(line)}`);
     }
   }

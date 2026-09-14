@@ -28,9 +28,13 @@ packages/
   webpack/             @afterpack/webpack — webpack plugin
   */e2e/               Playwright fixtures, one per package, driven by playwright.config.ts
 test/core-fake.ts       the shared `@afterpack/core` test double, aliased in by every vitest.config.ts
-scripts/                set-version.ts, check-public-hygiene.mjs, check-comments.mjs
+scripts/                set-version.ts, check-hygiene.mjs, check-comments.mjs
 .github/workflows/      ci (contributor), rc (publish on push to main), promote
+.github/ISSUE_TEMPLATE/ bug report form, issue config
+.github/PULL_REQUEST_TEMPLATE.md   the PR gate checklist
 playwright.config.ts    root Playwright config for every packages/*/e2e fixture
+SECURITY.md             where to report a vulnerability
+CODE_OF_CONDUCT.md      Contributor Covenant 2.1 by reference
 ```
 
 ## Commands

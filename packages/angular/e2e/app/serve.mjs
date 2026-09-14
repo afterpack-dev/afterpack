@@ -1,7 +1,3 @@
-// Minimal, dependency-free static server rooted at the Angular browser output
-// (dist/angular-fixture/browser), so `/` serves index.html and the hashed
-// main/polyfills chunks resolve beside it. Correct JS MIME so the obfuscated
-// bundle loads and the app bootstraps. `node serve.mjs <port>`. Hermetic.
 import { readFile, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, join, normalize } from "node:path";
@@ -42,7 +38,6 @@ createServer(async (req, res) => {
     res.writeHead(200, { "Content-Type": MIME[extname(target)] ?? "application/octet-stream" });
     res.end(body);
   } catch {
-    // SPA fallback: unknown non-file paths render index.html (client routing).
     try {
       const body = await readFile(join(root, "index.html"));
       res.writeHead(200, { "Content-Type": MIME[".html"] });

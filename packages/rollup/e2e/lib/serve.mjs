@@ -1,7 +1,3 @@
-// Minimal, dependency-free static server rooted at the FIXTURE dir (not dist/),
-// so `/` serves the host index.html and `/dist/esm/lib.js` serves the obfuscated
-// library the page imports. Correct JS MIME so <script type="module"> loads.
-// `node serve.mjs <port>`. Copied/adapted from vanilla-esm to stay hermetic.
 import { readFile, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, join, normalize } from "node:path";

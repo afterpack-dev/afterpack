@@ -1,0 +1,55 @@
+name: Bug report
+description: Something in the CLI or a framework integration is broken.
+labels: [bug]
+body:
+  - type: input
+    id: framework
+    attributes:
+      label: Framework and version
+      description: e.g. Next.js 16.0.2, Vite 8.1.0, or "none (CLI only)".
+    validations:
+      required: true
+
+  - type: input
+    id: versions
+    attributes:
+      label: afterpack and plugin versions
+      description: The `afterpack` CLI version and the `@afterpack/<plugin>` version, if any.
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: CLI or plugin summary line
+      description: >
+        The exact one-line summary the CLI or plugin printed, and every `DIAG_*` code it reported.
+    validations:
+      required: true
+
+  - type: input
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: A link to a repository or a Stackblitz/CodeSandbox that reproduces the bug.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: verify
+    attributes:
+      label: Does `afterpack verify` pass on the built output?
+      options:
+        - "Yes"
+        - "No"
+        - "Didn't run it"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: fix-form
+    attributes:
+      label: How would you like to contribute the fix?
+      options:
+        - label: I'll open a PR with a failing Playwright spec under `packages/<fw>/e2e` reproducing this.
+        - label: I'm reporting this for someone else to pick up.

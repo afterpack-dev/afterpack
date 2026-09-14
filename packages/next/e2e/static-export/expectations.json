@@ -1,7 +1,7 @@
 {
   "framework": "next-16-static-export",
   "frameworkClass": "static",
-  "description": "Next.js 16 App Router, `output: \"export\"`. No server runtime at request time -- the shipped artifact is out/ (mirrors .next/static under out/_next/static, plus prerendered .html), served with a plain static file server (docs/framework-integration.md §9.2 Next.js row; @afterpack/next's hook.ts module doc for why obfuscating .next/static/chunks in the build hook is what protects the exported tree).",
+  "description": "Next.js 16 App Router, `output: \"export\"`. No server runtime at request time -- the shipped artifact is out/ (mirrors .next/static under out/_next/static, plus prerendered .html), served with a plain static file server. The static export copies the already-obfuscated .next/static/chunks verbatim into out/_next/static, so obfuscating in the build hook is what protects the exported tree.",
   "seed": 184650294,
   "deterministicOutput": true,
   "dualBundle": false,
@@ -49,7 +49,7 @@
     ],
     "hydration": {
       "assertNoMismatch": true,
-      "note": "docs/testing.md §7.4 -- server-rendered (build-time) HTML must agree with the client-hydrated DOM."
+      "note": "server-rendered (build-time) HTML must agree with the client-hydrated DOM."
     },
     "consoleErrors": "none"
   }

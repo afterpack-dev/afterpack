@@ -1,7 +1,7 @@
 {
   "framework": "vite-react",
   "frameworkClass": "spa",
-  "description": "Vite 8 + React 19 SPA. Pure-bundler, single client bundle (docs/framework-integration.md §9.2 Vite row).",
+  "description": "Vite 8 + React 19 SPA. Pure-bundler, single client bundle.",
   "seed": 472938102,
   "deterministicOutput": true,
   "build": {

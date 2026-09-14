@@ -1,7 +1,3 @@
-// Minimal, dependency-free static server rooted at the Nuxt prerender output
-// (.output/public), so `/` serves the prerendered index.html and the hashed
-// _nuxt/*.js chunks resolve beside it. Correct JS MIME so the obfuscated client
-// bundle loads and the page hydrates. `node serve.mjs <port>`. Hermetic.
 import { readFile, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, join, normalize } from "node:path";

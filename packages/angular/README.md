@@ -91,3 +91,7 @@ other option keeps the name it has above. `cwd`, `distRoot` and `browserDir` loc
 The whole configuration is validated when the plugin is constructed: an unknown key, a kebab-cased
 key or a malformed value fails the build naming the canonical spelling, instead of being silently
 discarded.
+
+## Feedback
+
+Questions and proposals: https://github.com/afterpack-dev/afterpack/discussions · Bugs: https://github.com/afterpack-dev/afterpack/issues

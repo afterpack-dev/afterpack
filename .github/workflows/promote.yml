@@ -56,12 +56,7 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - name: Install dependencies
-        run: |
-          if [ -f pnpm-lock.yaml ]; then
-            pnpm install --frozen-lockfile
-          else
-            pnpm install --no-frozen-lockfile
-          fi
+        run: pnpm install --frozen-lockfile
 
       - name: Set the version across every package
         run: pnpm version:set --version "$VERSION"
@@ -80,6 +75,26 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag "v$VERSION"
           git push origin "v$VERSION"
+
+  release:
+    name: Create the GitHub Release
+    needs: promote
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    continue-on-error: true
+    steps:
+      - name: Create the release if it does not exist yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.promote.outputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          if gh release view "v$VERSION" --repo "$REPO" >/dev/null 2>&1; then
+            echo "v$VERSION already has a release"
+            exit 0
+          fi
+          gh release create "v$VERSION" --repo "$REPO" --title "v$VERSION" --generate-notes
 
   verify:
     name: Verify the published release

@@ -37,3 +37,7 @@ Options can also be set in `afterpack.json` — the one config file every AfterP
 at the nearest ancestor of your working directory — or in an `AFTERPACK_<key>` environment variable.
 Most specific wins: the options object here, then the environment, then the file. See
 [`@afterpack/vite`](../vite#configuration) for the canonical names and the validation rules.
+
+## Feedback
+
+Questions and proposals: https://github.com/afterpack-dev/afterpack/discussions · Bugs: https://github.com/afterpack-dev/afterpack/issues

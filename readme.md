@@ -67,3 +67,7 @@ release channels and the conventions this repository enforces.
 
 [Apache-2.0](LICENSE). The `@afterpack/core` engine is a separate, proprietary package under its
 own licence.
+
+## Feedback
+
+Questions and proposals: https://github.com/afterpack-dev/afterpack/discussions · Bugs: https://github.com/afterpack-dev/afterpack/issues

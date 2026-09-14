@@ -1,6 +1,3 @@
-// Minimal, dependency-free static server rooted at the FIXTURE dir, so `/` serves
-// index.html and `/dist/app.js` serves the obfuscated bundle. Correct JS MIME so
-// <script type="module"> loads. `node serve.mjs <port>`. Hermetic (no npm deps).
 import { readFile, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, join, normalize } from "node:path";

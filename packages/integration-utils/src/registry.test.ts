@@ -335,13 +335,13 @@ describe("the environment mapper", () => {
 
   it("leaves the non-configuration AFTERPACK_ variables alone", () => {
     const env = parseEnvOptions({
-      AFTERPACK_PERF: "1",
-      AFTERPACK_CORE_PATH: "/tmp/core.node",
+      AFTERPACK_NOT_A_KEY: "1",
+      AFTERPACK_ALSO_NOT_A_KEY: "1",
       AFTERPACK_API_URL: "http://localhost",
       AFTERPACK_ROOT: "/tmp",
-      AFTERPACK_SOURCE: "x",
-      AFTERPACK_FI_QUICK: "1",
-      AFTERPACK_UPDATE_CONTRACT: "1",
+      AFTERPACK_STILL_NOT_A_KEY: "x",
+      AFTERPACK_REALLY_NOT_A_KEY: "1",
+      AFTERPACK_DEFINITELY_NOT_A_KEY: "1",
     });
     expect(env.issues).toEqual([]);
     expect(env.config).toEqual({});

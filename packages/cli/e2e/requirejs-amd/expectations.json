@@ -1,7 +1,7 @@
 {
   "framework": "requirejs-amd",
   "frameworkClass": "vanilla",
-  "description": "Legacy AMD app: vendored require.js (2.3.7) loads define()/require() modules at runtime, no bundler. The `afterpack` CLI obfuscates dist/modules/ (docs/framework-integration.md -- CLI universal-fallback row). Proves AfterPack preserves AMD define/require semantics (globals + encoded module ids still resolve).",
+  "description": "Legacy AMD app: vendored require.js (2.3.7) loads define()/require() modules at runtime, no bundler. The `afterpack` CLI obfuscates dist/modules/ directly, since no plugin covers this case. Proves AfterPack preserves AMD define/require semantics (globals + encoded module ids still resolve).",
   "seed": 641928375,
   "deterministicOutput": true,
   "build": {

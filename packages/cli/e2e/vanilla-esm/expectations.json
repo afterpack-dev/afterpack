@@ -1,7 +1,7 @@
 {
   "framework": "vanilla-esm",
   "frameworkClass": "vanilla",
-  "description": "Native ES modules loaded via <script type=\"module\">, no bundler. Obfuscated post-build by the `afterpack` CLI (docs/framework-integration.md -- CLI universal-fallback row). Proves the CLI preserves ESM import/export names + relative specifiers so the sibling-module graph still links at runtime.",
+  "description": "Native ES modules loaded via <script type=\"module\">, no bundler. Obfuscated post-build by the `afterpack` CLI directly, since no plugin covers this case. Proves the CLI preserves ESM import/export names + relative specifiers so the sibling-module graph still links at runtime.",
   "seed": 518273649,
   "deterministicOutput": true,
   "build": {

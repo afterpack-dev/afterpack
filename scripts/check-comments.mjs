@@ -16,6 +16,7 @@ const includePatterns = [
   "packages/*/vitest.config.ts",
   "packages/protection-map/*.{mjs,js}",
   "packages/*/e2e/**/*.spec.ts",
+  "packages/*/e2e/**/*.mjs",
   "e2e/**/*.{ts,mjs}",
   "scripts/**/*.{ts,mjs}",
   "test/**/*.{ts,mts,cts,js,mjs,cjs}",
@@ -144,6 +145,7 @@ let commentTotal = 0;
 
 for (const relPath of targetFiles) {
   const absPath = path.join(repoRoot, relPath);
+  if (!fs.existsSync(absPath)) continue;
   const text = fs.readFileSync(absPath, "utf8");
   const lineStarts = buildLineStarts(text);
   const sourceFile = ts.createSourceFile(

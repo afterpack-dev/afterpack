@@ -142,3 +142,7 @@ affects the build.
 // Turn everything sensitive off:
 { "protectionMap": false, "sourceMap": false }
 ```
+
+## Feedback
+
+Questions and proposals: https://github.com/afterpack-dev/afterpack/discussions · Bugs: https://github.com/afterpack-dev/afterpack/issues
