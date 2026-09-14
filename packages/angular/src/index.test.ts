@@ -13,6 +13,7 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "afterpack-angular-test-"));
   browserDir = join(root, "dist", "angular-fixture", "browser");
   mkdirSync(browserDir, { recursive: true });
+  writeFileSync(join(root, ".gitignore"), "");
   __reset();
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});

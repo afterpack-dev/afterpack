@@ -1,12 +1,12 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
-import { expectObfuscationPass, readBuildLog } from "../../../../e2e/helpers/build-log.js";
-import { expectObfuscatedAndDeterministic } from "../../../../e2e/helpers/build.js";
-import { readExpectations, smokeOf } from "../../../../e2e/helpers/expectations.js";
-import { expectNoPostbuildScript, expectProtectionReceipt } from "../../../../e2e/helpers/receipt.js";
-import { baseURLOf, type Fixture, fixture } from "../../../../e2e/helpers/registry.js";
-import { runSmoke } from "../../../../e2e/helpers/smoke.js";
+import { expectObfuscationPass, readBuildLog } from "@e2e/helpers/build-log.js";
+import { expectObfuscatedAndDeterministic } from "@e2e/helpers/build.js";
+import { readExpectations, smokeOf } from "@e2e/helpers/expectations.js";
+import { expectNoPostbuildScript, expectProtectionReceipt } from "@e2e/helpers/receipt.js";
+import { baseURLOf, type Fixture, fixture } from "@e2e/helpers/registry.js";
+import { runSmoke } from "@e2e/helpers/smoke.js";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 const expectations = readExpectations(HERE);

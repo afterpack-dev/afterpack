@@ -1,9 +1,13 @@
 import {
   type AfterpackConfig,
-  CONFIG_KEYS,
+  type ConfigIssue,
   type EngineDiagnostic,
   getPath,
+  type LoadedConfigFile,
   loadConfigFile,
+  mergeConfig,
+  parseCliOptions,
+  parseEnvOptions,
 } from "@afterpack/integration-utils";
 import { setColorEnabled } from "./format.js";
 import type { CliLogger } from "./run.js";
@@ -21,80 +25,53 @@ export const DEFAULT_OUTPUT_MODE: OutputMode = { format: "text", level: "summary
 const FORMAT_PATH = "diagnostics.format";
 const LEVEL_PATH = "diagnostics.level";
 
-function allowedValues(path: string): readonly string[] {
-  const key = CONFIG_KEYS.find((k) => k.path === path);
-  return key && key.item.kind === "enum" ? key.item.values : [];
-}
-
-function envName(path: string): string {
-  return `AFTERPACK_${path.replace(/\./g, "_")}`;
-}
-
 export interface OutputModeResult {
   mode: OutputMode;
   issues: string[];
 }
 
-function read(
-  path: string,
-  raw: unknown,
-  where: string,
-  into: { value?: string },
-  issues: string[],
-): void {
-  if (raw === undefined) return;
-  const values = allowedValues(path);
-  if (typeof raw !== "string" || !values.includes(raw)) {
-    issues.push(
-      `\`${path}\`: expected one of: ${values.join(", ")}, got ${JSON.stringify(raw)} (${where})`,
-    );
-    return;
-  }
-  into.value = raw;
+const OUTPUT_PATHS: ReadonlySet<string> = new Set([FORMAT_PATH, LEVEL_PATH]);
+
+function outputIssues(issues: readonly ConfigIssue[]): string[] {
+  return issues.filter((issue) => OUTPUT_PATHS.has(issue.path)).map((issue) => issue.message);
 }
+
+const NO_CONFIG_FILE: LoadedConfigFile = {
+  path: null,
+  config: {} as AfterpackConfig,
+  issues: [],
+};
 
 export function resolveOutputMode(input: {
   argv: readonly string[];
   env: Record<string, string | undefined>;
   cwd: string;
 }): OutputModeResult {
-  const issues: string[] = [];
-  const format: { value?: string } = {};
-  const level: { value?: string } = {};
-
-  let fileConfig = {} as AfterpackConfig;
+  let file = NO_CONFIG_FILE;
   try {
-    fileConfig = loadConfigFile(input.cwd).config;
+    file = loadConfigFile(input.cwd);
   } catch {
-    fileConfig = {} as AfterpackConfig;
+    file = NO_CONFIG_FILE;
   }
-  read(FORMAT_PATH, getPath(fileConfig, FORMAT_PATH), "afterpack.json", format, issues);
-  read(LEVEL_PATH, getPath(fileConfig, LEVEL_PATH), "afterpack.json", level, issues);
-
-  read(FORMAT_PATH, input.env[envName(FORMAT_PATH)], "environment", format, issues);
-  read(LEVEL_PATH, input.env[envName(LEVEL_PATH)], "environment", level, issues);
-
-  for (const token of input.argv) {
-    if (token.startsWith(`--${FORMAT_PATH}=`)) {
-      read(FORMAT_PATH, token.slice(FORMAT_PATH.length + 3), "command line", format, issues);
-    } else if (token.startsWith(`--${LEVEL_PATH}=`)) {
-      read(LEVEL_PATH, token.slice(LEVEL_PATH.length + 3), "command line", level, issues);
-    }
-  }
-
+  const env = parseEnvOptions(input.env);
+  const cli = parseCliOptions([...input.argv]);
+  const config = mergeConfig(mergeConfig(file.config, env.config), cli.config);
   return {
-    mode: {
-      format: (format.value as DiagnosticsFormat | undefined) ?? DEFAULT_OUTPUT_MODE.format,
-      level: (level.value as DiagnosticsLevel | undefined) ?? DEFAULT_OUTPUT_MODE.level,
-    },
-    issues,
+    mode: outputModeOf(config),
+    issues: [
+      ...outputIssues(file.issues),
+      ...outputIssues(env.issues),
+      ...outputIssues(cli.issues),
+    ],
   };
 }
 
 export function outputModeOf(config: AfterpackConfig): OutputMode {
   return {
-    format: (getPath(config, FORMAT_PATH) as DiagnosticsFormat | undefined) ?? "text",
-    level: (getPath(config, LEVEL_PATH) as DiagnosticsLevel | undefined) ?? "summary",
+    format:
+      (getPath(config, FORMAT_PATH) as DiagnosticsFormat | undefined) ?? DEFAULT_OUTPUT_MODE.format,
+    level:
+      (getPath(config, LEVEL_PATH) as DiagnosticsLevel | undefined) ?? DEFAULT_OUTPUT_MODE.level,
   };
 }
 

@@ -83,6 +83,10 @@ export function renderFlag(key: ConfigKeyDef): string {
   return `--${key.path}=<${key.shape === "scalar" ? item : `${item}[,...]`}>`;
 }
 
+export const FEEDBACK_FOOTER =
+  "Questions and proposals: https://github.com/afterpack-dev/afterpack/discussions · " +
+  "Bugs: https://github.com/afterpack-dev/afterpack/issues";
+
 export const USAGE =
   "usage: afterpack [path] [--key=value ...] [--help] [--version]\n" +
   "       afterpack verify [dir]\n" +
@@ -172,4 +176,6 @@ ${EXIT_CODE_HELP}
 Telemetry reports ONLY when a build FAILS: the diagnostic code, severity, byte
 offsets and typed engine fields, plus versions, OS/arch and bucketed counts.
 Never your source, file names, paths or message text. Turn it off with
-\`--telemetry.enabled=false\`. See https://www.afterpack.dev/privacy`;
+\`--telemetry.enabled=false\`. See https://www.afterpack.dev/privacy
+
+${FEEDBACK_FOOTER}`;

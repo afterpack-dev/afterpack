@@ -5,11 +5,11 @@ import {
   expectObfuscationPass,
   expectOneSeedAcrossLegs,
   readBuildLog,
-} from "../../../../e2e/helpers/build-log.js";
-import { expectObfuscatedAndDeterministic, runBuild } from "../../../../e2e/helpers/build.js";
-import { readExpectations } from "../../../../e2e/helpers/expectations.js";
-import { baseURLOf, fixture } from "../../../../e2e/helpers/registry.js";
-import { collectConsoleErrors, expectNoConsoleErrors } from "../../../../e2e/helpers/smoke.js";
+} from "@e2e/helpers/build-log.js";
+import { expectObfuscatedAndDeterministic, runBuild } from "@e2e/helpers/build.js";
+import { readExpectations } from "@e2e/helpers/expectations.js";
+import { baseURLOf, fixture } from "@e2e/helpers/registry.js";
+import { collectConsoleErrors, expectNoConsoleErrors } from "@e2e/helpers/smoke.js";
 
 const app = fixture("electron-app");
 const expectations = readExpectations(app);

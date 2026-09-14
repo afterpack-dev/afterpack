@@ -16,7 +16,7 @@ export interface EngineDiagnostic {
   data?: EngineDiagnosticData | null;
 }
 
-export type DiagnosticsVerbosity = "summary" | "all";
+export type DiagnosticsVerbosity = "summary" | "all" | "none";
 
 const ISSUES_URL = "https://github.com/afterpack-dev/afterpack/issues";
 
@@ -200,7 +200,7 @@ export function reportDiagnostics(input: ReportDiagnosticsInput): DiagnosticsSum
   }
   if (diagnostics.length === 0) return summary;
 
-  const infos = diagnostics.filter((d) => d.severity === "info");
+  const infos = verbosity === "none" ? [] : diagnostics.filter((d) => d.severity === "info");
   if (infos.length > 0) {
     logger.log(prefix(formatInfoSummary(infos, verbosity)));
     if (verbosity === "all") {

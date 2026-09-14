@@ -21,8 +21,12 @@ export interface ProtectionReceipt {
   files: ProtectionReceiptFile[];
 }
 
+function sha256OfBytes(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
 export function sha256Of(path: string): string {
-  return createHash("sha256").update(readFileSync(path)).digest("hex");
+  return sha256OfBytes(readFileSync(path));
 }
 
 function receiptPathOf(dir: string, file: string): string {
@@ -149,6 +153,7 @@ export interface AlreadyObfuscatedInputs {
 export function detectAlreadyObfuscatedInputs(
   files: readonly string[],
   startDir: string,
+  bytesByPath?: ReadonlyMap<string, Uint8Array>,
 ): AlreadyObfuscatedInputs | null {
   const dir = findReceiptDir(startDir);
   if (!dir) return null;
@@ -157,6 +162,10 @@ export function detectAlreadyObfuscatedInputs(
   if (typeof parsed === "string") return null;
   const outputHashes = new Set(parsed.files.map((f) => f.sha256));
   if (outputHashes.size === 0) return null;
-  const matches = files.filter((file) => existsSync(file) && outputHashes.has(sha256Of(file)));
+  const matches = files.filter((file) => {
+    const bytes = bytesByPath?.get(file);
+    if (bytes !== undefined) return outputHashes.has(sha256OfBytes(bytes));
+    return existsSync(file) && outputHashes.has(sha256Of(file));
+  });
   return matches.length > 0 ? { receiptPath, files: matches } : null;
 }

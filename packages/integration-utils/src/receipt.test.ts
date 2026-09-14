@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -135,6 +135,19 @@ describe("detectAlreadyObfuscatedInputs", () => {
     const missing = join(dir, "gone.js");
     expect(() => detectAlreadyObfuscatedInputs([missing], dir)).not.toThrow();
     expect(detectAlreadyObfuscatedInputs([missing], dir)).toBeNull();
+  });
+
+  it("hashes the bytes the caller already read instead of re-reading the file", () => {
+    const dir = join(root, "dist");
+    mkdirSync(dir, { recursive: true });
+    const a = join(dir, "a.js");
+    writeFileSync(a, "OBF:export const a = 1;");
+    receiptAt(dir, [a]);
+    const obfuscated = readFileSync(a);
+
+    writeFileSync(a, "something else entirely");
+    expect(detectAlreadyObfuscatedInputs([a], dir)).toBeNull();
+    expect(detectAlreadyObfuscatedInputs([a], dir, new Map([[a, obfuscated]]))?.files).toEqual([a]);
   });
 
   it("ignores a receipt whose files array is empty", () => {

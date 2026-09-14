@@ -1,9 +1,9 @@
 import { test } from "@playwright/test";
-import { expectObfuscatedAndDeterministic } from "../../../../e2e/helpers/build.js";
-import { expectObfuscationPass, readBuildLog } from "../../../../e2e/helpers/build-log.js";
-import { readExpectations, smokeOf } from "../../../../e2e/helpers/expectations.js";
-import { baseURLOf, fixture } from "../../../../e2e/helpers/registry.js";
-import { runSmoke } from "../../../../e2e/helpers/smoke.js";
+import { expectObfuscatedAndDeterministic } from "@e2e/helpers/build.js";
+import { expectObfuscationPass, readBuildLog } from "@e2e/helpers/build-log.js";
+import { readExpectations, smokeOf } from "@e2e/helpers/expectations.js";
+import { baseURLOf, fixture } from "@e2e/helpers/registry.js";
+import { runSmoke } from "@e2e/helpers/smoke.js";
 
 const app = fixture("esbuild-app");
 const expectations = readExpectations(app);

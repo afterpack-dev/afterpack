@@ -14,5 +14,13 @@ const reviewProtectionMap = process.env.AFTERPACK_REVIEW_PM === "1" ? true : und
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), afterpackVite({ seed: expectations.seed, protectionMap: reviewProtectionMap })],
+  build: { sourcemap: true },
+  plugins: [
+    react(),
+    afterpackVite({
+      seed: expectations.seed,
+      protectionMap: reviewProtectionMap,
+      sourceMap: { enabled: true },
+    }),
+  ],
 });

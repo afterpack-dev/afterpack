@@ -3,10 +3,10 @@ import { chmodSync, cpSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
-import { expectObfuscationPass } from "../../../../e2e/helpers/build-log.js";
-import { expectObfuscatedAndDeterministic, runBuild } from "../../../../e2e/helpers/build.js";
-import { readExpectations } from "../../../../e2e/helpers/expectations.js";
-import { fixture } from "../../../../e2e/helpers/registry.js";
+import { expectObfuscationPass } from "@e2e/helpers/build-log.js";
+import { expectObfuscatedAndDeterministic, runBuild } from "@e2e/helpers/build.js";
+import { readExpectations } from "@e2e/helpers/expectations.js";
+import { fixture } from "@e2e/helpers/registry.js";
 
 const app = fixture("cli-single-file");
 const expectations = readExpectations(app);

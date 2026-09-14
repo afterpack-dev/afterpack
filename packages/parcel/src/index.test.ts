@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -47,6 +55,7 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "afterpack-parcel-test-"));
   distDir = join(root, "dist");
   mkdirSync(distDir, { recursive: true });
+  writeFileSync(join(root, ".gitignore"), "");
   warnings = [];
   resetBuildSessions();
   __reset();

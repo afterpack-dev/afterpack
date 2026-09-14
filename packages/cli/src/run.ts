@@ -14,6 +14,7 @@ import {
 } from "@afterpack/integration-utils";
 import {
   expandShortFlags,
+  FEEDBACK_FOOTER,
   HELP,
   parseSubcommandArgs,
   QUICKSTART,
@@ -223,6 +224,7 @@ function refuse(input: {
   input.logger.error(`afterpack: ${input.message}`);
   for (const line of input.detail ?? []) input.logger.error(line);
   input.logger.error(`afterpack: ${input.fix}`);
+  input.logger.error(FEEDBACK_FOOTER);
   return input.exitCode;
 }
 
@@ -291,6 +293,7 @@ export async function run(deps: CliDeps): Promise<number> {
     }
     logger.error(message);
     logger.error(USAGE);
+    logger.error(FEEDBACK_FOOTER);
     return EXIT.usage;
   }
 
@@ -371,6 +374,7 @@ export async function run(deps: CliDeps): Promise<number> {
         );
       }
       logger.error(QUICKSTART);
+      logger.error(FEEDBACK_FOOTER);
       return EXIT.failure;
     }
     requested = detected.dir;

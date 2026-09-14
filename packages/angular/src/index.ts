@@ -37,7 +37,9 @@ export async function afterpackAngular(options: AfterpackAngularOptions = {}): P
   });
   const settings = resolved.options;
   if (settings.build?.autorun === false) {
-    console.log("[afterpack-angular] autorun disabled, skipping obfuscation");
+    if (settings.diagnostics?.level !== "none") {
+      console.log("[afterpack-angular] autorun disabled, skipping obfuscation");
+    }
     return;
   }
   const browserDir =

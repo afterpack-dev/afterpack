@@ -51,6 +51,7 @@
     "url": "https://github.com/afterpack-dev/afterpack.git",
     "directory": "packages/webpack"
   },
+  "author": "AfterPack (https://www.afterpack.dev)",
   "license": "Apache-2.0",
   "homepage": "https://www.afterpack.dev",
   "bugs": {

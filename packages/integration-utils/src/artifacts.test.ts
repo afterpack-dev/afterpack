@@ -1,9 +1,9 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { decodeCompact } from "@afterpack/protection-map";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildProjectFileTree,
   cleanSourcePath,
@@ -540,24 +540,57 @@ describe("buildProjectFileTree — project-source tree normalization", () => {
 });
 
 describe("ensureGitignore", () => {
-  it("adds every guard glob to a fresh .gitignore and is idempotent", () => {
-    const added1 = ensureGitignore(dir);
-    expect(added1.sort()).toEqual([...GITIGNORE_ENTRIES].sort());
-    const content = readFileSync(join(dir, ".gitignore"), "utf8");
+  function repoWithGitignore(contents = ""): string {
+    const repo = join(dir, "repo");
+    mkdirSync(join(repo, ".git"), { recursive: true });
+    writeFileSync(join(repo, ".gitignore"), contents);
+    return repo;
+  }
+
+  it("adds every guard glob to the nearest .gitignore above the target, once", () => {
+    const repo = repoWithGitignore();
+    const target = join(repo, "dist", "assets");
+    mkdirSync(target, { recursive: true });
+
+    expect([...ensureGitignore(target)].sort()).toEqual([...GITIGNORE_ENTRIES].sort());
+    const content = readFileSync(join(repo, ".gitignore"), "utf8");
     for (const entry of GITIGNORE_ENTRIES) expect(content).toContain(entry);
 
-    const added2 = ensureGitignore(dir);
-    expect(added2).toEqual([]);
+    expect(ensureGitignore(target)).toEqual([]);
+    expect(readFileSync(join(repo, ".gitignore"), "utf8")).toBe(content);
   });
 
   it("only appends the MISSING entries to an existing .gitignore, preserving content", () => {
-    writeFileSync(join(dir, ".gitignore"), "node_modules/\n*.map\n");
-    const added = ensureGitignore(dir);
+    const repo = repoWithGitignore("node_modules/\n*.map\n");
+    const added = ensureGitignore(repo);
     expect(added).not.toContain("*.map");
     expect(added).toContain(".afterpack/");
-    const content = readFileSync(join(dir, ".gitignore"), "utf8");
+    const content = readFileSync(join(repo, ".gitignore"), "utf8");
     expect(content).toContain("node_modules/");
     expect((content.match(/\*\.map/g) || []).length).toBe(1);
+  });
+
+  it("never touches the working directory's repository when the target lives outside it", () => {
+    const repo = repoWithGitignore("node_modules/\n");
+    const outside = join(dir, "elsewhere", "bundle");
+    mkdirSync(outside, { recursive: true });
+    vi.spyOn(process, "cwd").mockReturnValue(repo);
+
+    expect(ensureGitignore(outside)).toEqual([]);
+    expect(readFileSync(join(repo, ".gitignore"), "utf8")).toBe("node_modules/\n");
+    expect(existsSync(join(outside, ".gitignore"))).toBe(false);
+    expect(existsSync(join(dir, "elsewhere", ".gitignore"))).toBe(false);
+  });
+
+  it("stops at the repository root rather than climbing into an outer .gitignore", () => {
+    writeFileSync(join(dir, ".gitignore"), "outer\n");
+    const inner = join(dir, "inner");
+    mkdirSync(join(inner, ".git"), { recursive: true });
+    const target = join(inner, "dist");
+    mkdirSync(target, { recursive: true });
+
+    expect(ensureGitignore(target)).toEqual([]);
+    expect(readFileSync(join(dir, ".gitignore"), "utf8")).toBe("outer\n");
   });
 });
 

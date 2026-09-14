@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { renderProtectionMapHtml } from "@afterpack/protection-map";
 import {
   type ArtifactMode,
@@ -18,6 +18,8 @@ export const GITIGNORE_ENTRIES = [
   "*.backup.*",
   "*.map",
 ];
+
+const GITIGNORE_FILE = ".gitignore";
 
 const GITIGNORE_BLOCK_HEADER = "# AfterPack artifacts (auto-added)";
 
@@ -521,15 +523,26 @@ function warnProtectionMapInProd(pmPath: string, logger: Logger): void {
   );
 }
 
-export function ensureGitignore(dir: string): string[] {
-  const gitignorePath = join(dir, ".gitignore");
+function nearestGitignore(startDir: string): string | null {
+  let current = resolve(startDir);
+  for (;;) {
+    const candidate = join(current, GITIGNORE_FILE);
+    if (existsSync(candidate)) return candidate;
+    if (existsSync(join(current, ".git"))) return null;
+    const parent = dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+}
+
+export function ensureGitignore(targetDir: string): string[] {
+  const gitignorePath = nearestGitignore(targetDir);
+  if (gitignorePath === null) return [];
   let existing = "";
-  if (existsSync(gitignorePath)) {
-    try {
-      existing = readFileSync(gitignorePath, "utf8");
-    } catch {
-      existing = "";
-    }
+  try {
+    existing = readFileSync(gitignorePath, "utf8");
+  } catch {
+    existing = "";
   }
 
   const present = new Set(existing.split(/\r?\n/).map((l) => l.trim()));

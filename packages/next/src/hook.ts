@@ -66,7 +66,11 @@ function stripDanglingTrailer(js: string): boolean {
   }
 }
 
-export function stripServedSourceMaps(chunks: string[], chunksDir: string): void {
+export function stripServedSourceMaps(
+  chunks: string[],
+  chunksDir: string,
+  log: (message: string) => void = (message) => console.log(message),
+): void {
   let removed = 0;
   for (const mapPath of collectSourceMaps(chunksDir)) {
     try {
@@ -84,7 +88,7 @@ export function stripServedSourceMaps(chunks: string[], chunksDir: string): void
 
   if (removed > 0 || trailers > 0) {
     const tail = trailers > 0 ? ` + ${trailers} sourceMappingURL trailer(s)` : "";
-    console.log(`[${LABEL}] stripped ${removed} served source map(s)${tail} from the client tree`);
+    log(`[${LABEL}] stripped ${removed} served source map(s)${tail} from the client tree`);
   }
 }
 
@@ -109,7 +113,9 @@ export async function runAfterpackHook(input: AfterpackHookInput): Promise<void>
   });
   const settings = resolved.options;
   if (settings.build?.autorun === false) {
-    console.log(`[${LABEL}] autorun disabled, skipping obfuscation`);
+    if (settings.diagnostics?.level !== "none") {
+      console.log(`[${LABEL}] autorun disabled, skipping obfuscation`);
+    }
     return;
   }
 
@@ -142,7 +148,11 @@ export async function runAfterpackHook(input: AfterpackHookInput): Promise<void>
     directivesExplicit: settings.directivesExplicit,
     postMinify: true,
     afterWrite: () => {
-      stripServedSourceMaps(files, chunksDir);
+      stripServedSourceMaps(
+        files,
+        chunksDir,
+        settings.diagnostics?.level === "none" ? () => {} : (message) => console.log(message),
+      );
     },
     receipt: {
       bundler: detectBundler(distDir),

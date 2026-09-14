@@ -868,7 +868,7 @@ export interface PluginOptionsView {
   directives: boolean;
   directivesExplicit: boolean;
   build?: { autorun?: boolean };
-  diagnostics?: { level?: "summary" | "all"; format?: "text" | "json" };
+  diagnostics?: { level?: "summary" | "all" | "none"; format?: "text" | "json" };
   paths?: { include?: string[] };
   key?: string;
 }
@@ -877,7 +877,6 @@ export function toPluginOptions(config: AfterpackConfig): PluginOptionsView {
   const read = <T>(path: string): T | undefined => getPath(config, path) as T | undefined;
   const set = <T extends object>(container: T): T | undefined =>
     Object.values(container).some((v) => v !== undefined) ? container : undefined;
-  const diagnosticsLevel = read<"summary" | "all" | "none">("diagnostics.level");
   return {
     artifactOptions: {
       protectionMap: set({ enabled: read<boolean>("protectionMap.enabled") }),
@@ -898,7 +897,7 @@ export function toPluginOptions(config: AfterpackConfig): PluginOptionsView {
     directivesExplicit: read<boolean>("directives") !== undefined,
     build: set({ autorun: read<boolean>("build.autorun") }),
     diagnostics: set({
-      level: diagnosticsLevel === "none" ? "summary" : diagnosticsLevel,
+      level: read<"summary" | "all" | "none">("diagnostics.level"),
       format: read<"text" | "json">("diagnostics.format"),
     }),
     paths: set({ include: read<string[]>("paths.include") }),

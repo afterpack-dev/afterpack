@@ -58,6 +58,7 @@
     "code-protection",
     "afterpack"
   ],
+  "author": "AfterPack (https://www.afterpack.dev)",
   "license": "Apache-2.0",
   "homepage": "https://www.afterpack.dev",
   "bugs": {

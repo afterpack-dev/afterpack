@@ -164,6 +164,11 @@ const DEFAULT_LOGGER: Logger = {
   log: (m) => console.log(m),
 };
 
+function silenceSummaryLines(logger: Logger, level: DiagnosticsVerbosity | undefined): Logger {
+  if (level !== "none") return logger;
+  return { warn: (m) => logger.warn(m), log: () => {} };
+}
+
 function parseSourceMap(json: string | null | undefined): DecodedSourceMap | null {
   if (!json) return null;
   try {
@@ -220,13 +225,20 @@ export async function runObfuscationPass(
     combinedProtectionMap,
     artifactOptions = {},
     env = process.env,
-    logger = DEFAULT_LOGGER,
   } = options;
+  const logger = silenceSummaryLines(options.logger ?? DEFAULT_LOGGER, options.diagnostics);
   const prefix = (message: string): string => `[${label}] ${message}`;
 
+  const onDiskFiles = options.inputs ? files.filter((f) => !options.inputs?.has(f)) : files;
+  const onDiskBytes = new Map<string, Buffer>();
+  for (const filePath of onDiskFiles) onDiskBytes.set(filePath, readFileSync(filePath));
+
   if (!options.emitToCaller) {
-    const onDiskFiles = options.inputs ? files.filter((f) => !options.inputs?.has(f)) : files;
-    const already = detectAlreadyObfuscatedInputs(onDiskFiles, combinedProtectionMap.buildDir);
+    const already = detectAlreadyObfuscatedInputs(
+      onDiskFiles,
+      combinedProtectionMap.buildDir,
+      onDiskBytes,
+    );
     if (already) {
       throw new Error(
         prefix(
@@ -268,7 +280,9 @@ export async function runObfuscationPass(
   const postMinifyRenameGlobals: string[] = [];
   const inputs: EngineFileInput[] = files.map((filePath) => {
     const provided = options.inputs?.get(filePath);
-    const source = provided ? provided.source : readFileSync(filePath, "utf8");
+    const source = provided
+      ? provided.source
+      : (onDiskBytes.get(filePath) ?? readFileSync(filePath)).toString("utf8");
     sourceByPath.set(filePath, source);
     const inputSourceMap = provided
       ? (provided.inputSourceMap ?? null)
@@ -315,6 +329,7 @@ export async function runObfuscationPass(
     }
     return { filePath, source, inputSourceMap: inputSourceMap ?? undefined, regions };
   });
+  onDiskBytes.clear();
 
   const hasBundlerSourcemap =
     (options.hasBundlerSourcemap ?? false) || inputs.some((i) => i.inputSourceMap != null);
@@ -322,7 +337,7 @@ export async function runObfuscationPass(
     hasBundlerSourcemap,
     inPlaceOutput: true,
   });
-  ensureGitignore(gitignoreDir);
+  ensureGitignore(combinedProtectionMap.buildDir);
   if (policy.autoEnableBundlerSourcemap && options.messages?.autoEnableBundlerSourcemap) {
     logger.warn(prefix(options.messages.autoEnableBundlerSourcemap));
   }

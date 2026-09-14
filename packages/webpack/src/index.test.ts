@@ -12,6 +12,7 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "afterpack-webpack-test-"));
   outDir = join(root, "dist");
   mkdirSync(outDir, { recursive: true });
+  writeFileSync(join(root, ".gitignore"), "");
   __reset();
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});

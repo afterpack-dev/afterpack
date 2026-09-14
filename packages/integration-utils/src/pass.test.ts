@@ -31,6 +31,7 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "afterpack-pass-test-"));
   outDir = join(root, "dist");
   mkdirSync(outDir, { recursive: true });
+  writeFileSync(join(root, ".gitignore"), "");
 });
 afterEach(() => {
   resetBuildSessions();
@@ -708,6 +709,36 @@ describe("runObfuscationPass engine diagnostics", () => {
     });
   });
 
+  it("prints no progress, summary or info line at the `none` level, and still reports errors", async () => {
+    const a = join(outDir, "a.js");
+    writeFileSync(a, "const x = 1;");
+    const loud: EngineDiagnostic = {
+      severity: "error",
+      code: "DIAG_SOMETHING_WRONG",
+      message: "something went wrong",
+      span: null,
+      file: null,
+    };
+    const { engine } = makeEngine(() => ({
+      diagnostics: [info("DIAG_ENGINE_PASSES"), loud],
+    }));
+
+    const chatty = silentLogger();
+    await runObfuscationPass({ ...baseOptions([a], engine), logger: chatty.logger });
+    expect(chatty.logs.length).toBeGreaterThan(0);
+
+    writeFileSync(a, "const x = 1;");
+    const quiet = silentLogger();
+    const result = await runObfuscationPass({
+      ...baseOptions([a], engine),
+      diagnostics: "none",
+      logger: quiet.logger,
+    });
+    expect(quiet.logs).toEqual([]);
+    expect(quiet.warnings.some((w) => w.includes("DIAG_SOMETHING_WRONG"))).toBe(true);
+    expect(result.diagnostics.total).toBe(2);
+  });
+
   it("lists every info diagnostic at the `all` level", async () => {
     const a = join(outDir, "a.js");
     writeFileSync(a, "const x = 1;");
@@ -1278,7 +1309,7 @@ describe("runObfuscationPass in-memory seam (inputs + emitToCaller)", () => {
       logger: silentLogger().logger,
     });
 
-    expect(existsSync(join(root, ".gitignore"))).toBe(true);
+    expect(readFileSync(join(root, ".gitignore"), "utf8")).toContain(".afterpack/");
     expect(result.protectionMapPath).toBe(
       join(root, ".afterpack", "one-bundle.protectionMap.html"),
     );

@@ -1,5 +1,6 @@
 import type { AfterpackPluginOptions } from "@afterpack/integration-utils";
 import { type AfterProductionCompileMetadata, runAfterpackHook } from "./hook.js";
+import { assertSupportedNext, detectNextVersion } from "./next-version.js";
 
 export type AfterpackNextOptions = AfterpackPluginOptions;
 
@@ -34,6 +35,7 @@ export function withAfterpackNext<T extends object>(
   nextConfig: T,
   options: AfterpackNextOptions = {},
 ): T {
+  assertSupportedNext(detectNextVersion());
   if (typeof nextConfig === "function") {
     const produce = nextConfig as unknown as PhaseConfigFn;
     const wrapped: PhaseConfigFn = (...args) => {

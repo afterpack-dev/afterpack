@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { PROTECTION_RECEIPT_FILE, verifyProtectionReceipt } from "@afterpack/integration-utils";
+import { FEEDBACK_FOOTER } from "./args.js";
 import { EXIT, type ExitCode } from "./exit.js";
 import { emitJson, jsonError, type OutputMode } from "./output.js";
 import type { CliLogger } from "./run.js";
@@ -32,7 +33,9 @@ there is no configuration for it to honour.
 
 Exit codes: 0 when every recorded file is intact, 1 when the receipt is
 missing, is from a different build, or any file no longer matches, 64 on a
-usage error.`;
+usage error.
+
+${FEEDBACK_FOOTER}`;
 
 function candidates(target: string): string[] {
   return [target, join(target, ".next")];
@@ -75,6 +78,7 @@ function fail(
   deps.logger.error(`afterpack: ${message}`);
   for (const line of detail) deps.logger.error(`  ${line}`);
   deps.logger.error(`  ${fix}`);
+  deps.logger.error(FEEDBACK_FOOTER);
   return exitCode;
 }
 

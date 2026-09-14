@@ -14,7 +14,7 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "typecheck": "pnpm -r --if-present typecheck",
-    "hygiene": "node scripts/check-public-hygiene.mjs",
+    "hygiene": "node scripts/check-hygiene.mjs",
     "check:comments": "node scripts/check-comments.mjs",
     "version:set": "tsx scripts/set-version.ts"
   },
@@ -27,6 +27,7 @@
   "engines": {
     "node": ">=18"
   },
+  "author": "AfterPack (https://www.afterpack.dev)",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

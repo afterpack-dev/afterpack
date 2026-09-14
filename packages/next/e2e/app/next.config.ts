@@ -6,6 +6,7 @@ const expectations = JSON.parse(readFileSync(new URL("./expectations.json", impo
 
 const nextConfig: NextConfig = {
   distDir: process.env.AFTERPACK_E2E_DIST_DIR ?? ".next",
+  productionBrowserSourceMaps: true,
 
   // Next.js generates a fresh random buildId on every `next build` by
   // default, embedded into middleware-build-manifest.js and every

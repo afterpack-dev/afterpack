@@ -15,7 +15,7 @@ const expectations = JSON.parse(readFileSync(new URL("./expectations.json", impo
 export default {
   mode: "production",
   entry: resolve(HERE, "src/index.jsx"),
-  devtool: false,
+  devtool: "source-map",
   output: {
     path: resolve(HERE, "dist"),
     filename: "[name].[contenthash].js",
@@ -41,6 +41,6 @@ export default {
   },
   plugins: [
     new HtmlWebpackPlugin({ template: resolve(HERE, "src/index.html") }),
-    new AfterpackWebpackPlugin({ seed: expectations.seed }),
+    new AfterpackWebpackPlugin({ seed: expectations.seed, sourceMap: { enabled: true } }),
   ],
 };

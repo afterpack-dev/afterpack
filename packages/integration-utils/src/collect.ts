@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, type Stats, statSync } from "node:fs";
+import { type Dirent, existsSync, readdirSync, type Stats, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import { matchesPath, reachesInto } from "./glob.js";
 
@@ -30,13 +30,30 @@ export function collectJsFiles(target: string, options: CollectJsOptions = {}): 
   return walkJs(target, options.include ?? [], false);
 }
 
+function entriesOf(dir: string): Dirent[] {
+  try {
+    return readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+}
+
+function kindOf(entry: Dirent, full: string): "dir" | "file" | null {
+  if (entry.isDirectory()) return "dir";
+  if (entry.isFile()) return "file";
+  const stat = statOrNull(full);
+  if (!stat) return null;
+  return stat.isDirectory() ? "dir" : "file";
+}
+
 function walkJs(dir: string, include: readonly string[], readmitted: boolean): string[] {
   const out: string[] = [];
-  for (const name of readdirSync(dir)) {
+  for (const entry of entriesOf(dir)) {
+    const name = entry.name;
     const full = join(dir, name);
-    const stat = statOrNull(full);
-    if (!stat) continue;
-    if (stat.isDirectory()) {
+    const kind = kindOf(entry, full);
+    if (kind === null) continue;
+    if (kind === "dir") {
       const skipped = name === NODE_MODULES;
       if (skipped && !include.some((pattern) => reachesInto(pattern, full))) continue;
       out.push(...walkJs(full, include, readmitted || skipped));
@@ -55,11 +72,12 @@ function isSourceMap(name: string): boolean {
 export function collectSourceMaps(dir: string): string[] {
   if (!existsSync(dir)) return [];
   const out: string[] = [];
-  for (const name of readdirSync(dir)) {
+  for (const entry of entriesOf(dir)) {
+    const name = entry.name;
     const full = join(dir, name);
-    const stat = statOrNull(full);
-    if (!stat) continue;
-    if (stat.isDirectory()) {
+    const kind = kindOf(entry, full);
+    if (kind === null) continue;
+    if (kind === "dir") {
       out.push(...collectSourceMaps(full));
     } else if (isSourceMap(name)) {
       out.push(full);

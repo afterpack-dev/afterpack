@@ -1,3 +1,4 @@
+import { FEEDBACK_FOOTER } from "./args.js";
 import { EXIT, type ExitCode } from "./exit.js";
 import { bold, cyan, dim, green, header, red, severityColor, stripAnsi, yellow } from "./format.js";
 import {
@@ -35,7 +36,9 @@ Environment:
 
 Exit codes: 0 when the scan completed (findings and all — a finding is a
 result, not a failure), 1 when the scan failed or the stream ended early,
-64 when the URL is missing or malformed.`;
+64 when the URL is missing or malformed.
+
+${FEEDBACK_FOOTER}`;
 
 const DEFAULT_API_BASE = "https://api.afterpack.dev";
 const WEB_BASE = "https://www.afterpack.dev";
@@ -199,6 +202,7 @@ function fail(deps: AuditDeps, code: string, message: string, fix: string): Exit
   }
   deps.logger.error(`\n  ${red("Error:")} ${message}`);
   deps.logger.error(`  ${fix}\n`);
+  deps.logger.error(FEEDBACK_FOOTER);
   return EXIT.failure;
 }
 
@@ -219,6 +223,7 @@ function misuse(deps: AuditDeps, code: string, message: string): ExitCode {
   }
   deps.logger.error(`afterpack: ${message}`);
   deps.logger.error(AUDIT_USAGE);
+  deps.logger.error(FEEDBACK_FOOTER);
   return EXIT.usage;
 }
 

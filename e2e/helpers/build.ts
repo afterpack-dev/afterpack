@@ -36,16 +36,22 @@ export function runBuild(
   return log;
 }
 
+const HASHED_OUTPUT = /\.(?:js|mjs|cjs|map)$/;
+
 export function hashTargets(targets: FixtureTarget[]): Map<string, string> {
   const out = new Map<string, string>();
   for (const { label, path } of targets) {
     expect(existsSync(path), `no build output at ${path} (target "${label}")`).toBe(true);
     const walk = (sub: string): void => {
-      for (const name of readdirSync(sub).sort()) {
-        const full = join(sub, name);
-        if (statSync(full).isDirectory()) {
+      const entries = readdirSync(sub, { withFileTypes: true });
+      entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+      for (const entry of entries) {
+        const full = join(sub, entry.name);
+        const isDirectory =
+          entry.isDirectory() || (!entry.isFile() && statSync(full).isDirectory());
+        if (isDirectory) {
           walk(full);
-        } else if (name.endsWith(".js") || name.endsWith(".mjs")) {
+        } else if (HASHED_OUTPUT.test(entry.name)) {
           out.set(
             `${label}:${relative(path, full)}`,
             createHash("sha256").update(readFileSync(full)).digest("hex"),

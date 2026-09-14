@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { engineCalls, processBatch } from "../../../test/core-fake.js";
+import { FEEDBACK_FOOTER } from "../src/args.js";
 import { run } from "../src/run.js";
 
 let root: string;
@@ -82,5 +83,31 @@ describe("help", () => {
   it("answers --help before an afterpack.json can refuse anything", async () => {
     expect(await invoke(["--help"])).toBe(0);
     expect(err).toEqual([]);
+  });
+
+  it("ends every help page with the one feedback line", async () => {
+    expect(FEEDBACK_FOOTER).toBe(
+      "Questions and proposals: https://github.com/afterpack-dev/afterpack/discussions · " +
+        "Bugs: https://github.com/afterpack-dev/afterpack/issues",
+    );
+    for (const argv of [["--help"], ["verify", "--help"], ["audit", "--help"]]) {
+      out = [];
+      expect(await invoke(argv)).toBe(0);
+      expect(out.join("\n").trimEnd().endsWith(FEEDBACK_FOOTER)).toBe(true);
+    }
+  });
+
+  it("closes every error with the same feedback line as its last output", async () => {
+    for (const argv of [
+      ["dist", "--nope=1"],
+      ["nope-nope-nope"],
+      ["verify", "no-such-dir"],
+      ["audit"],
+      ["audit", "a", "b"],
+    ]) {
+      err = [];
+      expect(await invoke(argv)).not.toBe(0);
+      expect(err.at(-1), `\`afterpack ${argv.join(" ")}\` last stderr line`).toBe(FEEDBACK_FOOTER);
+    }
   });
 });

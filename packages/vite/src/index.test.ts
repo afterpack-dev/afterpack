@@ -26,6 +26,7 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "afterpack-vite-test-"));
   outDir = join(root, "dist");
   mkdirSync(outDir, { recursive: true });
+  writeFileSync(join(root, ".gitignore"), "");
   resetBuildSessions();
   __reset();
   vi.spyOn(console, "log").mockImplementation(() => {});

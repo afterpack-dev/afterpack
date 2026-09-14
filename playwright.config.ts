@@ -11,6 +11,7 @@ assertFixturesInstalled();
 export default defineConfig({
   testDir: "./packages",
   testMatch: "**/e2e/**/*.spec.ts",
+  tsconfig: "./tsconfig.json",
   outputDir: ".afterpack/e2e/test-results",
   globalSetup: "./e2e/global-setup.ts",
   fullyParallel: false,

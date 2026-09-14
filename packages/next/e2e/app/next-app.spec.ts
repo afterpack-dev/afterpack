@@ -1,12 +1,13 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
-import { expectObfuscationPass, readBuildLog } from "../../../../e2e/helpers/build-log.js";
-import { expectObfuscatedAndDeterministic } from "../../../../e2e/helpers/build.js";
-import { readExpectations, smokeOf } from "../../../../e2e/helpers/expectations.js";
-import { expectNoPostbuildScript, expectProtectionReceipt } from "../../../../e2e/helpers/receipt.js";
-import { baseURLOf, type Fixture, fixture } from "../../../../e2e/helpers/registry.js";
-import { runSmoke } from "../../../../e2e/helpers/smoke.js";
+import { expectObfuscationPass, readBuildLog } from "@e2e/helpers/build-log.js";
+import { expectObfuscatedAndDeterministic } from "@e2e/helpers/build.js";
+import { readExpectations, smokeOf } from "@e2e/helpers/expectations.js";
+import { expectNoPostbuildScript, expectProtectionReceipt } from "@e2e/helpers/receipt.js";
+import { baseURLOf, type Fixture, fixture } from "@e2e/helpers/registry.js";
+import { expectSourceMap } from "@e2e/helpers/source-map.js";
+import { runSmoke } from "@e2e/helpers/smoke.js";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 const expectations = readExpectations(HERE);
@@ -48,6 +49,10 @@ test.describe("Next.js 16 App Router serves a dual bundle", { tag: "@quick" }, (
     page,
   }) => {
     await runSmoke(page, baseURLOf(current()), smokeOf(expectations));
+  });
+
+  test("every source map left in the build output is a usable v3 map", () => {
+    expectSourceMap(current());
   });
 });
 
