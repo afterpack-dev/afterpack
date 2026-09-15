@@ -36,6 +36,8 @@ class of bug a correct-looking bundle can still fail at, which no unit test can 
 
 ## Reproduce a bug as a failing e2e test
 
+A coding agent is the fastest way through the steps below: point it at this repository, ask it to reduce your project to the smallest app that still shows the bug, and then to write the spec. `AGENTS.md` and `packages/cli/SKILL.md` give it the layout, the commands and the CLI's behaviour.
+
 1. Create `packages/<fw>/e2e/<fixture>/`: a minimal app for the framework, with its own
    `package.json` and a committed `package-lock.json`.
 2. Register it in `e2e/helpers/registry.ts`'s `SPECS` array: a name, its directory, the build

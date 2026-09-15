@@ -31,7 +31,10 @@ body:
     id: repro
     attributes:
       label: Minimal reproduction
-      description: A link to a repository or a Stackblitz/CodeSandbox that reproduces the bug.
+      description: >
+        A link to a repository or a Stackblitz/CodeSandbox that reproduces the bug. A coding agent can
+        usually get you there fast: ask it to strip your project down to the smallest app that still
+        shows the problem.
     validations:
       required: true
 
