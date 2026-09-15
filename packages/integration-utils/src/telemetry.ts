@@ -5,21 +5,21 @@ import { dirname, join } from "node:path";
 import type { EngineDiagnostic, EngineDiagnosticData } from "./diagnostics.js";
 import type { EnvLike, Preset } from "./policy.js";
 
-export const API_URL_ENV_VAR = "AFTERPACK_API_URL";
+const API_URL_ENV_VAR = "AFTERPACK_API_URL";
 
 export const DEFAULT_API_URL = "https://api.afterpack.dev";
 
 export const TELEMETRY_ENDPOINT_PATH = "/v1/telemetry/build";
 
-export const TELEMETRY_PAYLOAD_VERSION = 1;
+const TELEMETRY_PAYLOAD_VERSION = 1;
 
-export const TELEMETRY_TIMEOUT_MS = 1500;
+const TELEMETRY_TIMEOUT_MS = 1500;
 
 export const INSTALL_ID_ROTATION_DAYS = 30;
 
 export const TELEMETRY_DIAGNOSTIC_LIMIT = 20;
 
-export const TELEMETRY_STATE_FILE = join(homedir(), ".afterpack", "telemetry.json");
+const TELEMETRY_STATE_FILE = join(homedir(), ".afterpack", "telemetry.json");
 
 const TOKEN_PATTERN = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 
@@ -94,33 +94,38 @@ export function resolveTelemetryEnabled(option: boolean | undefined, env: EnvLik
   return !(env.NODE_ENV === "test" || env.VITEST);
 }
 
-const FRAMEWORKS: Readonly<Record<string, string>> = {
-  afterpack: "cli",
-  "afterpack-angular": "angular",
-  "afterpack-esbuild": "esbuild",
-  "afterpack-next": "next",
-  "afterpack-rollup": "rollup",
-  "afterpack-vite": "vite",
-  "afterpack-webpack": "webpack",
-};
+interface FrameworkEntry {
+  label: string;
+  name: string;
+  pkg?: string;
+}
 
-const FRAMEWORK_PACKAGES: Readonly<Record<string, string>> = {
-  angular: "@angular/core",
-  esbuild: "esbuild",
-  next: "next",
-  rollup: "rollup",
-  vite: "vite",
-  webpack: "webpack",
-};
+const FRAMEWORK_ENTRIES: readonly FrameworkEntry[] = [
+  { label: "afterpack", name: "cli" },
+  { label: "afterpack-angular", name: "angular", pkg: "@angular/core" },
+  { label: "afterpack-esbuild", name: "esbuild", pkg: "esbuild" },
+  { label: "afterpack-next", name: "next", pkg: "next" },
+  { label: "afterpack-rollup", name: "rollup", pkg: "rollup" },
+  { label: "afterpack-vite", name: "vite", pkg: "vite" },
+  { label: "afterpack-webpack", name: "webpack", pkg: "webpack" },
+];
+
+const FRAMEWORK_BY_LABEL: ReadonlyMap<string, string> = new Map(
+  FRAMEWORK_ENTRIES.map((e) => [e.label, e.name]),
+);
+
+const FRAMEWORK_PACKAGE_BY_NAME: ReadonlyMap<string, string> = new Map(
+  FRAMEWORK_ENTRIES.flatMap((e) => (e.pkg ? [[e.name, e.pkg] as const] : [])),
+);
 
 export function frameworkFromLabel(label: string): string {
-  return FRAMEWORKS[label.split(":")[0]] ?? "unknown";
+  return FRAMEWORK_BY_LABEL.get(label.split(":")[0]) ?? "unknown";
 }
 
 const VERSION_RANGE_PATTERN = /^[\sv0-9.\-+*xX^~><=|]{1,32}$/;
 
 export function detectFrameworkVersion(projectRoot: string, framework: string): string | null {
-  const pkgName = FRAMEWORK_PACKAGES[framework];
+  const pkgName = FRAMEWORK_PACKAGE_BY_NAME.get(framework);
   if (!pkgName) return null;
   let deps: Record<string, unknown>;
   try {

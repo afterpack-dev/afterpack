@@ -8,8 +8,10 @@ import {
   CONFIG_PREFIXES,
   type ConfigIssue,
   deepMerge,
+  EMPTY_CONFIG,
   type EngineConfigSubset,
   getPath,
+  isPlainObject,
   mergeConfig,
   type PluginOptionsView,
   toEngineConfig,
@@ -24,10 +26,6 @@ export const PLUGIN_LOCAL_KEYS = [
 
 export type AfterpackPluginOptions = Omit<AfterpackConfig, "key"> &
   Pick<AfterpackArtifactOptions, (typeof PLUGIN_LOCAL_KEYS)[number]>;
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 export interface NormalizedPluginOptions {
   config: Record<string, unknown>;
@@ -141,7 +139,7 @@ function sameRankConflicts(options: AfterpackConfig, cli: AfterpackConfig): Conf
 }
 
 const NO_ARGV: CliParseResult = {
-  config: {} as AfterpackConfig,
+  config: EMPTY_CONFIG,
   positionals: [],
   help: false,
   version: false,
@@ -149,7 +147,7 @@ const NO_ARGV: CliParseResult = {
 };
 
 function argvOnlyAnswer(cli: CliParseResult): ResolvedPluginConfig {
-  const config = {} as AfterpackConfig;
+  const config = EMPTY_CONFIG;
   return {
     config,
     options: toPluginOptions(config),

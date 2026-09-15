@@ -6,16 +6,18 @@ import {
   canonicalSpelling,
   checkValue,
   DOCS_URL,
+  EMPTY_CONFIG,
   groupBooleanKey,
   mergeConfig,
   misdirectedHint,
+  nest,
   suggestKey,
   unknownKeyMessage,
 } from "./registry.js";
 
 export const ENV_PREFIX = "AFTERPACK_";
 
-export type ParseSurface = "cli" | "env" | "directive";
+type ParseSurface = "cli" | "env" | "directive";
 
 export function splitAssignment(token: string): { key: string; value: string | true } {
   const eq = token.indexOf("=");
@@ -23,7 +25,7 @@ export function splitAssignment(token: string): { key: string; value: string | t
   return { key: token.slice(0, eq), value: token.slice(eq + 1) };
 }
 
-export function parseScalarLiteral(raw: string): unknown {
+function parseScalarLiteral(raw: string): unknown {
   try {
     return JSON.parse(raw) as unknown;
   } catch {
@@ -113,12 +115,12 @@ function kebabIssue(key: string, surface: ParseSurface): ConfigIssue {
   };
 }
 
-export interface Assignment {
+interface Assignment {
   path: string;
   value: unknown;
 }
 
-export function parseAssignment(
+function parseAssignment(
   key: string,
   raw: string | true,
   surface: ParseSurface,
@@ -177,17 +179,8 @@ export function parseAssignment(
   return { assignment: { path, value } };
 }
 
-function nest(path: string, value: unknown): Record<string, unknown> {
-  return path
-    .split(".")
-    .reduceRight<unknown>((inner, segment) => ({ [segment]: inner }), value) as Record<
-    string,
-    unknown
-  >;
-}
-
 function collect(assignments: Assignment[]): AfterpackConfig {
-  let config = {} as AfterpackConfig;
+  let config = EMPTY_CONFIG;
   for (const a of assignments) {
     config = mergeConfig(config, nest(a.path, a.value) as AfterpackConfig);
   }
@@ -277,7 +270,7 @@ function screamingIssue(name: string, suffix: string): ConfigIssue {
   };
 }
 
-export function isReservedEnvSuffix(suffix: string): boolean {
+function isReservedEnvSuffix(suffix: string): boolean {
   if (/[a-z]/.test(suffix)) return false;
   const dotted = suffix.replace(/_/g, ".");
   return LIVE_SCREAMING_ENV.has(suffix) || canonicalSpelling(dotted) === undefined;

@@ -4,52 +4,8 @@ import {
   randomSeed,
   resetBuildSessions,
   resolveBuildSeed,
-  resolveSeed,
   SEED_ENV_VAR,
 } from "./seed.js";
-
-describe("resolveSeed — per-build polymorphism entry point", () => {
-  it("a number is used verbatim", () => {
-    expect(resolveSeed(0)).toBe(0);
-    expect(resolveSeed(42)).toBe(42);
-    expect(resolveSeed(1641677636)).toBe(1641677636);
-  });
-
-  it("undefined -> a fresh random seed per invocation", () => {
-    let n = 0;
-    const draw = () => ++n * 1000;
-    expect(resolveSeed(undefined, { randomSeed: draw })).toBe(1000);
-    expect(resolveSeed(undefined, { randomSeed: draw })).toBe(2000);
-  });
-
-  it('"git" -> the resolved HEAD hash string (passed through for the engine to hash)', () => {
-    const head = "9f7a8ffdeadbeef0000000000000000000000000";
-    expect(resolveSeed("git", { gitHead: () => head })).toBe(head);
-  });
-
-  it('"git" with no repo -> fresh random seed + a printed notice, never throws', () => {
-    const warnings: string[] = [];
-    const out = resolveSeed("git", {
-      gitHead: () => null,
-      randomSeed: () => 7777,
-      warn: (m) => warnings.push(m),
-    });
-    expect(out).toBe(7777);
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toMatch(/no git repository/i);
-  });
-
-  it("any other string is passed through UNHASHED (engine owns the hash)", () => {
-    expect(resolveSeed("v1.2.3")).toBe("v1.2.3");
-    expect(resolveSeed("release-candidate")).toBe("release-candidate");
-  });
-
-  it("distinct random draws make the default non-transferable across builds", () => {
-    const seen = new Set<number | string>();
-    for (let i = 0; i < 200; i++) seen.add(resolveSeed(undefined));
-    expect(seen.size).toBe(200);
-  });
-});
 
 describe("randomSeed", () => {
   it("returns a JSON-safe, non-negative integer", () => {

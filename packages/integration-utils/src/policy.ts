@@ -1,5 +1,10 @@
 import type { GitBuildContext } from "./git.js";
-import { deepMerge, type EngineConfigSubset } from "./registry.js";
+import {
+  type EngineConfigSubset,
+  mergeInto,
+  PRESET_VALUES,
+  type TRANSFORM_KIND_VALUES,
+} from "./registry.js";
 
 export interface EnvLike {
   NODE_ENV?: string;
@@ -39,7 +44,7 @@ export interface ReportPolicy {
   emitSourceMappingURL: boolean;
   backup: boolean;
   protectionMapInProd: boolean;
-  sourceMapOverride?: boolean;
+  engineSourceMapOverride?: boolean;
 }
 
 export function detectProduction(env: EnvLike = {}, opts: AfterpackArtifactOptions = {}): boolean {
@@ -70,7 +75,7 @@ export function resolveReportPolicy(
     emitSourceMappingURL,
     backup,
     protectionMapInProd: isProduction && protectionMap,
-    sourceMapOverride: userOpts.sourceMap?.enabled ?? (isProduction ? false : undefined),
+    engineSourceMapOverride: userOpts.sourceMap?.enabled ?? (isProduction ? false : undefined),
   };
 }
 
@@ -83,9 +88,9 @@ export function resolveSourceMapEnabled(
   return hasInputMap;
 }
 
-export type Preset = "minify" | "light" | "medium" | "hard" | "extreme";
+export type Preset = (typeof PRESET_VALUES)[number];
 
-export const PRESETS: readonly Preset[] = ["minify", "light", "medium", "hard", "extreme"];
+export const PRESETS: readonly Preset[] = PRESET_VALUES;
 
 export const DEFAULT_PRESET: Preset = "light";
 
@@ -108,17 +113,7 @@ export function effectiveComplexityTarget(preset?: Preset, complexity?: number):
   return complexity ?? presetTarget(preset ?? DEFAULT_PRESET);
 }
 
-export type TransformKind =
-  | "stringEncoding"
-  | "controlFlowFlatten"
-  | "opaquePredicate"
-  | "mixedBooleanArithmetic"
-  | "integerBytecode"
-  | "crossDependency"
-  | "scopeDeepen"
-  | "comparisonHardening"
-  | "selfIntegrity"
-  | "objectConstruction";
+export type TransformKind = (typeof TRANSFORM_KIND_VALUES)[number];
 
 export interface RegionConfig {
   start: number;
@@ -161,8 +156,8 @@ export function buildEngineConfig(options: BuildEngineConfigOptions): EngineConf
   const sourcesContent = options.sourcesContent ?? !policy.isProduction;
 
   const smEnabled: boolean | undefined = perFileMap
-    ? resolveSourceMapEnabled(policy.sourceMapOverride, inputSourceMap != null)
-    : policy.sourceMapOverride;
+    ? resolveSourceMapEnabled(policy.engineSourceMapOverride, inputSourceMap != null)
+    : policy.engineSourceMapOverride;
 
   const sourceMap: EngineConfig["sourceMap"] = { sourcesContent };
   if (smEnabled !== undefined) sourceMap.enabled = smEnabled;
@@ -176,10 +171,10 @@ export function buildEngineConfig(options: BuildEngineConfigOptions): EngineConf
   if (options.preset === undefined || options.complexity !== undefined) {
     defaults.complexity = target;
   }
-  const config = deepMerge(
+  const config = mergeInto<EngineConfig>(
     { ...defaults, sourceMap, protectionMap: { enabled: policy.protectionMap } },
     (engine ?? {}) as Record<string, unknown>,
-  ) as unknown as EngineConfig;
+  );
   config.seed = seed;
   if (options.renameGlobals === true) {
     config.identifiers = { ...config.identifiers, globals: { rename: true } };

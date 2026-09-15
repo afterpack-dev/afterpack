@@ -1,18 +1,16 @@
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { type AfterpackConfig, type ConfigIssue, validateConfig } from "./registry.js";
+import { readFileSync } from "node:fs";
+import { findUpward } from "./paths.js";
+import {
+  type AfterpackConfig,
+  type ConfigIssue,
+  EMPTY_CONFIG,
+  validateConfig,
+} from "./registry.js";
 
 export const CONFIG_FILE_NAME = "afterpack.json";
 
-export function findConfigFile(startDir: string): string | null {
-  let current = resolve(startDir);
-  for (;;) {
-    const candidate = join(current, CONFIG_FILE_NAME);
-    if (existsSync(candidate)) return candidate;
-    const parent = dirname(current);
-    if (parent === current) return null;
-    current = parent;
-  }
+function findConfigFile(startDir: string): string | null {
+  return findUpward(startDir, CONFIG_FILE_NAME);
 }
 
 export interface LoadedConfigFile {
@@ -23,7 +21,7 @@ export interface LoadedConfigFile {
 
 export function loadConfigFile(startDir: string): LoadedConfigFile {
   const path = findConfigFile(startDir);
-  if (!path) return { path: null, config: {} as AfterpackConfig, issues: [] };
+  if (!path) return { path: null, config: EMPTY_CONFIG, issues: [] };
   let raw: unknown;
   try {
     raw = JSON.parse(readFileSync(path, "utf8")) as unknown;
@@ -31,7 +29,7 @@ export function loadConfigFile(startDir: string): LoadedConfigFile {
     const detail = error instanceof Error ? error.message : String(error);
     return {
       path,
-      config: {} as AfterpackConfig,
+      config: EMPTY_CONFIG,
       issues: [{ path: CONFIG_FILE_NAME, message: `${path} is not valid JSON: ${detail}` }],
     };
   }

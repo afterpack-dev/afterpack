@@ -2,23 +2,18 @@ import {
   type AfterpackConfig,
   CONFIG_KEYS,
   type ConfigKeyDef,
+  EMPTY_CONFIG,
   getPath,
   mergeConfig,
+  nest,
   toPluginOptions,
 } from "./registry.js";
+
+export { nest };
 
 export interface ConfigSample {
   value: unknown;
   flat?: string;
-}
-
-export function nest(path: string, value: unknown): Record<string, unknown> {
-  return path
-    .split(".")
-    .reduceRight<unknown>((inner, segment) => ({ [segment]: inner }), value) as Record<
-    string,
-    unknown
-  >;
 }
 
 function itemSample(key: ConfigKeyDef): ConfigSample | undefined {
@@ -40,12 +35,11 @@ function itemSample(key: ConfigKeyDef): ConfigSample | undefined {
     case "reserved":
       return { value: "Hls", flat: "Hls" };
     case "region":
-      return undefined;
+      return { value: { start: 0, end: 1 } };
   }
 }
 
 export function configSample(key: ConfigKeyDef): ConfigSample | undefined {
-  if (key.item.kind === "region") return { value: [{ start: 0, end: 1 }] };
   const item = itemSample(key);
   if (!item) return undefined;
   if (key.shape === "scalar") return item;
@@ -53,7 +47,7 @@ export function configSample(key: ConfigKeyDef): ConfigSample | undefined {
 }
 
 export function unforwardedBuildKeys(): ConfigKeyDef[] {
-  let config = {} as AfterpackConfig;
+  let config = EMPTY_CONFIG;
   const build = CONFIG_KEYS.filter((k) => k.surface === "build") as ConfigKeyDef[];
   for (const key of build) {
     const sample = configSample(key);

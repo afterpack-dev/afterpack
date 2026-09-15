@@ -3,12 +3,6 @@ import { randomBytes } from "node:crypto";
 
 export type SeedOption = number | string | undefined;
 
-export interface ResolveSeedDeps {
-  gitHead?: () => string | null;
-  randomSeed?: () => number;
-  warn?: (message: string) => void;
-}
-
 export function randomSeed(): number {
   const b = randomBytes(8);
   const hi = b.readUInt32BE(0) & 0x1f_ffff;
@@ -29,33 +23,16 @@ export function gitHead(): string | null {
   }
 }
 
-export function resolveSeed(input: SeedOption, deps: ResolveSeedDeps = {}): number | string {
-  const draw = deps.randomSeed ?? randomSeed;
-  if (typeof input === "number") return input;
-  if (input === undefined) return draw();
-  if (input === "git") {
-    const head = (deps.gitHead ?? gitHead)();
-    if (head) return head;
-    const warn = deps.warn ?? ((m: string) => console.warn(m));
-    warn(
-      '[afterpack] seed "git": no git repository / HEAD found; ' +
-        "using a fresh random seed for this build.",
-    );
-    return draw();
-  }
-  return input;
-}
-
 export const SEED_ENV_VAR = "AFTERPACK_SEED";
 
 export type SeedOrigin = "option" | "git" | "env" | "session" | "fresh";
 
-export interface BuildSeedScope {
+interface BuildSeedScope {
   root: string;
   leg: string;
 }
 
-export interface ResolvedBuildSeed {
+interface ResolvedBuildSeed {
   seed: number | string;
   origin: SeedOrigin;
   legs: string[];
@@ -63,7 +40,10 @@ export interface ResolvedBuildSeed {
   mismatch: { leg: string; seed: number | string } | null;
 }
 
-export interface ResolveBuildSeedDeps extends ResolveSeedDeps {
+interface ResolveBuildSeedDeps {
+  gitHead?: () => string | null;
+  randomSeed?: () => number;
+  warn?: (message: string) => void;
   env?: Record<string, string | undefined>;
   exportToEnv?: boolean;
 }

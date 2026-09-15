@@ -114,13 +114,11 @@ function norm(p: string): string {
     .replace(/^(?:\.\.?\/)+/, "");
 }
 
-function pathsMatch(id: string, source: string): boolean {
-  const a = norm(id);
-  const b = norm(source);
+function normEq(a: string, b: string): boolean {
   return a === b || a.endsWith(`/${b}`) || b.endsWith(`/${a}`);
 }
 
-export type ColorRegionsWarn = (message: string) => void;
+type ColorRegionsWarn = (message: string) => void;
 
 const DEFAULT_WARN: ColorRegionsWarn = (message) => {
   console.warn(`[afterpack] ${message}`);
@@ -155,6 +153,7 @@ export function colorRegions(
     return [];
   }
   const sources = map.sources ?? [];
+  const normSources = sources.map((s) => (s == null ? null : norm(s)));
 
   const lines = chunkCode.split("\n");
   const index = new ChunkByteIndex(lines);
@@ -163,10 +162,14 @@ export function colorRegions(
   const out: RegionConfig[] = [];
   const located: { mod: CapturedModule; srcIdx: number }[] = [];
   for (const mod of withDirectives) {
-    const srcIdx =
+    let srcIdx =
       mod.srcIndex != null && mod.srcIndex >= 0 && mod.srcIndex < sources.length
         ? mod.srcIndex
-        : sources.findIndex((s) => s != null && pathsMatch(mod.id, s));
+        : -1;
+    if (srcIdx < 0) {
+      const normId = norm(mod.id);
+      srcIdx = normSources.findIndex((ns) => ns != null && normEq(normId, ns));
+    }
     if (srcIdx < 0) {
       warn(
         `DIAG_DIRECTIVE_COVERAGE_UNVERIFIED: skipped ${mod.directives.length} @afterpack ` +

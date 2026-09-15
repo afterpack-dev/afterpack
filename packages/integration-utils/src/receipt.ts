@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
+import { findUpward } from "./paths.js";
 
 export const PROTECTION_RECEIPT_FILE = ".afterpack-protection.json";
 
@@ -136,16 +137,11 @@ export function verifyProtectionReceipt(
 }
 
 function findReceiptDir(startDir: string): string | null {
-  let current = resolve(startDir);
-  for (;;) {
-    if (existsSync(join(current, PROTECTION_RECEIPT_FILE))) return current;
-    const parent = dirname(current);
-    if (parent === current) return null;
-    current = parent;
-  }
+  const receiptPath = findUpward(startDir, PROTECTION_RECEIPT_FILE);
+  return receiptPath ? dirname(receiptPath) : null;
 }
 
-export interface AlreadyObfuscatedInputs {
+interface AlreadyObfuscatedInputs {
   receiptPath: string;
   files: string[];
 }

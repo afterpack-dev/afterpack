@@ -1,15 +1,16 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, join } from "node:path";
 import { renderProtectionMapHtml } from "@afterpack/protection-map";
 import {
   type ArtifactMode,
   combinedProtectionMapPath,
+  findUpward,
   resolveArtifactPaths,
   shortHash,
 } from "./paths.js";
 import type { ReportPolicy } from "./policy.js";
 
-export const AFTERPACK_DIR = ".afterpack";
+const AFTERPACK_DIR = ".afterpack";
 
 export const GITIGNORE_ENTRIES = [
   ".afterpack/",
@@ -40,7 +41,7 @@ export interface Logger {
   log: (message: string) => void;
 }
 
-const DEFAULT_LOGGER: Logger = {
+export const DEFAULT_LOGGER: Logger = {
   warn: (m) => console.warn(m),
   log: (m) => console.log(m),
 };
@@ -126,7 +127,7 @@ export function writeArtifacts(input: WriteArtifactsInput): WriteArtifactsResult
   return result;
 }
 
-export interface WriteCombinedProtectionMapInput {
+interface WriteCombinedProtectionMapInput {
   buildDir: string;
   docs: unknown[];
   policy: ReportPolicy;
@@ -152,6 +153,7 @@ interface PmRegion {
   span?: [number, number];
   reversalClass?: string;
   entropy?: number;
+  entropyRaw?: number;
   transformCount?: number;
   sizeDeltaEst?: number;
   lineage?: unknown[];
@@ -377,8 +379,7 @@ function mergeEntries(entries: PmFileEntry[], path: string): PmFileEntry {
   }
 
   regions.sort((a, b) => {
-    const er =
-      ((b.entropyRaw as number | undefined) ?? 0) - ((a.entropyRaw as number | undefined) ?? 0);
+    const er = (b.entropyRaw ?? 0) - (a.entropyRaw ?? 0);
     if (er !== 0) return er;
     const as = Array.isArray(a.span) ? a.span[0] : 0;
     const bs = Array.isArray(b.span) ? b.span[0] : 0;
@@ -524,15 +525,9 @@ function warnProtectionMapInProd(pmPath: string, logger: Logger): void {
 }
 
 function nearestGitignore(startDir: string): string | null {
-  let current = resolve(startDir);
-  for (;;) {
-    const candidate = join(current, GITIGNORE_FILE);
-    if (existsSync(candidate)) return candidate;
-    if (existsSync(join(current, ".git"))) return null;
-    const parent = dirname(current);
-    if (parent === current) return null;
-    current = parent;
-  }
+  return findUpward(startDir, GITIGNORE_FILE, {
+    stopAtDir: (dir) => existsSync(join(dir, ".git")),
+  });
 }
 
 export function ensureGitignore(targetDir: string): string[] {

@@ -1,16 +1,16 @@
 import { execFileSync } from "node:child_process";
 import type { EnvLike } from "./policy.js";
 
-export const GIT_COMMIT_SHA_PATTERN = /^[0-9a-f]{7,40}$/;
+const GIT_COMMIT_SHA_PATTERN = /^[0-9a-f]{7,40}$/;
 
-export const GIT_REF_PATTERN = /^[A-Za-z0-9._\-/+]{1,200}$/;
+const GIT_REF_PATTERN = /^[A-Za-z0-9._\-/+]{1,200}$/;
 
 export interface GitBuildContext {
   commitSha?: string;
   ref?: string;
 }
 
-export interface DetectGitDeps {
+interface DetectGitDeps {
   env?: EnvLike;
   cwd?: string;
   localGit?: (cwd?: string) => GitBuildContext | null;

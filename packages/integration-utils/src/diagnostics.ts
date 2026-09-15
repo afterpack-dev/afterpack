@@ -28,17 +28,17 @@ export interface DiagnosticsSummary {
   byCode: Record<string, number>;
 }
 
-export interface DiagnosticCarrier {
+interface DiagnosticCarrier {
   filePath?: string;
   diagnostics?: string;
 }
 
-export interface ParsedDiagnostics {
+interface ParsedDiagnostics {
   diagnostics: EngineDiagnostic[];
   malformed: number;
 }
 
-export interface CollectedDiagnostics {
+interface CollectedDiagnostics {
   diagnostics: EngineDiagnostic[];
   unknownFiles: number;
   malformedEntries: number;
@@ -177,7 +177,7 @@ function formatInfoSummary(infos: EngineDiagnostic[], verbosity: DiagnosticsVerb
   return `${infos.length} info diagnostic(s): ${parts.join(" · ")}${hint}`;
 }
 
-export interface ReportDiagnosticsInput {
+interface ReportDiagnosticsInput {
   diagnostics: EngineDiagnostic[];
   malformedEntries?: number;
   logger: { warn: (message: string) => void; log: (message: string) => void };
@@ -187,7 +187,7 @@ export interface ReportDiagnosticsInput {
 
 export function reportDiagnostics(input: ReportDiagnosticsInput): DiagnosticsSummary {
   const { diagnostics, logger, prefix } = input;
-  const verbosity = input.verbosity ?? "summary";
+  const verbosity = resolveDiagnosticsVerbosity(input.verbosity);
   const malformedEntries = input.malformedEntries ?? 0;
   const summary = summarizeDiagnostics(diagnostics);
   if (malformedEntries > 0) {

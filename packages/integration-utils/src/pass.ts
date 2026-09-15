@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
 import {
+  DEFAULT_LOGGER,
   ensureGitignore,
   type Logger,
   warnIfPublicPath,
@@ -159,11 +161,6 @@ export interface ObfuscationPassResult {
   outputs?: InMemoryOutput[];
 }
 
-const DEFAULT_LOGGER: Logger = {
-  warn: (m) => console.warn(m),
-  log: (m) => console.log(m),
-};
-
 function silenceSummaryLines(logger: Logger, level: DiagnosticsVerbosity | undefined): Logger {
   if (level !== "none") return logger;
   return { warn: (m) => logger.warn(m), log: () => {} };
@@ -230,8 +227,11 @@ export async function runObfuscationPass(
   const prefix = (message: string): string => `[${label}] ${message}`;
 
   const onDiskFiles = options.inputs ? files.filter((f) => !options.inputs?.has(f)) : files;
-  const onDiskBytes = new Map<string, Buffer>();
-  for (const filePath of onDiskFiles) onDiskBytes.set(filePath, readFileSync(filePath));
+  const onDiskBytes = new Map<string, Buffer>(
+    await Promise.all(
+      onDiskFiles.map(async (filePath) => [filePath, await readFile(filePath)] as const),
+    ),
+  );
 
   if (!options.emitToCaller) {
     const already = detectAlreadyObfuscatedInputs(

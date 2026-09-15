@@ -1,23 +1,11 @@
 import { splitAssignment } from "./config-parse.js";
 import { PRESETS, presetTarget, type RegionConfig, type TransformKind } from "./policy.js";
+import { TRANSFORM_KIND_VALUES } from "./registry.js";
 
 type RegionDelta = Pick<RegionConfig, "target" | "max" | "floor" | "only" | "deny">;
 
 const KIND_BY_LOWER = new Map<string, TransformKind>(
-  (
-    [
-      "stringEncoding",
-      "controlFlowFlatten",
-      "opaquePredicate",
-      "mixedBooleanArithmetic",
-      "integerBytecode",
-      "crossDependency",
-      "scopeDeepen",
-      "comparisonHardening",
-      "selfIntegrity",
-      "objectConstruction",
-    ] as TransformKind[]
-  ).map((k) => [k.toLowerCase(), k]),
+  TRANSFORM_KIND_VALUES.map((k) => [k.toLowerCase(), k]),
 );
 
 function parseKindList(value: string): { kinds?: TransformKind[]; error?: string } {
@@ -485,7 +473,7 @@ export function scanDirectives(source: string): DirectiveManifest {
   return { regions: directives.map((d) => d.region), directives, diagnostics, renameGlobals };
 }
 
-export interface DirectiveCapture {
+interface DirectiveCapture {
   regions?: RegionConfig[];
   applied: number;
   deferredFiles: number;
@@ -508,7 +496,7 @@ export function renameGlobalsRefusalMessage(refused: readonly string[], fileCoun
   );
 }
 
-export interface DirectiveCaptureInput {
+interface DirectiveCaptureInput {
   source: string;
   filePath?: string;
 }

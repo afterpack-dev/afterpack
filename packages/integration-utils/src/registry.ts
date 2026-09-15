@@ -49,7 +49,7 @@ export const TRANSFORM_KIND_VALUES = [
   "objectConstruction",
 ] as const;
 
-export const REFLECTION_ALLOW_VALUES = [
+const REFLECTION_ALLOW_VALUES = [
   "functionToString",
   "nameIntrospection",
   "argumentsCallee",
@@ -60,7 +60,7 @@ export const REFLECTION_ALLOW_VALUES = [
   "nestjs",
 ] as const;
 
-export const UNLIMITED = "unlimited";
+const UNLIMITED = "unlimited";
 
 export const DIRECTIVES_DEFAULT = true;
 
@@ -417,8 +417,6 @@ export const CONFIG_KEYS = [
 
 type Registry = (typeof CONFIG_KEYS)[number];
 
-export type ConfigPath = Registry["path"];
-
 type ItemTs<I> = I extends { kind: "boolean" }
   ? boolean
   : I extends { kind: "number" }
@@ -461,6 +459,8 @@ type NestOf<K> = K extends ConfigKeyDef ? Nest<K["path"], KeyTs<K>> : never;
 
 export type AfterpackConfig = Collapse<UnionToIntersection<NestOf<Registry>>>;
 
+export const EMPTY_CONFIG = {} as AfterpackConfig;
+
 export const CONFIG_BY_PATH: ReadonlyMap<string, ConfigKeyDef> = new Map(
   CONFIG_KEYS.map((k) => [k.path, k as ConfigKeyDef]),
 );
@@ -472,7 +472,7 @@ export const CONFIG_PREFIXES: ReadonlySet<string> = new Set(
   }),
 );
 
-export const CONFIG_CHILDREN: ReadonlyMap<string, readonly string[]> = new Map(
+const CONFIG_CHILDREN: ReadonlyMap<string, readonly string[]> = new Map(
   [...CONFIG_PREFIXES].map((prefix) => [
     prefix,
     CONFIG_KEYS.filter((k) => k.path.startsWith(`${prefix}.`)).map((k) => k.path),
@@ -491,7 +491,7 @@ const PREFIX_BY_NORMALIZED: ReadonlyMap<string, string> = new Map(
   [...CONFIG_PREFIXES].map((prefix) => [normalizeKey(prefix), prefix]),
 );
 
-export function normalizeKey(key: string): string {
+function normalizeKey(key: string): string {
   return key.replace(/[-_.]/g, "").toLowerCase();
 }
 
@@ -576,7 +576,7 @@ export function unknownKeyMessage(path: string, surface: string): string {
   return `unknown configuration key \`${path}\` (${surface})${tail}`;
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -802,6 +802,10 @@ export function deepMerge(
   return out;
 }
 
+export function mergeInto<T>(base: Record<string, unknown>, override: Record<string, unknown>): T {
+  return deepMerge(base, override) as unknown as T;
+}
+
 export function mergeConfig(base: AfterpackConfig, override: AfterpackConfig): AfterpackConfig {
   return deepMerge(
     base as Record<string, unknown>,
@@ -816,6 +820,15 @@ export function getPath(config: AfterpackConfig, path: string): unknown {
     current = current[part];
   }
   return current;
+}
+
+export function nest(path: string, value: unknown): Record<string, unknown> {
+  return path
+    .split(".")
+    .reduceRight<unknown>((inner, segment) => ({ [segment]: inner }), value) as Record<
+    string,
+    unknown
+  >;
 }
 
 export interface EngineConfigSubset {
