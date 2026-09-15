@@ -126,7 +126,8 @@ key with its type and default.
 | `--help` / `-h`, `--version` / `-v` | print usage / the installed version | |
 
 `--telemetry.enabled=false` (or `AFTERPACK_telemetry_enabled=false`) turns off anonymous build
-diagnostics; they are on by default and report only when a build fails.
+diagnostics; they are on by default and report when a build reports an error-level diagnostic (a
+refused or partial build), never on a clean build.
 
 ### `afterpack.json`
 

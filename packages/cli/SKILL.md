@@ -113,7 +113,7 @@ The options worth knowing (`--help` lists them all):
 | `sourceMap.enabled` | write `.map` siblings | on iff an upstream map exists |
 | `protectionMap.enabled` | write the local HTML report | on when an upstream map is found |
 | `build.autorun` | `false` turns AfterPack off project-wide | `true` |
-| `telemetry.enabled` | anonymous diagnostics, reported **only when a build fails** | `true` |
+| `telemetry.enabled` | anonymous diagnostics, reported when a build reports an error-level diagnostic (a refused or partial build), never on a clean build | `true` |
 
 `afterpack.json` is the one config file, shared by the CLI and every plugin. It accepts the whole
 schema, nested, and an unknown key fails the build:

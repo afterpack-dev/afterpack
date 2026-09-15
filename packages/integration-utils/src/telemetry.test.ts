@@ -205,7 +205,8 @@ describe("reporter", () => {
     expect(notice).toContain("--telemetry.enabled=false");
     expect(notice).toContain("telemetry: { enabled: false }");
     expect(notice).toContain("never sends your source");
-    expect(notice).toContain("succeeds sends nothing");
+    expect(notice).toContain("clean build sends nothing");
+    expect(notice).toContain("error-level diagnostic (a refused or partial build)");
     expect(notice).toContain("https://www.afterpack.dev/privacy");
   });
 

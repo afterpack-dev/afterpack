@@ -173,9 +173,10 @@ ${optionLines()}
 
 ${EXIT_CODE_HELP}
 
-Telemetry reports ONLY when a build FAILS: the diagnostic code, severity, byte
-offsets and typed engine fields, plus versions, OS/arch and bucketed counts.
-Never your source, file names, paths or message text. Turn it off with
+Telemetry reports when a build reports an error-level diagnostic (a refused or
+partial build): the diagnostic code, severity, byte offsets and typed engine
+fields, plus versions, OS/arch and bucketed counts. Never on a clean build,
+and never your source, file names, paths or message text. Turn it off with
 \`--telemetry.enabled=false\`. See https://www.afterpack.dev/privacy
 
 ${FEEDBACK_FOOTER}`;

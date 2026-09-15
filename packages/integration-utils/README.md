@@ -62,7 +62,9 @@ so a helper that only this package uses stays on its own module and never become
 - `writeArtifacts({ outPath, code, sourceMapJson, protectionMapJson, originalSource, policy, mode })` —
   writes the backup, the code (+ optional `//# sourceMappingURL` append), the `.map`, and — in
   `single` mode — the per-file `protectionMap.html`.
-- `createTelemetryReporter(deps) → TelemetryReporter` — the failure-only reporter every front door wires.
+- `createTelemetryReporter(deps) → TelemetryReporter` — the reporter every front door wires; it
+  fires only when a build reports an error-level diagnostic (a refused or partial build), never on
+  a clean build.
 
 **The protection receipt**
 

@@ -274,12 +274,13 @@ function safeToken(value: string): string {
 
 export const TELEMETRY_NOTICE: readonly string[] = [
   "AfterPack: anonymous build diagnostics are ON (this notice prints once).",
-  "AfterPack: A build that FAILS reports the failing diagnostic's code, severity, byte",
-  "AfterPack:   offsets and typed engine fields, plus engine version, integration, Node",
-  "AfterPack:   version, OS/arch, bucketed file counts and durations, and a random install",
-  "AfterPack:   id that rotates every 30 days.",
+  "AfterPack: A build that reports an error-level diagnostic (a refused or partial build)",
+  "AfterPack:   sends that diagnostic's code, severity, byte offsets and typed engine",
+  "AfterPack:   fields, plus engine version, integration, Node version, OS/arch, bucketed",
+  "AfterPack:   file counts and durations, and a random install id that rotates every 30",
+  "AfterPack:   days.",
   "AfterPack: It never sends your source, file names, paths, project name, diagnostic",
-  "AfterPack:   message text, or exact byte counts. A build that succeeds sends nothing.",
+  "AfterPack:   message text, or exact byte counts. A clean build sends nothing.",
   "AfterPack: Turn it off with AFTERPACK_telemetry_enabled=false, --telemetry.enabled=false, or",
   "AfterPack:   `telemetry: { enabled: false }` in your config.",
   "AfterPack: https://www.afterpack.dev/privacy",
