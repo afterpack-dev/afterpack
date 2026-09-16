@@ -38,9 +38,11 @@ npx afterpack@latest dist/bundle.js              # or one .js / .mjs / .cjs file
 npx afterpack@latest dist --preset=hard --seed=git
 npx afterpack@latest dist --diagnostics.format=json
 npx afterpack@latest verify .                    # the deploy gate
+npx afterpack@latest restore                     # undo the last backed-up run
 npx afterpack@latest audit https://example.com   # scan a DEPLOYED site
 npx afterpack@latest --help                      # every key, its type and its default
 npx afterpack@latest verify --help
+npx afterpack@latest restore --help
 npx afterpack@latest audit --help
 npx afterpack@latest --version
 ```
@@ -48,11 +50,16 @@ npx afterpack@latest --version
 Always pin `afterpack@latest` rather than bare `npx afterpack`, which can resolve to a stale cached
 copy.
 
-`[path]` is optional. **With no path**, AfterPack picks the build output itself: the directory the
-bundler in your `package.json` writes (Next → `.next/`, Nuxt → `.output/`, everything else →
-`dist/`), else the newest of `dist/`, `build/`, `out/`, `.output/`, `.next/`. It prints what it found
-and what it will do, then runs — it never prompts, in a terminal or in CI, and it exits `1` with the
-quickstart when it finds nothing.
+`[path]` is optional and framework-first: with no path, AfterPack checks `package.json` before it
+ever touches a file. An `@afterpack/*` integration already installed, or a framework detected with
+no integration for it, both refuse to obfuscate (exit `1`) and print the one-line fix instead —
+obfuscating twice, once through the plugin and once through the CLI, is exactly the double-run this
+tool now refuses. Only when no framework is detected does it fall back to the directory the bundler
+in your `package.json` writes (Next → `.next/`, Nuxt → `.output/`, everything else → `dist/`), else
+the newest of `dist/`, `build/`, `out/`, `.output/`, `.next/`. It prints what it found and what it
+will do, then runs — it never prompts, in a terminal or in CI. It exits `1` with the quickstart when
+it finds neither a framework nor a build. **A path argument always obfuscates**, framework or not —
+`afterpack dist/` is the deliberate escape hatch and skips this dispatch entirely.
 
 Nested `node_modules/` are skipped; pass `--paths.include='**/node_modules/**'` (quoted — an
 unquoted glob is expanded by the shell first) to walk them too. AfterPack's own `.backup.<hash>`
@@ -61,13 +68,15 @@ copies are never re-obfuscated.
 ## Output is written in place
 
 The files under `[path]` are **replaced** with their obfuscated form. **Build, then run it once**: a
-second run over the same, unrebuilt tree is **refused** (`DIAG_ALREADY_OBFUSCATED`), because the run
-recorded a sha256 per shipped file in the protection receipt it left there. Every run writes that
-`.afterpack-protection.json` into the directory it walked. Alongside them AfterPack may also write:
+second run over the same, unrebuilt tree is **refused**, because the run recorded a sha256 per
+shipped file both in the protection receipt it left in the tree and in the backup manifest it left
+outside it — either recognizing the current bytes fails the run closed. Every run writes
+`.afterpack-protection.json` into the directory it walked. Alongside it AfterPack may also write:
 
 - `foo.js.map` — the composed source map, when an upstream map was found (off in a detected
   production build).
-- `foo.backup.<hash>.js` — the original, only with `--build.backup`.
+- `.afterpack/backup/` — the originals, **on by default**, never inside the directory you deploy.
+  `afterpack restore [dir]` puts them back; `--build.backup=false` turns this off.
 - `.afterpack/protectionMap.html` — one combined, self-contained report for the whole run, in a
   gitignored directory rather than in your output.
 
@@ -109,7 +118,7 @@ The options worth knowing (`--help` lists them all):
 | `diagnostics.format` | `text` or `json` — see below | `text` |
 | `diagnostics.level` | `summary`, `all`, or `none` (silent; errors still print) | `summary` |
 | `allowUnobfuscated` | ship a file the engine could not obfuscate as cleartext (exit `2`) | `false` |
-| `build.backup` | keep a `.backup.<hash>.js` copy of each original | `false` |
+| `build.backup` | keep the originals under `.afterpack/backup/`, restorable with `afterpack restore` | `true` for the CLI, `false` inside a bundler pipeline |
 | `sourceMap.enabled` | write `.map` siblings | on iff an upstream map exists |
 | `protectionMap.enabled` | write the local HTML report | on when an upstream map is found |
 | `build.autorun` | `false` turns AfterPack off project-wide | `true` |
@@ -192,6 +201,22 @@ It exits non-zero when the receipt is **missing** (nothing protected this tree),
 what it was obfuscated to (replaced after the build). A missing receipt is a failure, never a quiet
 pass. `verify` reads no configuration; it takes only `--diagnostics.format` and
 `--diagnostics.level`. Run it in the deploy step.
+
+## `afterpack restore [dir]`
+
+Undoes a CLI run in place. The CLI backs up every original file to `.afterpack/backup/` before
+obfuscating it — on by default, `--build.backup=false` turns it off — and `restore` reads the
+manifest it left there, checks each file on disk still hashes to what that run obfuscated it to (so
+it never clobbers a change made since), and writes the originals back.
+
+```bash
+npx afterpack@latest restore        # the project root that holds .afterpack/backup/
+npx afterpack@latest restore dist   # restore a specific project root
+```
+
+A file that no longer matches is skipped and named, and the whole command exits `1` — everything
+else still gets restored. A missing manifest is also a failure: there is nothing to restore.
+`restore` reads no configuration either.
 
 ## `afterpack audit <url>`
 

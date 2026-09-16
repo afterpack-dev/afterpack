@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -152,9 +152,8 @@ describe("the build-layer view comes from that same resolution", () => {
     });
 
     expect(code).toBe(0);
-    expect(
-      readdirSync(join(root, "dist")).some((f) => /^app\.backup\.[0-9a-f]{8}\.js$/.test(f)),
-    ).toBe(true);
+    expect(readdirSync(join(root, "dist")).some((f) => /\.backup\./.test(f))).toBe(false);
+    expect(existsSync(join(root, ".afterpack", "backup", "dist", "app.js"))).toBe(true);
   });
 });
 

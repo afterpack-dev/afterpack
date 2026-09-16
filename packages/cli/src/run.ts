@@ -19,12 +19,23 @@ import {
   expandShortFlags,
   HELP,
   HELP_ALL,
-  OUTPUT_DIR_LIST,
   parseSubcommandArgs,
   toRunOptions,
 } from "./args.js";
 import { AUDIT_HELP, audit } from "./audit.js";
-import { detectBuildOutput } from "./detect.js";
+import {
+  backupDir,
+  backupManifestPath,
+  captureOriginals,
+  matchAlreadyObfuscated,
+  type PendingBackup,
+  projectRootFor,
+  readBackupManifest,
+  type WriteBackupsResult,
+  writeBackups,
+} from "./backup.js";
+import { frameworkDocsUrl } from "./detect.js";
+import { commandLine, commandRow, planBareRun } from "./dispatch.js";
 import { EXIT, type ExitCode, failureExitCode, SIZE_CAP_CODE } from "./exit.js";
 import { colorSupported, dim, green, isCiTruthy, red, setColorEnabled, yellow } from "./format.js";
 import { printHeader } from "./header.js";
@@ -43,7 +54,9 @@ import {
   sortedRecord,
   toJsonDiagnostic,
 } from "./output.js";
+import { detectPackageManager } from "./package-manager.js";
 import { withProgress } from "./progress.js";
+import { RESTORE_HELP, restore } from "./restore.js";
 import { readBuildId, VERIFY_HELP, verify } from "./verify.js";
 
 export interface CliLogger {
@@ -79,7 +92,8 @@ const NOT_A_COMMAND: Readonly<Record<string, string>> = {
 };
 
 const COMMAND_HINT =
-  "the commands are `verify` and `audit`; obfuscation is `afterpack <path>`, with no subcommand";
+  "the commands are `verify`, `restore` and `audit`; obfuscation is `afterpack <path>`, " +
+  "with no subcommand";
 
 function unknownCommand(
   argv: readonly string[],
@@ -209,6 +223,33 @@ function buildDocument(input: {
   };
 }
 
+function dispatchGuidance(input: {
+  logger: CliLogger;
+  mode: OutputMode;
+  version: string;
+  code: string;
+  message: string;
+  fix: string;
+  lines: readonly string[];
+}): ExitCode {
+  if (input.mode.format === "json") {
+    emitJson(
+      input.logger,
+      jsonError({
+        version: input.version,
+        command: "obfuscate",
+        exitCode: EXIT.failure,
+        code: input.code,
+        message: input.message,
+        fix: input.fix,
+      }),
+    );
+    return EXIT.failure;
+  }
+  for (const line of input.lines) input.logger.error(line);
+  return EXIT.failure;
+}
+
 function refuse(input: {
   logger: CliLogger;
   mode: OutputMode;
@@ -314,6 +355,31 @@ function renderAlreadyObfuscated(
   logger.error(dim(CONTACT_FOOTER));
 }
 
+function refuseAlreadyObfuscated(
+  logger: CliLogger,
+  cwd: string,
+  mode: OutputMode,
+  version: string,
+  error: AlreadyObfuscatedError,
+): ExitCode {
+  if (mode.format === "json") {
+    emitJson(
+      logger,
+      jsonError({
+        version,
+        command: "obfuscate",
+        exitCode: EXIT.failure,
+        code: DIAG_ALREADY_OBFUSCATED,
+        message: `${error.files.length} file(s) already carry AfterPack output from a previous run`,
+        fix: "Rebuild from source (clean your bundler's output, or delete the directory) before running AfterPack again.",
+      }),
+    );
+    return EXIT.failure;
+  }
+  renderAlreadyObfuscated(logger, cwd, error);
+  return EXIT.failure;
+}
+
 export async function run(deps: CliDeps): Promise<number> {
   const startedAt = Date.now();
   const { cwd, engine, logger, version } = deps;
@@ -332,7 +398,7 @@ export async function run(deps: CliDeps): Promise<number> {
   }
 
   const command = argv[0];
-  if (command === "verify" || command === "audit") {
+  if (command === "verify" || command === "audit" || command === "restore") {
     return runSubcommand(command, argv.slice(1), { ...deps, env, stdout, argv });
   }
 
@@ -441,6 +507,8 @@ export async function run(deps: CliDeps): Promise<number> {
   }
 
   const parsed = toRunOptions(resolved.config);
+  const projectRoot = projectRootFor(cwd, resolved.configFile);
+  const backupEnabled = parsed.artifactOptions.build?.backup ?? true;
   if (resolved.configFile) report.log(`afterpack: using ${resolved.configFile}`);
   if (parsed.build?.autorun === false) {
     if (mode.format === "json") {
@@ -462,30 +530,61 @@ export async function run(deps: CliDeps): Promise<number> {
 
   let requested = resolved.positionals[0];
   if (requested === undefined) {
-    const detected = detectBuildOutput(cwd);
-    if (!detected) {
-      if (mode.format === "json") {
-        return refuseHere(
-          EXIT.failure,
-          "NO_BUILD_OUTPUT",
-          "no build output found in the working directory",
-          "Build the project first, or name the directory: `afterpack <path>`.",
-        );
-      }
-      logger.error(`${red("✗")} No build output found`);
-      logger.error("");
-      logger.error(`None of ${OUTPUT_DIR_LIST} exists in the working directory.`);
-      logger.error("");
-      logger.error(alignRow("fix", "build your project first, then run afterpack again"));
-      logger.error(alignRow("skip", "name the directory yourself: afterpack <path>"));
-      logger.error("");
-      logger.error(dim(CONTACT_FOOTER));
-      return EXIT.failure;
+    const plan = planBareRun(cwd);
+    if (plan.kind === "integrationInstalled") {
+      const pm = detectPackageManager(cwd);
+      return dispatchGuidance({
+        logger,
+        mode,
+        version,
+        code: "INTEGRATION_INSTALLED",
+        message: `${plan.framework.afterpackPackage} is installed; your build protects the output.`,
+        fix: `Run ${pm.run("build")}.`,
+        lines: [
+          `${plan.framework.afterpackPackage} is installed.`,
+          commandLine(pm.run("build")),
+          dim(`docs ${frameworkDocsUrl(plan.framework)}`),
+        ],
+      });
     }
-    requested = detected.dir;
+    if (plan.kind === "frameworkDetected") {
+      const pm = detectPackageManager(cwd);
+      const install = pm.install(plan.framework.afterpackPackage);
+      return dispatchGuidance({
+        logger,
+        mode,
+        version,
+        code: "FRAMEWORK_DETECTED",
+        message: `${plan.framework.name} detected; ${plan.framework.afterpackPackage} protects its build.`,
+        fix: `Run ${install}.`,
+        lines: [
+          `${plan.framework.name} detected.`,
+          commandLine(install),
+          dim(`docs ${frameworkDocsUrl(plan.framework)}`),
+        ],
+      });
+    }
+    if (plan.kind === "nothing") {
+      return dispatchGuidance({
+        logger,
+        mode,
+        version,
+        code: "NO_FRAMEWORK",
+        message: "No framework detected in this directory.",
+        fix: "Name the target yourself: afterpack <dir> or afterpack <file>.js",
+        lines: [
+          "No framework detected in this directory.",
+          commandRow("afterpack dist/", "protect a built directory"),
+          commandRow("afterpack app.js", "protect one file"),
+          dim("docs https://www.afterpack.dev/docs/cli"),
+        ],
+      });
+    }
+    requested = plan.detected.dir;
     report.log(
-      `afterpack: no path given — using ${detected.dir}/ (${detected.reason}); ` +
-        "obfuscating it IN PLACE, so build again before re-running",
+      dim(
+        `Using ${plan.detected.dir}/ (${plan.detected.reason}) · protected in place, rebuild before re-running`,
+      ),
     );
   }
 
@@ -515,6 +614,26 @@ export async function run(deps: CliDeps): Promise<number> {
     );
   }
 
+  const backupManifest = readBackupManifest(projectRoot);
+  if (backupManifest) {
+    const matched = matchAlreadyObfuscated(projectRoot, backupManifest, files);
+    if (matched.length > 0) {
+      return refuseAlreadyObfuscated(
+        logger,
+        cwd,
+        mode,
+        version,
+        new AlreadyObfuscatedError(
+          `${matched.length} file(s) already carry AfterPack output from a previous run`,
+          matched,
+          backupManifestPath(projectRoot),
+          buildDir,
+        ),
+      );
+    }
+  }
+  const pendingBackups: PendingBackup[] = backupEnabled ? captureOriginals(projectRoot, files) : [];
+
   const progressLabel = `Protecting ${isDirectory ? displayDir(cwd, target) : documentPath(cwd, target)}…`;
 
   const captured: CapturedFile[] = [];
@@ -535,7 +654,7 @@ export async function run(deps: CliDeps): Promise<number> {
           gitignoreDir: cwd,
           startedAt,
           combinedProtectionMap: { buildDir, afterpackDir: join(cwd, ".afterpack") },
-          artifactOptions: parsed.artifactOptions,
+          artifactOptions: { ...parsed.artifactOptions, build: { backup: false } },
           telemetry: createTelemetryReporter({ logger: notice }),
           clientVersion: version,
           seed: parsed.seed,
@@ -555,23 +674,18 @@ export async function run(deps: CliDeps): Promise<number> {
     failure = error instanceof Error ? error.message : String(error);
   }
 
+  let backupWritten: WriteBackupsResult | null = null;
+  if (failureError === null && failure === null && backupEnabled) {
+    backupWritten = writeBackups({
+      projectRoot,
+      protectedRoot: buildDir,
+      cliVersion: version,
+      pending: pendingBackups,
+    });
+  }
+
   if (failureError instanceof AlreadyObfuscatedError) {
-    if (mode.format === "json") {
-      emitJson(
-        logger,
-        jsonError({
-          version,
-          command: "obfuscate",
-          exitCode: EXIT.failure,
-          code: DIAG_ALREADY_OBFUSCATED,
-          message: `${failureError.files.length} file(s) already carry AfterPack output from a previous run`,
-          fix: "Rebuild from source (clean your bundler's output, or delete the directory) before running AfterPack again.",
-        }),
-      );
-      return EXIT.failure;
-    }
-    renderAlreadyObfuscated(logger, cwd, failureError);
-    return EXIT.failure;
+    return refuseAlreadyObfuscated(logger, cwd, mode, version, failureError);
   }
 
   const diagnostics = captured.flatMap((f) => f.diagnostics);
@@ -608,7 +722,7 @@ export async function run(deps: CliDeps): Promise<number> {
 
   if (exitCode === EXIT.partial) {
     logger.error(
-      `${yellow("⚠")} ${unobfuscated.length} file(s) shipped UNOBFUSCATED — ` +
+      `${yellow("⚠")} ${unobfuscated.length} ${unobfuscated.length === 1 ? "file" : "files"} shipped UNOBFUSCATED — ` +
         "drop --allowUnobfuscated to fail closed instead.",
     );
     logger.error("");
@@ -618,8 +732,18 @@ export async function run(deps: CliDeps): Promise<number> {
 
   if (result?.receiptPath) {
     report.log(`  receipt  ${documentPath(cwd, result.receiptPath)}`);
+  }
+  if (backupWritten !== null && backupWritten.count > 0) {
+    report.log(`  backup   ${documentPath(cwd, backupDir(projectRoot))}/`);
+  }
+  if (result?.receiptPath || backupWritten !== null) {
     report.log("");
+  }
+  if (result?.receiptPath) {
     report.log(alignRow("next", "afterpack verify   before you deploy"));
+  }
+  if (backupWritten !== null && backupWritten.count > 0) {
+    report.log(alignRow("undo", "afterpack restore"));
   }
   if (stdout.isTTY && !env.AFTERPACK_KEY && !isCiTruthy(env.CI)) {
     report.log(dim(alignRow("pro", "10 MB/month free · https://www.afterpack.dev/login")));
@@ -627,15 +751,21 @@ export async function run(deps: CliDeps): Promise<number> {
   return exitCode;
 }
 
+const SUBCOMMAND_HELP: Readonly<Record<"verify" | "audit" | "restore", string>> = {
+  verify: VERIFY_HELP,
+  restore: RESTORE_HELP,
+  audit: AUDIT_HELP,
+};
+
 async function runSubcommand(
-  command: "verify" | "audit",
+  command: "verify" | "audit" | "restore",
   rest: string[],
   deps: CliDeps & { env: Record<string, string | undefined>; stdout: CliStdout },
 ): Promise<number> {
   const { cwd, logger, version, env, stdout } = deps;
   const args = parseSubcommandArgs(rest, command);
   if (args.help) {
-    logger.log(command === "verify" ? VERIFY_HELP : AUDIT_HELP);
+    logger.log(SUBCOMMAND_HELP[command]);
     return EXIT.ok;
   }
 
@@ -657,6 +787,9 @@ async function runSubcommand(
   const report = reportingLogger(logger, mode);
   if (command === "verify") {
     return verify({ cwd, logger, report, positionals: args.positionals, mode, version });
+  }
+  if (command === "restore") {
+    return restore({ cwd, logger, report, positionals: args.positionals, mode, version });
   }
   return audit({
     positionals: args.positionals,

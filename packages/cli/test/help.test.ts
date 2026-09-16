@@ -39,10 +39,11 @@ afterEach(() => {
 });
 
 describe("help", () => {
-  it("the short --help lists both commands and the common options, but not the full reference", async () => {
+  it("the short --help lists all three commands and the common options, but not the full reference", async () => {
     expect(await invoke(["--help"])).toBe(0);
     const help = out.join("\n");
     expect(help).toContain("afterpack verify [dir]");
+    expect(help).toContain("afterpack restore [dir]");
     expect(help).toContain("afterpack audit <url>");
     expect(help).toContain("--diagnostics.format=<text|json>");
     expect(help).toContain("--diagnostics.level=<summary|all|none>");
@@ -51,19 +52,25 @@ describe("help", () => {
     expect(help.split("\n").length).toBeLessThanOrEqual(30);
   });
 
-  it("--help --all lists every option and the exit codes, without the RESERVED codes", async () => {
+  it("--help --all lists every option, the restore command, and the exit codes, without the RESERVED codes", async () => {
     expect(await invoke(["--help", "--all"])).toBe(0);
     const help = out.join("\n");
     expect(help).toContain("--paths.include=<string[,...]>");
     expect(help).toContain("--identifiers.reserved=<name[,...]>");
+    expect(help).toContain("restore [dir]");
     expect(help).toContain("Exit codes:");
     expect(help).toContain("64  misuse");
     expect(help).not.toContain("RESERVED");
   });
 
-  it("answers `verify --help` and `audit --help` with their own page", async () => {
+  it("answers `verify --help`, `restore --help` and `audit --help` with their own page", async () => {
     expect(await invoke(["verify", "--help"])).toBe(0);
     expect(out.join("\n")).toContain("usage: afterpack verify [dir]");
+    expect(out.join("\n")).not.toContain("afterpack audit <url>");
+
+    out = [];
+    expect(await invoke(["restore", "--help"])).toBe(0);
+    expect(out.join("\n")).toContain("usage: afterpack restore [dir]");
     expect(out.join("\n")).not.toContain("afterpack audit <url>");
 
     out = [];
@@ -101,6 +108,7 @@ describe("help", () => {
     for (const argv of [
       ["--help", "--all"],
       ["verify", "--help"],
+      ["restore", "--help"],
       ["audit", "--help"],
     ]) {
       out = [];
@@ -122,6 +130,7 @@ describe("help", () => {
       ["dist", "--nope=1"],
       ["nope-nope-nope"],
       ["verify", "no-such-dir"],
+      ["restore", "no-such-dir"],
       ["audit"],
       ["audit", "a", "b"],
     ]) {

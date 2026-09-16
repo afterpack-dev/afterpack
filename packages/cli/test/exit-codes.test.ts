@@ -134,7 +134,7 @@ describe("the exit-code contract", () => {
 
     err = [];
     expect(await invoke(["scan", "dist"])).toBe(64);
-    expect(err.join("\n")).toContain("the commands are `verify` and `audit`");
+    expect(err.join("\n")).toContain("the commands are `verify`, `restore` and `audit`");
     expect(engineCalls).toHaveLength(0);
   });
 

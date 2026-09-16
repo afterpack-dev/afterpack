@@ -86,7 +86,7 @@ export function reportingLogger(logger: CliLogger, mode: OutputMode): CliLogger 
   return { log, warn: (m) => logger.warn(m), error: (m) => logger.error(m) };
 }
 
-export type CommandName = "obfuscate" | "verify" | "audit";
+export type CommandName = "obfuscate" | "verify" | "restore" | "audit";
 
 export interface JsonDiagnostic {
   code: string;

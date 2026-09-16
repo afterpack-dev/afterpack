@@ -89,6 +89,7 @@ export const CONTACT_FOOTER = "contact https://www.afterpack.dev/contact";
 export const USAGE =
   "usage: afterpack [path] [--key=value ...] [--help] [--version]\n" +
   "       afterpack verify [dir]\n" +
+  "       afterpack restore [dir]\n" +
   "       afterpack audit <url>";
 
 export const OUTPUT_DIR_LIST = OUTPUT_DIRS.map((dir) => `${dir}/`).join(", ");
@@ -216,6 +217,12 @@ Commands:
                            from a different build, or any recorded file no longer
                            hashes to the value it was obfuscated to. Run it in
                            the deploy step. \`afterpack verify --help\` for more.
+  restore [dir]            undo a run in place: restores the original files a
+                           previous run backed up to .afterpack/backup/ (defaults
+                           to the working directory). Refuses a file whose current
+                           bytes no longer match what that run obfuscated it to,
+                           and refuses outright with no backup manifest.
+                           \`afterpack restore --help\` for more.
   audit <url>              scan a DEPLOYED site for leaked secrets, exposed
                            source and unprotected JavaScript, streaming the
                            findings as they land. \`afterpack audit --help\`.

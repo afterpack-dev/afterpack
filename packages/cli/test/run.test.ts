@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -34,7 +42,7 @@ afterEach(() => {
 });
 
 describe("run", () => {
-  it("collects every emitted JS (recursively), delegates to the engine, and writes obfuscated output + a backup", async () => {
+  it("collects every emitted JS (recursively), delegates to the engine, and backs it up OUTSIDE the tree", async () => {
     writeFileSync(join(buildDir, "app.js"), "export const a = 1;");
     mkdirSync(join(buildDir, "chunks"));
     writeFileSync(join(buildDir, "chunks", "vendor.mjs"), "export const b = 2;");
@@ -49,24 +57,31 @@ describe("run", () => {
     );
     expect(readFileSync(join(buildDir, "styles.css"), "utf8")).toBe(".x{}");
     expect(readdirSync(buildDir).some((f) => /\.backup\./.test(f))).toBe(false);
+    expect(readFileSync(join(root, ".afterpack", "backup", "dist", "app.js"), "utf8")).toBe(
+      "export const a = 1;",
+    );
     expect(engineCalls.map((c) => c.input).sort()).toEqual([
       "export const a = 1;",
       "export const b = 2;",
     ]);
   });
 
-  it("respects --build.backup=false (no backup files written)", async () => {
+  it("respects --build.backup=false (no backup written anywhere)", async () => {
     writeFileSync(join(buildDir, "app.js"), "export const a = 1;");
     const code = await invoke(["dist", "--build.backup=false", "--protectionMap.enabled=false"]);
     expect(code).toBe(0);
     expect(readdirSync(buildDir).some((f) => /\.backup\./.test(f))).toBe(false);
+    expect(existsSync(join(root, ".afterpack", "backup"))).toBe(false);
   });
 
-  it("writes a backup when --build.backup is passed explicitly", async () => {
+  it("backup is ON by default: --build.backup is redundant but still honoured explicitly", async () => {
     writeFileSync(join(buildDir, "app.js"), "export const a = 1;");
     const code = await invoke(["dist", "--build.backup", "--protectionMap.enabled=false"]);
     expect(code).toBe(0);
-    expect(readdirSync(buildDir).some((f) => /^app\.backup\.[0-9a-f]{8}\.js$/.test(f))).toBe(true);
+    expect(readdirSync(buildDir).some((f) => /\.backup\./.test(f))).toBe(false);
+    expect(readFileSync(join(root, ".afterpack", "backup", "dist", "app.js"), "utf8")).toBe(
+      "export const a = 1;",
+    );
   });
 
   it("prints the new success block: the summary line, the receipt line and the next hint", async () => {

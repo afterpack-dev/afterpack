@@ -1,53 +1,113 @@
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-export interface Bundler {
+export interface Framework {
   dep: string;
   name: string;
+  afterpackPackage: string;
+  docsPath: string;
   outputDir: string;
-  hint: string;
 }
 
-export const BUNDLERS: readonly Bundler[] = [
+export const FRAMEWORKS: readonly Framework[] = [
   {
-    dep: "next",
-    name: "Next.js",
-    outputDir: ".next",
-    hint: "detected Next.js — `@afterpack/next` obfuscates your build automatically as a postbuild step.",
+    dep: "@sveltejs/kit",
+    name: "SvelteKit",
+    afterpackPackage: "@afterpack/sveltekit",
+    docsPath: "sveltekit",
+    outputDir: "build",
+  },
+  {
+    dep: "astro",
+    name: "Astro",
+    afterpackPackage: "@afterpack/astro",
+    docsPath: "astro",
+    outputDir: "dist",
   },
   {
     dep: "nuxt",
     name: "Nuxt",
+    afterpackPackage: "@afterpack/nuxt",
+    docsPath: "nuxt",
     outputDir: ".output",
-    hint: "detected Nuxt — `@afterpack/nuxt` obfuscates the server + client output as part of your build.",
+  },
+  {
+    dep: "next",
+    name: "Next.js",
+    afterpackPackage: "@afterpack/next",
+    docsPath: "nextjs",
+    outputDir: ".next",
+  },
+  {
+    dep: "@angular/core",
+    name: "Angular",
+    afterpackPackage: "@afterpack/angular",
+    docsPath: "angular",
+    outputDir: "dist",
+  },
+  {
+    dep: "electron",
+    name: "Electron",
+    afterpackPackage: "@afterpack/electron",
+    docsPath: "electron",
+    outputDir: "out",
+  },
+  {
+    dep: "svelte",
+    name: "Svelte",
+    afterpackPackage: "@afterpack/svelte",
+    docsPath: "svelte",
+    outputDir: "dist",
+  },
+  {
+    dep: "vue",
+    name: "Vue",
+    afterpackPackage: "@afterpack/vue",
+    docsPath: "vue",
+    outputDir: "dist",
+  },
+  {
+    dep: "parcel",
+    name: "Parcel",
+    afterpackPackage: "@afterpack/parcel-optimizer",
+    docsPath: "parcel",
+    outputDir: "dist",
   },
   {
     dep: "vite",
     name: "Vite",
+    afterpackPackage: "@afterpack/vite",
+    docsPath: "vite",
     outputDir: "dist",
-    hint: "detected Vite — `@afterpack/vite` hooks your build for region directives + sourcemap chaining.",
   },
   {
     dep: "webpack",
     name: "webpack",
+    afterpackPackage: "@afterpack/webpack",
+    docsPath: "webpack",
     outputDir: "dist",
-    hint: "detected webpack — `@afterpack/webpack` hooks your build for region directives + sourcemap chaining.",
   },
   {
     dep: "rollup",
     name: "Rollup",
+    afterpackPackage: "@afterpack/rollup",
+    docsPath: "rollup",
     outputDir: "dist",
-    hint: "detected Rollup — `@afterpack/rollup` hooks your build for region directives + sourcemap chaining.",
   },
   {
     dep: "esbuild",
     name: "esbuild",
+    afterpackPackage: "@afterpack/esbuild",
+    docsPath: "esbuild",
     outputDir: "dist",
-    hint: "detected esbuild — `@afterpack/esbuild` hooks your build for region directives + sourcemap chaining.",
   },
 ];
 
 export const OUTPUT_DIRS = ["dist", "build", "out", ".output", ".next"] as const;
+
+export function frameworkDocsUrl(framework: Framework): string {
+  return `https://www.afterpack.dev/docs/frameworks/${framework.docsPath}`;
+}
 
 function readDependencies(cwd: string): Record<string, unknown> {
   try {
@@ -61,9 +121,13 @@ function readDependencies(cwd: string): Record<string, unknown> {
   }
 }
 
-export function detectBundler(cwd: string): Bundler | null {
+export function detectFramework(cwd: string): Framework | null {
   const deps = readDependencies(cwd);
-  return BUNDLERS.find((b) => b.dep in deps) ?? null;
+  return FRAMEWORKS.find((f) => f.dep in deps) ?? null;
+}
+
+export function detectIntegration(cwd: string, framework: Framework): boolean {
+  return framework.afterpackPackage in readDependencies(cwd);
 }
 
 function directoryMtime(cwd: string, name: string): number | null {
@@ -88,9 +152,9 @@ export function detectBuildOutput(cwd: string): DetectedOutput | null {
   }
   if (present.length === 0) return null;
 
-  const bundler = detectBundler(cwd);
-  if (bundler && present.some((c) => c.dir === bundler.outputDir)) {
-    return { dir: bundler.outputDir, reason: `${bundler.name} writes it` };
+  const framework = detectFramework(cwd);
+  if (framework && present.some((c) => c.dir === framework.outputDir)) {
+    return { dir: framework.outputDir, reason: `${framework.name} writes it` };
   }
   const newest = present.reduce((best, c) => (c.mtime > best.mtime ? c : best));
   return { dir: newest.dir, reason: "the newest build output here" };
