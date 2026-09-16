@@ -687,7 +687,7 @@ describe("runObfuscationPass engine diagnostics", () => {
     );
   });
 
-  it("rolls per-file info diagnostics up to ONE line and tallies them on the result", async () => {
+  it("says nothing about info diagnostics at the default level, but still tallies them on the result", async () => {
     const files = ["a.js", "b.js", "c.js"].map((n) => join(outDir, n));
     for (const f of files) writeFileSync(f, "const x = 1;");
     const { engine } = makeEngine(() => ({
@@ -695,11 +695,7 @@ describe("runObfuscationPass engine diagnostics", () => {
     }));
     const cap = silentLogger();
     const result = await runObfuscationPass({ ...baseOptions(files, engine), logger: cap.logger });
-    const summaryLines = cap.logs.filter((l) => l.includes("info diagnostic(s)"));
-    expect(summaryLines).toEqual([
-      "[afterpack-test] 6 info diagnostic(s): DIAG_ENGINE_PASSES x3 · DIAG_TARGET_REACHED x3 " +
-        "(AFTERPACK_diagnostics_level=all to list them)",
-    ]);
+    expect(cap.logs.some((l) => l.includes("info diagnostic(s)"))).toBe(false);
     expect(result.diagnostics).toEqual({
       total: 6,
       info: 6,
@@ -707,6 +703,17 @@ describe("runObfuscationPass engine diagnostics", () => {
       critical: 0,
       byCode: { DIAG_ENGINE_PASSES: 3, DIAG_TARGET_REACHED: 3 },
     });
+
+    for (const f of files) writeFileSync(f, "const x = 2;");
+    const all = silentLogger();
+    await runObfuscationPass({
+      ...baseOptions(files, engine),
+      diagnostics: "all",
+      logger: all.logger,
+    });
+    expect(all.logs.filter((l) => l.includes("info diagnostic(s)"))).toEqual([
+      "[afterpack-test] 6 info diagnostic(s): DIAG_ENGINE_PASSES x3 · DIAG_TARGET_REACHED x3",
+    ]);
   });
 
   it("prints no progress, summary or info line at the `none` level, and still reports errors", async () => {
@@ -889,25 +896,6 @@ describe("runObfuscationPass timing", () => {
     expect(anchored.timing.callerAnchored).toBe(true);
     expect(anchored.timing.totalMs).toBeGreaterThanOrEqual(discoveryMs);
     expect(anchored.timing.totalMs).toBeGreaterThan(selfTimed.timing.totalMs);
-  });
-
-  it("the summary log's honest breakdown says 'cloud' only when the engine reports source===\"cloud\"", async () => {
-    const a = join(outDir, "a.js");
-    writeFileSync(a, "const a = 1;");
-
-    const { engine: localEngine } = makeEngine(() => ({}), "local");
-    const capLocal = silentLogger();
-    await runObfuscationPass({ ...baseOptions([a], localEngine), logger: capLocal.logger });
-    const localSummary = capLocal.logs.find((l) => l.includes("afterpack overhead"));
-    expect(localSummary).toMatch(/afterpack overhead .*\(prep .*· engine .*· write .*\)/);
-    expect(localSummary).not.toContain("cloud");
-
-    writeFileSync(a, "const a = 2;");
-    const { engine: cloudEngine } = makeEngine(() => ({}), "cloud");
-    const capCloud = silentLogger();
-    await runObfuscationPass({ ...baseOptions([a], cloudEngine), logger: capCloud.logger });
-    const cloudSummary = capCloud.logs.find((l) => l.includes("afterpack overhead"));
-    expect(cloudSummary).toMatch(/afterpack overhead .*\(prep .*· cloud .*· write .*\)/);
   });
 });
 
@@ -1146,6 +1134,7 @@ describe("runObfuscationPass — the cross-bundle build seed", () => {
       gitignoreDir: root,
       buildLeg: name,
       seed,
+      diagnostics: "all",
       combinedProtectionMap: { buildDir: dir, afterpackDir: join(root, ".afterpack", name) },
       logger: captured.logger,
     });
@@ -1170,7 +1159,7 @@ describe("runObfuscationPass — the cross-bundle build seed", () => {
 
   it("reports the seed and its origin on the machine-readable summary line", async () => {
     const { logs, result } = await leg("main", 12345);
-    const summary = logs.find((l) => l.includes("% of input)"));
+    const summary = logs.find((l) => l.includes("Protected "));
     expect(summary).toContain(`· seed ${result.seed} (option)`);
   });
 
@@ -1178,7 +1167,7 @@ describe("runObfuscationPass — the cross-bundle build seed", () => {
     await leg("main", 12345);
     const renderer = await leg("renderer");
     expect(renderer.warnings.join("\n")).toMatch(/does not match leg "main"/);
-    expect(renderer.logs.find((l) => l.includes("% of input)"))).toContain("(MISMATCH)");
+    expect(renderer.logs.find((l) => l.includes("Protected "))).toContain("(MISMATCH)");
   });
 
   it("an ancestor process's AFTERPACK_SEED pins every leg (the cross-PROCESS channel)", async () => {

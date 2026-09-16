@@ -1,6 +1,6 @@
 import { parseCliOptions, validateConfig } from "@afterpack/integration-utils";
 import { describe, expect, it } from "vitest";
-import { expandShortFlags, HELP, renderFlag, toRunOptions, USAGE } from "../src/args.js";
+import { expandShortFlags, HELP, HELP_ALL, renderFlag, toRunOptions, USAGE } from "../src/args.js";
 
 function runOptionsFor(argv: string[]) {
   const parsed = parseCliOptions(argv);
@@ -136,22 +136,30 @@ describe("the flags the CLI no longer has", () => {
 });
 
 describe("help", () => {
-  it("shows the one-spelling usage line", () => {
+  it("shows the one-spelling usage line in both the short and the full help", () => {
     expect(USAGE).toContain("--key=value");
     expect(HELP).toContain(USAGE);
+    expect(HELP_ALL).toContain(USAGE);
   });
 
-  it("lists every registry key with its default", () => {
+  it("the short help lists only the common options, each with its default", () => {
     expect(HELP).toContain("--preset=<minify|light|medium|hard|extreme>");
-    expect(HELP).toContain("--identifiers.reserved=<name[,...]>");
-    expect(HELP).toContain("regions (afterpack.json only)");
     expect(HELP).toContain("default: light");
+    expect(HELP).not.toContain("--identifiers.reserved=<name[,...]>");
+    expect(HELP).not.toContain("regions (afterpack.json only)");
   });
 
-  it("documents the bundled-build reasoning for paths.include", () => {
-    expect(HELP).toContain("--paths.include=<string[,...]>");
-    expect(HELP).toContain("--paths.include='**/node_modules/**'");
-    expect(HELP).toContain("node_modules path left to match");
+  it("the full help lists every registry key with its default", () => {
+    expect(HELP_ALL).toContain("--preset=<minify|light|medium|hard|extreme>");
+    expect(HELP_ALL).toContain("--identifiers.reserved=<name[,...]>");
+    expect(HELP_ALL).toContain("regions (afterpack.json only)");
+    expect(HELP_ALL).toContain("default: light");
+  });
+
+  it("documents the bundled-build reasoning for paths.include in the full help", () => {
+    expect(HELP_ALL).toContain("--paths.include=<string[,...]>");
+    expect(HELP_ALL).toContain("--paths.include='**/node_modules/**'");
+    expect(HELP_ALL).toContain("node_modules path left to match");
   });
 
   it("renders a structured key as file-only", () => {

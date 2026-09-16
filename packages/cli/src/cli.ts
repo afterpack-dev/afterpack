@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs";
 import { processBatch, version } from "@afterpack/core";
-import { FEEDBACK_FOOTER } from "./args.js";
+import { CONTACT_FOOTER } from "./args.js";
+import { dim } from "./format.js";
 import { run } from "./run.js";
 
 function readVersion(): string {
@@ -33,6 +34,6 @@ run({
   })
   .catch((error) => {
     console.error(`afterpack: ${error instanceof Error ? error.message : String(error)}`);
-    console.error(FEEDBACK_FOOTER);
+    console.error(dim(CONTACT_FOOTER));
     process.exitCode = 1;
   });

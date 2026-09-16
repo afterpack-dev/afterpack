@@ -4,7 +4,21 @@ import type { ObfuscationExpectation } from "./expectations.js";
 import type { Fixture } from "./registry.js";
 
 const SUMMARY_LINE =
-  /\[([^\]]+)\] obfuscated (\d+) file\(s\) in [^\n]*?\((\d+)% of input\)([^\n]*)/g;
+  /(?:\[([^\]]+)\]|(✓)) Protected (\d+) files? · ([\d.]+ [A-Za-z]+) → ([\d.]+ [A-Za-z]+)([^\n]*)/g;
+
+// biome-ignore lint/suspicious/noControlCharactersInRegex: matching the ESC byte is the point.
+const ANSI = /\x1b\[[0-9;]*m/g;
+
+const BYTE_SIZE = /^([\d.]+) (B|KB|MB)$/;
+
+function parseBytes(text: string): number {
+  const match = BYTE_SIZE.exec(text);
+  if (!match) return Number.NaN;
+  const value = Number(match[1]);
+  if (match[2] === "KB") return value * 1024;
+  if (match[2] === "MB") return value * 1024 * 1024;
+  return value;
+}
 
 export interface ObfuscationPass {
   passLabel: string;
@@ -18,14 +32,17 @@ export interface ObfuscationPass {
 
 export function parseObfuscationPasses(log: string): ObfuscationPass[] {
   const out: ObfuscationPass[] = [];
-  for (const match of log.matchAll(SUMMARY_LINE)) {
-    const tail = match[4] ?? "";
+  const plain = log.replace(ANSI, "");
+  for (const match of plain.matchAll(SUMMARY_LINE)) {
+    const tail = match[6] ?? "";
     const noOp = tail.match(/(\d+) no-op \(unchanged\)/);
     const seed = tail.match(/· seed (\S+) \(([^)]+)\)/);
+    const bytesIn = parseBytes(match[4]);
+    const bytesOut = parseBytes(match[5]);
     out.push({
-      passLabel: match[1],
-      files: Number(match[2]),
-      ratioPercent: Number(match[3]),
+      passLabel: match[1] ?? "afterpack",
+      files: Number(match[3]),
+      ratioPercent: Math.round((bytesOut / bytesIn) * 100),
       unobfuscated: tail.includes("shipped UNOBFUSCATED"),
       noOp: noOp ? Number(noOp[1]) : 0,
       seed: seed ? seed[1] : null,

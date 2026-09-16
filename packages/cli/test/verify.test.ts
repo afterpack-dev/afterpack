@@ -58,7 +58,7 @@ describe("afterpack verify", () => {
   it("passes on a freshly protected build, found through the project root", async () => {
     protectedBuild();
     expect(await invoke(["verify", "."])).toBe(0);
-    expect(out.join("\n")).toContain("1 obfuscated file(s) intact");
+    expect(out.join("\n")).toContain("Verified 1 file");
   });
 
   it("FAILS a receipt that lists files the engine never changed", async () => {
@@ -175,7 +175,7 @@ describe("afterpack <dir> writes the receipt afterpack verify reads", () => {
 
     expect(await invoke(["dist", ...QUIET])).toBe(0);
     expect(await invoke(["verify", "dist"])).toBe(0);
-    expect(out.join("\n")).toContain("1 obfuscated file(s) intact");
+    expect(out.join("\n")).toContain("Verified 1 file");
   });
 
   it("FAILS the gate when a file is replaced after the run", async () => {
@@ -193,7 +193,7 @@ describe("afterpack <dir> writes the receipt afterpack verify reads", () => {
     expect(await invoke(["dist", ...QUIET])).toBe(0);
 
     expect(await invoke(["dist", ...QUIET])).toBe(1);
-    expect(err.join("\n")).toContain("DIAG_ALREADY_OBFUSCATED");
+    expect(err.join("\n")).toContain("Already obfuscated");
 
     out = [];
     err = [];
@@ -207,7 +207,9 @@ describe("afterpack <dir> writes the receipt afterpack verify reads", () => {
     writeFileSync(join(dist, "BUILD_ID"), BUILD_ID);
 
     expect(await invoke([".next", ...QUIET])).toBe(0);
-    expect(await invoke(["verify", "."])).toBe(0);
-    expect(out.join("\n")).toContain(`build ${BUILD_ID}`);
+    out = [];
+    expect(await invoke(["verify", ".", "--diagnostics.format=json"])).toBe(0);
+    const doc = JSON.parse(out[0]) as { summary: { buildId: string } };
+    expect(doc.summary.buildId).toBe(BUILD_ID);
   });
 });

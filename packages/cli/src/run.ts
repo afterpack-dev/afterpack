@@ -1,8 +1,10 @@
 import { existsSync, statSync } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
+  AlreadyObfuscatedError,
   collectJsFiles,
   createTelemetryReporter,
+  DIAG_ALREADY_OBFUSCATED,
   type EngineBatchResult,
   type EngineDiagnostic,
   type EngineFileResult,
@@ -13,17 +15,19 @@ import {
   runObfuscationPass,
 } from "@afterpack/integration-utils";
 import {
+  CONTACT_FOOTER,
   expandShortFlags,
-  FEEDBACK_FOOTER,
   HELP,
+  HELP_ALL,
+  OUTPUT_DIR_LIST,
   parseSubcommandArgs,
-  QUICKSTART,
   toRunOptions,
-  USAGE,
 } from "./args.js";
 import { AUDIT_HELP, audit } from "./audit.js";
-import { detectBuildOutput, detectBundler } from "./detect.js";
+import { detectBuildOutput } from "./detect.js";
 import { EXIT, type ExitCode, failureExitCode, SIZE_CAP_CODE } from "./exit.js";
+import { colorSupported, dim, green, isCiTruthy, red, setColorEnabled, yellow } from "./format.js";
+import { printHeader } from "./header.js";
 import {
   type CommandName,
   emitJson,
@@ -39,6 +43,7 @@ import {
   sortedRecord,
   toJsonDiagnostic,
 } from "./output.js";
+import { withProgress } from "./progress.js";
 import { readBuildId, VERIFY_HELP, verify } from "./verify.js";
 
 export interface CliLogger {
@@ -134,6 +139,14 @@ function documentPath(cwd: string, filePath: string): string {
   return rel === "" || rel.startsWith("..") ? filePath : rel.split(sep).join("/");
 }
 
+function displayDir(cwd: string, dir: string): string {
+  return `${documentPath(cwd, dir)}/`;
+}
+
+function alignRow(label: string, value: string): string {
+  return `${label.padEnd(6)}${value}`;
+}
+
 function fileStatus(file: CapturedFile): string {
   if (file.status === "failure") return "failed";
   if (file.unobfuscated) return "unobfuscated";
@@ -221,11 +234,84 @@ function refuse(input: {
     );
     return input.exitCode;
   }
-  input.logger.error(`afterpack: ${input.message}`);
-  for (const line of input.detail ?? []) input.logger.error(line);
-  input.logger.error(`afterpack: ${input.fix}`);
-  input.logger.error(FEEDBACK_FOOTER);
+  input.logger.error(`${red("✗")} ${input.message}`);
+  if (input.detail && input.detail.length > 0) {
+    input.logger.error("");
+    for (const line of input.detail) input.logger.error(line);
+  }
+  input.logger.error("");
+  input.logger.error(input.fix);
+  input.logger.error("");
+  input.logger.error(dim(CONTACT_FOOTER));
   return input.exitCode;
+}
+
+const UNKNOWN_OPTION_LINE =
+  /^\s*command line:\s*unknown configuration key `([^`]+)` \(command line\) — (?:did you mean `([^`]+)`\?|see \S+)$/;
+
+function unknownOptionFromMessage(
+  message: string,
+): { path: string; suggestion: string | null } | null {
+  const lines = message.split("\n");
+  if (lines.length !== 2) return null;
+  const match = UNKNOWN_OPTION_LINE.exec(lines[1]);
+  if (!match) return null;
+  return { path: match[1], suggestion: match[2] ?? null };
+}
+
+function renderUnknownOption(logger: CliLogger, path: string, suggestion: string | null): void {
+  logger.error(`${red("✗")} Unknown option \`--${path}\``);
+  logger.error("");
+  if (suggestion) {
+    logger.error(`Did you mean \`--${suggestion}\`?`);
+  }
+  logger.error("See afterpack --help for every option.");
+  logger.error("");
+  logger.error(dim(CONTACT_FOOTER));
+}
+
+function renderInvalidConfig(logger: CliLogger, message: string): void {
+  logger.error(`${red("✗")} Invalid configuration`);
+  logger.error("");
+  for (const line of message.split("\n").slice(1)) logger.error(line.trim());
+  logger.error("");
+  logger.error("See afterpack --help for every option.");
+  logger.error("");
+  logger.error(dim(CONTACT_FOOTER));
+}
+
+const ALREADY_OBFUSCATED_LIST_CAP = 10;
+
+function renderAlreadyObfuscated(
+  logger: CliLogger,
+  cwd: string,
+  error: AlreadyObfuscatedError,
+): void {
+  const relFiles = error.files.map((f) => documentPath(cwd, f));
+  const relDir = displayDir(cwd, error.dir);
+  logger.error(`${red("✗")} Already obfuscated`);
+  logger.error("");
+  if (relFiles.length === 1) {
+    logger.error(`${relFiles[0]} already carries AfterPack output from a previous run.`);
+  } else {
+    logger.error(`${relFiles.length} files already carry AfterPack output from a previous run:`);
+    const shown = relFiles.slice(0, ALREADY_OBFUSCATED_LIST_CAP);
+    for (const f of shown) logger.error(`  ${f}`);
+    const hidden = relFiles.length - shown.length;
+    if (hidden > 0) logger.error(`  and ${hidden} more`);
+  }
+  logger.error("Output is not idempotent, so rebuild from source before running AfterPack again.");
+  logger.error("");
+  logger.error(alignRow("fix", `run your bundler's clean, or delete ${relDir}, then build again`));
+  logger.error(
+    relFiles.length === 1
+      ? alignRow("skip", `afterpack --paths.exclude='**/${basename(relFiles[0])}'`)
+      : alignRow("skip", "carve them out with --paths.exclude=<glob>"),
+  );
+  logger.error("");
+  logger.error("Your build output was left unchanged.");
+  logger.error("");
+  logger.error(dim(CONTACT_FOOTER));
 }
 
 export async function run(deps: CliDeps): Promise<number> {
@@ -249,6 +335,16 @@ export async function run(deps: CliDeps): Promise<number> {
   if (command === "verify" || command === "audit") {
     return runSubcommand(command, argv.slice(1), { ...deps, env, stdout, argv });
   }
+
+  const earlyMode = resolveOutputMode({ argv, env, cwd }).mode;
+  setColorEnabled(earlyMode.format !== "json" && colorSupported(env, stdout.isTTY));
+  await printHeader({
+    stdout,
+    env,
+    version,
+    mode: earlyMode,
+    report: reportingLogger(logger, earlyMode),
+  });
 
   const unknown = unknownCommand(argv, cwd);
   if (unknown) {
@@ -291,14 +387,17 @@ export async function run(deps: CliDeps): Promise<number> {
       );
       return EXIT.usage;
     }
-    logger.error(message);
-    logger.error(USAGE);
-    logger.error(FEEDBACK_FOOTER);
+    const unknownOption = unknownOptionFromMessage(message);
+    if (unknownOption) {
+      renderUnknownOption(logger, unknownOption.path, unknownOption.suggestion);
+    } else {
+      renderInvalidConfig(logger, message);
+    }
     return EXIT.usage;
   }
 
   if (resolved.help) {
-    logger.log(HELP);
+    logger.log(argv.includes("--all") ? HELP_ALL : HELP);
     return EXIT.ok;
   }
   if (resolved.version) {
@@ -373,8 +472,14 @@ export async function run(deps: CliDeps): Promise<number> {
           "Build the project first, or name the directory: `afterpack <path>`.",
         );
       }
-      logger.error(QUICKSTART);
-      logger.error(FEEDBACK_FOOTER);
+      logger.error(`${red("✗")} No build output found`);
+      logger.error("");
+      logger.error(`None of ${OUTPUT_DIR_LIST} exists in the working directory.`);
+      logger.error("");
+      logger.error(alignRow("fix", "build your project first, then run afterpack again"));
+      logger.error(alignRow("skip", "name the directory yourself: afterpack <path>"));
+      logger.error("");
+      logger.error(dim(CONTACT_FOOTER));
       return EXIT.failure;
     }
     requested = detected.dir;
@@ -410,31 +515,63 @@ export async function run(deps: CliDeps): Promise<number> {
     );
   }
 
+  const progressLabel = `Protecting ${isDirectory ? displayDir(cwd, target) : documentPath(cwd, target)}…`;
+
   const captured: CapturedFile[] = [];
   let result: ObfuscationPassResult | null = null;
   let failure: string | null = null;
+  let failureError: unknown = null;
   try {
-    result = await runObfuscationPass({
-      files,
-      engine: observeEngine(engine, captured),
-      label: "afterpack",
-      gitignoreDir: cwd,
-      startedAt,
-      combinedProtectionMap: { buildDir, afterpackDir: join(cwd, ".afterpack") },
-      artifactOptions: parsed.artifactOptions,
-      telemetry: createTelemetryReporter({ logger: notice }),
-      clientVersion: version,
-      seed: parsed.seed,
-      preset: parsed.preset,
-      complexity: parsed.complexity,
-      diagnostics: parsed.diagnostics?.level,
-      engineConfig: parsed.engineConfig,
-      directives: false,
-      receipt: { buildId: readBuildId(buildDir) },
-      logger: report,
+    result = await withProgress({
+      stdout,
+      mode,
+      report,
+      label: progressLabel,
+      work: () =>
+        runObfuscationPass({
+          files,
+          engine: observeEngine(engine, captured),
+          label: "afterpack",
+          gitignoreDir: cwd,
+          startedAt,
+          combinedProtectionMap: { buildDir, afterpackDir: join(cwd, ".afterpack") },
+          artifactOptions: parsed.artifactOptions,
+          telemetry: createTelemetryReporter({ logger: notice }),
+          clientVersion: version,
+          seed: parsed.seed,
+          preset: parsed.preset,
+          complexity: parsed.complexity,
+          diagnostics: parsed.diagnostics?.level,
+          engineConfig: parsed.engineConfig,
+          directives: false,
+          receipt: { buildId: readBuildId(buildDir) },
+          logger: report,
+          summaryStyle: "cli",
+          colorGlyph: green,
+        }),
     });
   } catch (error) {
+    failureError = error;
     failure = error instanceof Error ? error.message : String(error);
+  }
+
+  if (failureError instanceof AlreadyObfuscatedError) {
+    if (mode.format === "json") {
+      emitJson(
+        logger,
+        jsonError({
+          version,
+          command: "obfuscate",
+          exitCode: EXIT.failure,
+          code: DIAG_ALREADY_OBFUSCATED,
+          message: `${failureError.files.length} file(s) already carry AfterPack output from a previous run`,
+          fix: "Rebuild from source (clean your bundler's output, or delete the directory) before running AfterPack again.",
+        }),
+      );
+      return EXIT.failure;
+    }
+    renderAlreadyObfuscated(logger, cwd, failureError);
+    return EXIT.failure;
   }
 
   const diagnostics = captured.flatMap((f) => f.diagnostics);
@@ -471,13 +608,22 @@ export async function run(deps: CliDeps): Promise<number> {
 
   if (exitCode === EXIT.partial) {
     logger.error(
-      `afterpack: ${unobfuscated.length} file(s) shipped UNOBFUSCATED (allowUnobfuscated) — ` +
-        "drop --allowUnobfuscated and report the engine bug at " +
-        "https://github.com/afterpack-dev/afterpack/issues so the build can fail closed again.",
+      `${yellow("⚠")} ${unobfuscated.length} file(s) shipped UNOBFUSCATED — ` +
+        "drop --allowUnobfuscated to fail closed instead.",
     );
+    logger.error("");
+    logger.error(dim(CONTACT_FOOTER));
+    return exitCode;
   }
-  const bundler = detectBundler(cwd);
-  if (bundler) report.log(`afterpack: ${bundler.hint}`);
+
+  if (result?.receiptPath) {
+    report.log(`  receipt  ${documentPath(cwd, result.receiptPath)}`);
+    report.log("");
+    report.log(alignRow("next", "afterpack verify   before you deploy"));
+  }
+  if (stdout.isTTY && !env.AFTERPACK_KEY && !isCiTruthy(env.CI)) {
+    report.log(dim(alignRow("pro", "10 MB/month free · https://www.afterpack.dev/login")));
+  }
   return exitCode;
 }
 

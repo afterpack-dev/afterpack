@@ -61,11 +61,11 @@ test.describe("the CLI's own protection receipt gates a deploy", { tag: "@quick"
   test("verify passes the built tree, a re-run over it is refused, a rebuilt tree passes again", () => {
     const verified = afterpack(["verify", "dist"]);
     expect(verified.status, `stderr: ${verified.stderr}`).toBe(0);
-    expect(verified.stdout).toContain("obfuscated file(s) intact");
+    expect(verified.stdout).toContain("Verified 1 file");
 
     const reRun = afterpack(obfuscateArgs);
     expect(reRun.status, `stdout: ${reRun.stdout}`).toBe(1);
-    expect(reRun.stderr).toContain("DIAG_ALREADY_OBFUSCATED");
+    expect(reRun.stderr).toContain("Already obfuscated");
 
     cpSync(join(app.dir, "src", "cli.js"), join(dist, "cli.js"));
     chmodSync(join(dist, "cli.js"), 0o755);

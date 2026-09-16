@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { engineCalls, processBatch } from "../../../test/core-fake.js";
-import { FEEDBACK_FOOTER } from "../src/args.js";
+import { CONTACT_FOOTER } from "../src/args.js";
 import { run } from "../src/run.js";
 
 let root: string;
@@ -39,15 +39,26 @@ afterEach(() => {
 });
 
 describe("help", () => {
-  it("lists both commands, the two new output keys and the exit codes", async () => {
+  it("the short --help lists both commands and the common options, but not the full reference", async () => {
     expect(await invoke(["--help"])).toBe(0);
     const help = out.join("\n");
     expect(help).toContain("afterpack verify [dir]");
     expect(help).toContain("afterpack audit <url>");
     expect(help).toContain("--diagnostics.format=<text|json>");
     expect(help).toContain("--diagnostics.level=<summary|all|none>");
+    expect(help).toContain("--help --all");
+    expect(help).not.toContain("Exit codes:");
+    expect(help.split("\n").length).toBeLessThanOrEqual(30);
+  });
+
+  it("--help --all lists every option and the exit codes, without the RESERVED codes", async () => {
+    expect(await invoke(["--help", "--all"])).toBe(0);
+    const help = out.join("\n");
+    expect(help).toContain("--paths.include=<string[,...]>");
+    expect(help).toContain("--identifiers.reserved=<name[,...]>");
     expect(help).toContain("Exit codes:");
     expect(help).toContain("64  misuse");
+    expect(help).not.toContain("RESERVED");
   });
 
   it("answers `verify --help` and `audit --help` with their own page", async () => {
@@ -85,19 +96,28 @@ describe("help", () => {
     expect(err).toEqual([]);
   });
 
-  it("ends every help page with the one feedback line", async () => {
-    expect(FEEDBACK_FOOTER).toBe(
-      "Questions and proposals: https://github.com/afterpack-dev/afterpack/discussions · " +
-        "Bugs: https://github.com/afterpack-dev/afterpack/issues",
-    );
-    for (const argv of [["--help"], ["verify", "--help"], ["audit", "--help"]]) {
+  it("ends the full help page and every subcommand's page with the one contact line", async () => {
+    expect(CONTACT_FOOTER).toBe("contact https://www.afterpack.dev/contact");
+    for (const argv of [
+      ["--help", "--all"],
+      ["verify", "--help"],
+      ["audit", "--help"],
+    ]) {
       out = [];
       expect(await invoke(argv)).toBe(0);
-      expect(out.join("\n").trimEnd().endsWith(FEEDBACK_FOOTER)).toBe(true);
+      expect(out.join("\n").trimEnd().endsWith(CONTACT_FOOTER)).toBe(true);
     }
   });
 
-  it("closes every error with the same feedback line as its last output", async () => {
+  it("the short --help ends with the --all pointer and the docs line instead", async () => {
+    expect(await invoke(["--help"])).toBe(0);
+    const lastLines = out.join("\n").trimEnd().split("\n").slice(-2);
+    expect(lastLines[0]).toContain("afterpack --help --all");
+    expect(lastLines[1]).toContain("docs");
+    expect(lastLines[1]).toContain("https://www.afterpack.dev/docs/cli");
+  });
+
+  it("closes every error with the same contact line as its last output", async () => {
     for (const argv of [
       ["dist", "--nope=1"],
       ["nope-nope-nope"],
@@ -107,7 +127,7 @@ describe("help", () => {
     ]) {
       err = [];
       expect(await invoke(argv)).not.toBe(0);
-      expect(err.at(-1), `\`afterpack ${argv.join(" ")}\` last stderr line`).toBe(FEEDBACK_FOOTER);
+      expect(err.at(-1), `\`afterpack ${argv.join(" ")}\` last stderr line`).toBe(CONTACT_FOOTER);
     }
   });
 });

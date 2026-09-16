@@ -163,37 +163,39 @@ describe("reportDiagnostics", () => {
     expect(r.logs).toEqual([]);
   });
 
-  it("warns every error and critical in full, criticals first, and rolls info up to one line", () => {
+  it("warns every error and critical in full, criticals first, and says nothing about info at the default level", () => {
     const r = recorder();
-    reportDiagnostics({
-      diagnostics: [
-        diag({}),
-        diag({ code: "DIAG_ENGINE_PASSES", message: "4 passes" }),
-        diag({
-          severity: "error",
-          code: "DIAG_PARSE_ERROR",
-          message: "failed to parse",
-          file: "/d/a.js",
-          data: { kind: "parseError", parserErrorKind: "Expected" },
-        }),
-        diag({
-          severity: "critical",
-          code: "DIAG_ENGINE_BUG_PROCESS_THREAD_PANIC",
-          message: "worker panicked",
-        }),
-      ],
-      logger: r.logger,
-      prefix: r.prefix,
-    });
+    const diagnostics = [
+      diag({}),
+      diag({ code: "DIAG_ENGINE_PASSES", message: "4 passes" }),
+      diag({
+        severity: "error",
+        code: "DIAG_PARSE_ERROR",
+        message: "failed to parse",
+        file: "/d/a.js",
+        data: { kind: "parseError", parserErrorKind: "Expected" },
+      }),
+      diag({
+        severity: "critical",
+        code: "DIAG_ENGINE_BUG_PROCESS_THREAD_PANIC",
+        message: "worker panicked",
+      }),
+    ];
+    reportDiagnostics({ diagnostics, logger: r.logger, prefix: r.prefix });
     expect(r.warnings).toEqual([
       "[afterpack] critical DIAG_ENGINE_BUG_PROCESS_THREAD_PANIC · worker panicked",
       '[afterpack] error DIAG_PARSE_ERROR · /d/a.js · failed to parse · parserErrorKind="Expected"',
       "[afterpack] 1 critical diagnostic(s) above are engine bugs — please report them at " +
         "https://github.com/afterpack-dev/afterpack/issues, quoting the code(s).",
     ]);
-    expect(r.logs).toEqual([
-      "[afterpack] 2 info diagnostic(s): DIAG_ENGINE_PASSES x1 · DIAG_TARGET_REACHED x1 " +
-        "(AFTERPACK_diagnostics_level=all to list them)",
+    expect(r.logs).toEqual([]);
+
+    const all = recorder();
+    reportDiagnostics({ diagnostics, logger: all.logger, prefix: all.prefix, verbosity: "all" });
+    expect(all.logs).toEqual([
+      "[afterpack] 2 info diagnostic(s): DIAG_ENGINE_PASSES x1 · DIAG_TARGET_REACHED x1",
+      "[afterpack] info DIAG_TARGET_REACHED · target reached",
+      "[afterpack] info DIAG_ENGINE_PASSES · 4 passes",
     ]);
   });
 
@@ -250,10 +252,10 @@ describe("reportDiagnostics", () => {
     const diagnostics = codes.flatMap((c, i) =>
       Array.from({ length: codes.length - i }, () => diag({ code: `DIAG_${c}` })),
     );
-    reportDiagnostics({ diagnostics, logger: r.logger, prefix: r.prefix });
+    reportDiagnostics({ diagnostics, logger: r.logger, prefix: r.prefix, verbosity: "all" });
     expect(r.logs[0]).toBe(
       "[afterpack] 36 info diagnostic(s): DIAG_A x8 · DIAG_B x7 · DIAG_C x6 · DIAG_D x5 · " +
-        "DIAG_E x4 · DIAG_F x3 · +2 more code(s) (AFTERPACK_diagnostics_level=all to list them)",
+        "DIAG_E x4 · DIAG_F x3 · +2 more code(s)",
     );
   });
 });

@@ -22,8 +22,6 @@ export const EXIT_CODE_HELP = `Exit codes:
       \`--allowUnobfuscated\`
   3   size cap — \`inflation.max\` could not reach the complexity target
       (${SIZE_CAP_CODE})
-  4   RESERVED — a Pro feature without a key, or a lapsed entitlement
-  5   RESERVED — runtime reflection detected without \`reflection.allow\`
   64  misuse — an unknown flag or command, or a malformed value`;
 
 export function failureExitCode(diagnostics: readonly EngineDiagnostic[]): ExitCode {

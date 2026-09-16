@@ -249,7 +249,7 @@ const BUILD_PROBES: Record<string, () => Promise<void>> = {
       "--diagnostics.level=none",
     ]);
     expect(silent.code).toBe(0);
-    expect(silent.logs.join("\n")).not.toContain("obfuscated 1 file(s)");
+    expect(silent.logs.join("\n")).not.toContain("Protected 1 file");
   },
 
   key: async () => {

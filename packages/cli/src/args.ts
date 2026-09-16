@@ -9,6 +9,7 @@ import {
 } from "@afterpack/integration-utils";
 import { OUTPUT_DIRS } from "./detect.js";
 import { EXIT_CODE_HELP } from "./exit.js";
+import { dim } from "./format.js";
 
 export interface CliRunOptions extends PluginOptionsView {
   pathsInclude: string[];
@@ -83,34 +84,35 @@ export function renderFlag(key: ConfigKeyDef): string {
   return `--${key.path}=<${key.shape === "scalar" ? item : `${item}[,...]`}>`;
 }
 
-export const FEEDBACK_FOOTER =
-  "Questions and proposals: https://github.com/afterpack-dev/afterpack/discussions · " +
-  "Bugs: https://github.com/afterpack-dev/afterpack/issues";
+export const CONTACT_FOOTER = "contact https://www.afterpack.dev/contact";
 
 export const USAGE =
   "usage: afterpack [path] [--key=value ...] [--help] [--version]\n" +
   "       afterpack verify [dir]\n" +
   "       afterpack audit <url>";
 
-const OUTPUT_DIR_LIST = OUTPUT_DIRS.map((dir) => `${dir}/`).join(", ");
+export const OUTPUT_DIR_LIST = OUTPUT_DIRS.map((dir) => `${dir}/`).join(", ");
 
-export const QUICKSTART = `${USAGE}
+const KEY_BY_PATH: ReadonlyMap<string, ConfigKeyDef> = new Map(
+  CONFIG_KEYS.map((k) => [k.path, k as ConfigKeyDef]),
+);
 
-afterpack obfuscates the JavaScript a build already emitted.
+const COMMON_OPTION_PATHS = [
+  "preset",
+  "seed",
+  "key",
+  "diagnostics.format",
+  "diagnostics.level",
+  "paths.exclude",
+] as const;
 
-  1. build your project first — afterpack never runs it for you
-  2. run \`npx afterpack@latest\` in the project root, or name the directory:
-     \`npx afterpack@latest dist/\`
-  3. deploy the output; \`npx afterpack@latest verify\` re-checks it first
-
-Nothing to obfuscate was found here: none of ${OUTPUT_DIR_LIST} exists in the
-working directory. Build, then run it again — or pass the path yourself.
-
-Run \`afterpack --help\` for every option, or see https://www.afterpack.dev/docs/cli`;
-
-function optionLines(): string {
-  const rows = CONFIG_KEYS.map((key) => [renderFlag(key as ConfigKeyDef), key.default] as const);
-  const width = Math.min(52, Math.max(...rows.map(([flag]) => flag.length)));
+function commonOptionLines(): string {
+  const rows = COMMON_OPTION_PATHS.map((path) => {
+    const key = KEY_BY_PATH.get(path);
+    if (!key) throw new Error(`no registry key at \`${path}\``);
+    return [renderFlag(key), key.default] as const;
+  });
+  const width = Math.min(44, Math.max(...rows.map(([flag]) => flag.length)));
   return rows
     .map(([flag, def]) =>
       flag.length > width
@@ -122,8 +124,70 @@ function optionLines(): string {
 
 export const HELP = `${USAGE}
 
-afterpack obfuscates the JavaScript a build already emitted. Point it at your
-output directory (dist/, build/, out/, ...) or at ONE .js/.mjs/.cjs file, and
+AfterPack protects the JavaScript your build ships. Point it at your output
+directory (dist/, build/, out/, ...) or at ONE .js/.mjs/.cjs file.
+
+common options
+${commonOptionLines()}
+
+${dim("afterpack --help --all    every option")}
+${dim("docs  https://www.afterpack.dev/docs/cli")}`;
+
+const AREA_PREFIXES: ReadonlyArray<readonly [string, string]> = [
+  ["identifiers", "identifiers"],
+  ["strings", "strings"],
+  ["paths", "paths"],
+  ["sourceMap", "source maps"],
+  ["protectionMap", "protection map"],
+  ["transforms", "transforms"],
+  ["build", "build"],
+  ["diagnostics", "diagnostics"],
+  ["telemetry", "telemetry"],
+];
+
+function areaOf(path: string): string {
+  const prefix = path.split(".")[0];
+  return AREA_PREFIXES.find(([p]) => p === prefix)?.[1] ?? "engine";
+}
+
+const AREA_ORDER = [
+  "engine",
+  "identifiers",
+  "strings",
+  "paths",
+  "source maps",
+  "protection map",
+  "transforms",
+  "build",
+  "diagnostics",
+  "telemetry",
+];
+
+function optionLines(): string {
+  const rows = CONFIG_KEYS.map((key) => [renderFlag(key as ConfigKeyDef), key.default] as const);
+  const width = Math.min(52, Math.max(...rows.map(([flag]) => flag.length)));
+  const byArea = new Map<string, string[]>();
+  for (let i = 0; i < CONFIG_KEYS.length; i++) {
+    const key = CONFIG_KEYS[i] as ConfigKeyDef;
+    const [flag, def] = rows[i];
+    const line =
+      flag.length > width
+        ? `  ${flag}\n  ${" ".repeat(width)}  default: ${def}`
+        : `  ${flag.padEnd(width)}  default: ${def}`;
+    const area = areaOf(key.path);
+    const lines = byArea.get(area) ?? [];
+    lines.push(line);
+    byArea.set(area, lines);
+  }
+  return AREA_ORDER.filter((area) => byArea.has(area))
+    .map((area) => byArea.get(area)?.join("\n"))
+    .join("\n\n");
+}
+
+export const HELP_ALL = `${USAGE}
+
+AfterPack protects the JavaScript your build ships. Point it at your output
+directory (dist/, build/, out/, ...) or at ONE .js/.mjs/.cjs file, and
 it processes every emitted file in place.
 
 Every option below is written the same way in all four places: as
@@ -173,10 +237,7 @@ ${optionLines()}
 
 ${EXIT_CODE_HELP}
 
-Telemetry reports when a build reports an error-level diagnostic (a refused or
-partial build): the diagnostic code, severity, byte offsets and typed engine
-fields, plus versions, OS/arch and bucketed counts. Never on a clean build,
-and never your source, file names, paths or message text. Turn it off with
-\`--telemetry.enabled=false\`. See https://www.afterpack.dev/privacy
+Telemetry: only on a build that reports an error-level diagnostic (a refused
+or partial build), never on a clean build. See https://www.afterpack.dev/privacy
 
-${FEEDBACK_FOOTER}`;
+${dim(CONTACT_FOOTER)}`;

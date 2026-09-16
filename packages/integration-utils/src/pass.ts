@@ -10,6 +10,7 @@ import {
   writeCombinedProtectionMap,
 } from "./artifacts.js";
 import {
+  AlreadyObfuscatedError,
   collectDiagnostics,
   type DiagnosticsSummary,
   type DiagnosticsVerbosity,
@@ -40,6 +41,7 @@ import { detectAlreadyObfuscatedInputs, writeProtectionReceipt } from "./receipt
 import type { EngineConfigSubset } from "./registry.js";
 import { resolveBuildSeed, type SeedOption, type SeedOrigin } from "./seed.js";
 import { discoverInputSourceMap } from "./source-map.js";
+import { formatPassSummary, type PassSummaryStyle } from "./summary.js";
 import {
   resolveTelemetryEnabled,
   type TelemetryFacts,
@@ -137,6 +139,8 @@ export interface ObfuscationPassOptions {
   clientVersion?: string;
   logger?: Logger;
   startedAt?: number;
+  summaryStyle?: PassSummaryStyle;
+  colorGlyph?: (glyph: string) => string;
 }
 
 export interface PassTiming {
@@ -152,6 +156,7 @@ export interface PassTiming {
 export interface ObfuscationPassResult {
   fileCount: number;
   protectionMapPath: string | null;
+  receiptPath: string | null;
   policy: ReportPolicy;
   seed: number | string;
   seedOrigin: SeedOrigin;
@@ -193,16 +198,6 @@ async function readEngineVersion(engine: ObfuscationEngine): Promise<string | nu
   }
 }
 
-function fmtBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(2)} MB`;
-}
-
-function fmtSeconds(ms: number): string {
-  return (ms / 1000).toFixed(1);
-}
-
 function describeLevel(preset: Preset | undefined, complexity: number | undefined): string {
   if (complexity === undefined) return `preset "${preset ?? DEFAULT_PRESET}"`;
   if (preset === undefined) return `complexity target ${complexity}`;
@@ -225,6 +220,7 @@ export async function runObfuscationPass(
   } = options;
   const logger = silenceSummaryLines(options.logger ?? DEFAULT_LOGGER, options.diagnostics);
   const prefix = (message: string): string => `[${label}] ${message}`;
+  const style: PassSummaryStyle = options.summaryStyle ?? "plugin";
 
   const onDiskFiles = options.inputs ? files.filter((f) => !options.inputs?.has(f)) : files;
   const onDiskBytes = new Map<string, Buffer>(
@@ -240,7 +236,7 @@ export async function runObfuscationPass(
       onDiskBytes,
     );
     if (already) {
-      throw new Error(
+      throw new AlreadyObfuscatedError(
         prefix(
           formatAlreadyObfuscatedMessage({
             files: already.files,
@@ -248,6 +244,9 @@ export async function runObfuscationPass(
             dir: combinedProtectionMap.buildDir,
           }),
         ),
+        already.files,
+        already.receiptPath,
+        combinedProtectionMap.buildDir,
       );
     }
   }
@@ -430,11 +429,13 @@ export async function runObfuscationPass(
     engine: options.engineConfig,
     renameGlobals: capture.renameGlobals,
   });
-  logger.log(
-    prefix(
-      `obfuscating ${inputs.length} file(s) at ${describeLevel(options.preset, options.complexity)} ...`,
-    ),
-  );
+  if (style !== "cli") {
+    logger.log(
+      prefix(
+        `obfuscating ${inputs.length} file(s) at ${describeLevel(options.preset, options.complexity)} ...`,
+      ),
+    );
+  }
   const engineStartedAt = Date.now();
   const prepMs = engineStartedAt - passStartedAt;
   const batch = await engine.processBatch(inputs, configJson, buildContextJson(git));
@@ -565,8 +566,9 @@ export async function runObfuscationPass(
     if (warnIfPublicPath(artifactPath, logger)) break;
   }
 
+  let receiptPath: string | null = null;
   if (!options.emitToCaller) {
-    const receiptPath = writeProtectionReceipt({
+    receiptPath = writeProtectionReceipt({
       dir: combinedProtectionMap.buildDir,
       tool: label,
       engineVersion,
@@ -577,7 +579,9 @@ export async function runObfuscationPass(
       files: writtenFiles,
       transformed: transformedFiles,
     });
-    logger.log(prefix(`wrote protection receipt -> ${receiptPath} (afterpack verify)`));
+    if (style !== "cli") {
+      logger.log(prefix(`wrote protection receipt -> ${receiptPath} (afterpack verify)`));
+    }
   }
 
   const writeEndedAt = Date.now();
@@ -595,27 +599,30 @@ export async function runObfuscationPass(
     callerAnchored,
   };
 
-  const elapsedS = ((writeEndedAt - engineStartedAt) / 1000).toFixed(1);
-  const ratio = inputBytes > 0 ? Math.round((outputBytes / inputBytes) * 100) : 100;
-  const overheadLabel = engineSource === "cloud" ? "cloud" : "engine";
+  const summaryVerbosity = resolveDiagnosticsVerbosity(options.diagnostics);
+  const seedSuffix =
+    summaryVerbosity === "all"
+      ? ` · seed ${seed} (${resolvedSeed.mismatch ? "MISMATCH" : resolvedSeed.origin})`
+      : "";
   logger.log(
-    prefix(
-      `obfuscated ${files.length} file(s) in ${elapsedS}s · ` +
-        `${fmtBytes(inputBytes)} -> ${fmtBytes(outputBytes)} (${ratio}% of input)` +
-        ` · seed ${seed} (${resolvedSeed.mismatch ? "MISMATCH" : resolvedSeed.origin})` +
-        (unobfuscatedFiles.length > 0
-          ? ` · ${unobfuscatedFiles.length} shipped UNOBFUSCATED (fallback, cleartext)`
-          : "") +
-        (noOp > 0 ? ` · ${noOp} no-op (unchanged)` : "") +
-        (protectionMapPath ? ` · protection map -> ${protectionMapPath}` : "") +
-        ` · afterpack overhead ${fmtSeconds(totalMs)}s (prep ${fmtSeconds(prepMs)}s · ` +
-        `${overheadLabel} ${fmtSeconds(engineMs)}s · write ${fmtSeconds(writeMs)}s)`,
-    ),
+    formatPassSummary(
+      {
+        label,
+        fileCount: files.length,
+        inputBytes,
+        outputBytes,
+        unobfuscatedCount: unobfuscatedFiles.length,
+        noOpCount: noOp,
+      },
+      style,
+      options.colorGlyph,
+    ) + seedSuffix,
   );
 
   return {
     fileCount: files.length,
     protectionMapPath,
+    receiptPath,
     policy,
     seed,
     seedOrigin: resolvedSeed.origin,

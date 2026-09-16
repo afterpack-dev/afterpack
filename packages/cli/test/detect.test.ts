@@ -79,10 +79,10 @@ describe("a bare `afterpack` picks the build output itself", () => {
     expect(detectBuildOutput(root)).toEqual({ dir: "dist", reason: "Vite writes it" });
   });
 
-  it("prints the quickstart and exits 1 when there is nothing to obfuscate", async () => {
+  it("refuses cleanly and exits 1 when there is nothing to obfuscate", async () => {
     expect(await invoke([])).toBe(1);
+    expect(err.join("\n")).toContain("No build output found");
     expect(err.join("\n")).toContain("build your project first");
-    expect(err.join("\n")).toContain("npx afterpack@latest");
     expect(engineCalls).toHaveLength(0);
   });
 

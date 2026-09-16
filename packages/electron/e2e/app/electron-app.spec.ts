@@ -58,12 +58,12 @@ test.describe("electron-vite emits main, preload and renderer, byte-level proof"
   test("every leg shares one seed, freshly drawn per build and pinnable from the environment", () => {
     const rerunLog = `${app.buildLog}.rerun`;
     const first = expectOneSeedAcrossLegs(
-      runBuild(app, { AFTERPACK_FI_FREE_SEED: "1" }, rerunLog),
+      runBuild(app, { AFTERPACK_FI_FREE_SEED: "1", AFTERPACK_diagnostics_level: "all" }, rerunLog),
       `${app.name} free seed`,
       LEGS,
     );
     const second = expectOneSeedAcrossLegs(
-      runBuild(app, { AFTERPACK_FI_FREE_SEED: "1" }, rerunLog),
+      runBuild(app, { AFTERPACK_FI_FREE_SEED: "1", AFTERPACK_diagnostics_level: "all" }, rerunLog),
       `${app.name} free seed again`,
       LEGS,
     );
@@ -71,7 +71,11 @@ test.describe("electron-vite emits main, preload and renderer, byte-level proof"
 
     const pinned = "424242";
     const fromEnv = expectOneSeedAcrossLegs(
-      runBuild(app, { AFTERPACK_FI_FREE_SEED: "1", AFTERPACK_SEED: pinned }, rerunLog),
+      runBuild(
+        app,
+        { AFTERPACK_FI_FREE_SEED: "1", AFTERPACK_SEED: pinned, AFTERPACK_diagnostics_level: "all" },
+        rerunLog,
+      ),
       `${app.name} env seed`,
       LEGS,
     );

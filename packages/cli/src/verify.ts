@@ -1,8 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
-import { isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { PROTECTION_RECEIPT_FILE, verifyProtectionReceipt } from "@afterpack/integration-utils";
-import { FEEDBACK_FOOTER } from "./args.js";
+import { CONTACT_FOOTER } from "./args.js";
 import { EXIT, type ExitCode } from "./exit.js";
+import { dim, green, red } from "./format.js";
 import { emitJson, jsonError, type OutputMode } from "./output.js";
 import type { CliLogger } from "./run.js";
 
@@ -35,7 +36,7 @@ Exit codes: 0 when every recorded file is intact, 1 when the receipt is
 missing, is from a different build, or any file no longer matches, 64 on a
 usage error.
 
-${FEEDBACK_FOOTER}`;
+${dim(CONTACT_FOOTER)}`;
 
 function candidates(target: string): string[] {
   return [target, join(target, ".next")];
@@ -75,11 +76,22 @@ function fail(
     );
     return exitCode;
   }
-  deps.logger.error(`afterpack: ${message}`);
-  for (const line of detail) deps.logger.error(`  ${line}`);
-  deps.logger.error(`  ${fix}`);
-  deps.logger.error(FEEDBACK_FOOTER);
+  deps.logger.error(`${red("✗")} ${message}`);
+  if (detail.length > 0) {
+    deps.logger.error("");
+    for (const line of detail) deps.logger.error(`  ${line}`);
+  }
+  deps.logger.error("");
+  deps.logger.error(fix);
+  deps.logger.error("");
+  deps.logger.error(dim(CONTACT_FOOTER));
   return exitCode;
+}
+
+function displayDir(cwd: string, dir: string): string {
+  const rel = relative(cwd, dir);
+  const path = rel === "" || rel.startsWith("..") ? dir : rel.split(sep).join("/");
+  return `${path}/`;
 }
 
 export function verify(deps: VerifyDeps): ExitCode {
@@ -164,8 +176,8 @@ export function verify(deps: VerifyDeps): ExitCode {
   }
 
   deps.report.log(
-    `afterpack: ${dir} verified — ${files.length} obfuscated file(s) intact ` +
-      `(${receipt?.tool}, ${receipt?.bundler}, build ${String(receipt?.buildId)}, seed ${receipt?.seed})`,
+    `${green("✓")} Verified ${files.length} ${files.length === 1 ? "file" : "files"} · ` +
+      displayDir(deps.cwd, dir),
   );
   return EXIT.ok;
 }

@@ -19,13 +19,15 @@ export {
   parseCliOptions,
   parseEnvOptions,
 } from "./config-parse.js";
-export type {
-  DiagnosticsSummary,
-  DiagnosticsVerbosity,
-  EngineDiagnostic,
-  EngineDiagnosticData,
-  EngineSeverity,
-  EngineSpan,
+export {
+  AlreadyObfuscatedError,
+  DIAG_ALREADY_OBFUSCATED,
+  type DiagnosticsSummary,
+  type DiagnosticsVerbosity,
+  type EngineDiagnostic,
+  type EngineDiagnosticData,
+  type EngineSeverity,
+  type EngineSpan,
 } from "./diagnostics.js";
 export {
   type CapturedDirective,

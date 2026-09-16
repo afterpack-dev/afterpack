@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { __reset, __setProcessResult, engineCalls, processBatch } from "../../../test/core-fake.js";
-import { HELP } from "../src/args.js";
+import { HELP_ALL } from "../src/args.js";
 import { EXIT_CODE_HELP } from "../src/exit.js";
 import { run } from "../src/run.js";
 
@@ -99,10 +99,14 @@ describe("the exit-code contract", () => {
     expect(err.join("\n")).toContain("Raise --inflation.max");
   });
 
-  it("4 and 5 stay RESERVED — documented, never emitted", async () => {
-    expect(EXIT_CODE_HELP).toContain("4   RESERVED");
-    expect(EXIT_CODE_HELP).toContain("5   RESERVED");
-    expect(HELP).toContain(EXIT_CODE_HELP);
+  it("4 and 5 are not documented at all — never emitted, never named", async () => {
+    expect(EXIT_CODE_HELP).not.toContain("RESERVED");
+    expect(EXIT_CODE_HELP).toContain("0   success");
+    expect(EXIT_CODE_HELP).toContain("1   total failure");
+    expect(EXIT_CODE_HELP).toContain("2   partial");
+    expect(EXIT_CODE_HELP).toContain("3   size cap");
+    expect(EXIT_CODE_HELP).toContain("64  misuse");
+    expect(HELP_ALL).toContain(EXIT_CODE_HELP);
     __setProcessResult((input) => ({
       code: `OBF:${input}`,
       diagnostics: [
@@ -170,8 +174,8 @@ describe("diagnostics.format=json", () => {
       { path: "dist/b.js", status: "obfuscated", bytesIn: 19, bytesOut: 23, diagnostics: [] },
     ]);
     expect(doc.summary).toMatchObject({ files: 2, transformed: 2, seed: 4242, engine: "local" });
-    expect(err.join("\n")).toContain("obfuscating 2 file(s)");
-    expect(out.join("")).not.toContain("obfuscating");
+    expect(err.join("\n")).toContain("Protecting dist");
+    expect(out.join("")).not.toContain("Protecting");
   });
 
   it("is byte-identical across two runs of the same build", async () => {

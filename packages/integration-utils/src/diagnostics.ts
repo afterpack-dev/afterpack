@@ -124,6 +124,21 @@ export function formatDiagnostic(d: EngineDiagnostic): string {
 
 export const DIAG_ALREADY_OBFUSCATED = "DIAG_ALREADY_OBFUSCATED";
 
+export class AlreadyObfuscatedError extends Error {
+  readonly code = DIAG_ALREADY_OBFUSCATED;
+  readonly files: readonly string[];
+  readonly receiptPath: string;
+  readonly dir: string;
+
+  constructor(message: string, files: readonly string[], receiptPath: string, dir: string) {
+    super(message);
+    this.name = "AlreadyObfuscatedError";
+    this.files = files;
+    this.receiptPath = receiptPath;
+    this.dir = dir;
+  }
+}
+
 const ALREADY_OBFUSCATED_FILE_CAP = 10;
 
 export function formatAlreadyObfuscatedMessage(input: {
@@ -165,7 +180,7 @@ function groupByCode(diagnostics: EngineDiagnostic[]): Map<string, EngineDiagnos
   return groups;
 }
 
-function formatInfoSummary(infos: EngineDiagnostic[], verbosity: DiagnosticsVerbosity): string {
+function formatInfoSummary(infos: EngineDiagnostic[]): string {
   const byCode = [...groupByCode(infos).entries()].sort(
     (a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]),
   );
@@ -173,8 +188,7 @@ function formatInfoSummary(infos: EngineDiagnostic[], verbosity: DiagnosticsVerb
   const parts = shown.map(([code, list]) => `${code} x${list.length}`);
   const hidden = byCode.length - shown.length;
   if (hidden > 0) parts.push(`+${hidden} more code(s)`);
-  const hint = verbosity === "all" ? "" : " (AFTERPACK_diagnostics_level=all to list them)";
-  return `${infos.length} info diagnostic(s): ${parts.join(" · ")}${hint}`;
+  return `${infos.length} info diagnostic(s): ${parts.join(" · ")}`;
 }
 
 interface ReportDiagnosticsInput {
@@ -200,12 +214,10 @@ export function reportDiagnostics(input: ReportDiagnosticsInput): DiagnosticsSum
   }
   if (diagnostics.length === 0) return summary;
 
-  const infos = verbosity === "none" ? [] : diagnostics.filter((d) => d.severity === "info");
+  const infos = verbosity === "all" ? diagnostics.filter((d) => d.severity === "info") : [];
   if (infos.length > 0) {
-    logger.log(prefix(formatInfoSummary(infos, verbosity)));
-    if (verbosity === "all") {
-      for (const d of infos) logger.log(prefix(formatDiagnostic(d)));
-    }
+    logger.log(prefix(formatInfoSummary(infos)));
+    for (const d of infos) logger.log(prefix(formatDiagnostic(d)));
   }
 
   const loud = diagnostics

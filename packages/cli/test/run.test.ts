@@ -69,21 +69,19 @@ describe("run", () => {
     expect(readdirSync(buildDir).some((f) => /^app\.backup\.[0-9a-f]{8}\.js$/.test(f))).toBe(true);
   });
 
-  it("prints the bundler nudge when the cwd package.json reveals one, and stays silent otherwise", async () => {
+  it("prints the new success block: the summary line, the receipt line and the next hint", async () => {
     writeFileSync(join(buildDir, "app.js"), "export const a = 1;");
     writeFileSync(
       join(root, "package.json"),
       JSON.stringify({ devDependencies: { vite: "^8.0.0" } }),
     );
 
-    await invoke(["dist", "--protectionMap.enabled=false"]);
-    expect(out.join("\n")).toContain("detected Vite");
-    expect(out.join("\n")).toContain("@afterpack/vite");
-
-    rmSync(join(root, "package.json"));
-    out = [];
-    await invoke(["dist", "--protectionMap.enabled=false"]);
-    expect(out.join("\n")).not.toContain("detected");
+    expect(await invoke(["dist", "--protectionMap.enabled=false"])).toBe(0);
+    const text = out.join("\n");
+    expect(text).toContain("Protected 1 file");
+    expect(text).toContain("receipt  dist/.afterpack-protection.json");
+    expect(text).toContain("next  afterpack verify   before you deploy");
+    expect(text).not.toContain("detected Vite");
   });
 
   it("prints help and version and exits 0 without touching the engine", async () => {
@@ -100,7 +98,7 @@ describe("run", () => {
     __setProcessResult(() => ({ code: "", diagnostics: [{ severity: "error", message: "boom" }] }));
     const code = await invoke(["dist", "--protectionMap.enabled=false"]);
     expect(code).toBe(1);
-    expect(err.join("\n")).toContain("afterpack:");
+    expect(err.join("\n")).toContain("✗");
     expect(readFileSync(join(buildDir, "app.js"), "utf8")).toBe("export const a = 1;");
   });
 
@@ -157,16 +155,16 @@ describe("run", () => {
     }));
 
     expect(await invoke(["dist", "--protectionMap.enabled=false"])).toBe(0);
-    expect(out).toContain(
-      "[afterpack] 2 info diagnostic(s): DIAG_ENGINE_PASSES x1 · DIAG_TARGET_REACHED x1 " +
-        "(AFTERPACK_diagnostics_level=all to list them)",
-    );
+    expect(out.some((l) => l.includes("info diagnostic(s)"))).toBe(false);
     expect(out.some((l) => l.includes("info DIAG_ENGINE_PASSES ·"))).toBe(false);
 
     out = [];
     writeFileSync(join(buildDir, "app.js"), "export const a = 1;");
     expect(await invoke(["dist", "--protectionMap.enabled=false", "--diagnostics.level=all"])).toBe(
       0,
+    );
+    expect(out).toContain(
+      "[afterpack] 2 info diagnostic(s): DIAG_ENGINE_PASSES x1 · DIAG_TARGET_REACHED x1",
     );
     expect(out).toContain(
       `[afterpack] info DIAG_ENGINE_PASSES · ${join(buildDir, "app.js")} · 4 passes`,
@@ -177,7 +175,7 @@ describe("run", () => {
     expect(await invoke([])).toBe(1);
     expect(await invoke(["does-not-exist"])).toBe(1);
     expect(await invoke(["dist"])).toBe(1);
-    expect(err.join("\n")).toContain("afterpack:");
+    expect(err.join("\n")).toContain("✗");
   });
 });
 
@@ -309,9 +307,9 @@ describe("run — node_modules", () => {
     expect(engineCalls).toHaveLength(0);
   });
 
-  it("documents the bundled-build reasoning in --help", async () => {
+  it("documents the bundled-build reasoning in --help --all", async () => {
     out = [];
-    await invoke(["--help"]);
+    await invoke(["--help", "--all"]);
     const help = out.join("\n");
     expect(help).toContain("--paths.include=<string[,...]>");
     expect(help).toContain("silent no-op");
