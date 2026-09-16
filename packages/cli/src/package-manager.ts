@@ -1,31 +1,31 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-export interface PackageManager {
+interface PackageManager {
   name: string;
   install(pkg: string): string;
   run(script: string): string;
 }
 
-export const NPM: PackageManager = {
+const NPM: PackageManager = {
   name: "npm",
   install: (pkg) => `npm install -D ${pkg}`,
   run: (script) => `npm run ${script}`,
 };
 
-export const PNPM: PackageManager = {
+const PNPM: PackageManager = {
   name: "pnpm",
   install: (pkg) => `pnpm add -D ${pkg}`,
   run: (script) => `pnpm ${script}`,
 };
 
-export const YARN: PackageManager = {
+const YARN: PackageManager = {
   name: "yarn",
   install: (pkg) => `yarn add -D ${pkg}`,
   run: (script) => `yarn ${script}`,
 };
 
-export const BUN: PackageManager = {
+const BUN: PackageManager = {
   name: "bun",
   install: (pkg) => `bun add -d ${pkg}`,
   run: (script) => `bun run ${script}`,

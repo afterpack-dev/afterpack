@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { dirname, join, relative, sep } from "node:path";
 import { sha256Of } from "@afterpack/integration-utils";
 
-export const BACKUP_MANIFEST_FILE = "manifest.json";
+const BACKUP_MANIFEST_FILE = "manifest.json";
 
 export interface BackupManifestFile {
   path: string;
@@ -11,7 +11,7 @@ export interface BackupManifestFile {
   obfuscatedSha256: string;
 }
 
-export interface BackupManifest {
+interface BackupManifest {
   schema: 1;
   timestamp: string;
   protectedRoot: string;
@@ -35,7 +35,7 @@ function toPosixPath(value: string): string {
   return value.split(sep).join("/");
 }
 
-export function relPathFor(projectRoot: string, filePath: string): string {
+function relPathFor(projectRoot: string, filePath: string): string {
   return toPosixPath(relative(projectRoot, filePath));
 }
 
@@ -79,7 +79,7 @@ export function readBackupManifest(projectRoot: string): BackupManifest | null {
   }
 }
 
-export interface WriteBackupsInput {
+interface WriteBackupsInput {
   projectRoot: string;
   protectedRoot: string;
   cliVersion: string;
@@ -119,14 +119,14 @@ export function writeBackups(input: WriteBackupsInput): WriteBackupsResult {
 }
 
 export function matchAlreadyObfuscated(
-  projectRoot: string,
   manifest: BackupManifest,
-  files: readonly string[],
+  pending: readonly PendingBackup[],
 ): string[] {
   const byPath = new Map(manifest.files.map((f) => [f.path, f] as const));
-  return files.filter((filePath) => {
-    if (!existsSync(filePath)) return false;
-    const entry = byPath.get(relPathFor(projectRoot, filePath));
-    return entry !== undefined && sha256Of(filePath) === entry.obfuscatedSha256;
-  });
+  return pending
+    .filter((p) => {
+      const entry = byPath.get(p.relPath);
+      return entry !== undefined && p.originalSha256 === entry.obfuscatedSha256;
+    })
+    .map((p) => p.filePath);
 }

@@ -107,6 +107,12 @@ const COMMON_OPTION_PATHS = [
   "paths.exclude",
 ] as const;
 
+function formatOptionRow(flag: string, def: string, width: number): string {
+  return flag.length > width
+    ? `  ${flag}\n  ${" ".repeat(width)}  default: ${def}`
+    : `  ${flag.padEnd(width)}  default: ${def}`;
+}
+
 function commonOptionLines(): string {
   const rows = COMMON_OPTION_PATHS.map((path) => {
     const key = KEY_BY_PATH.get(path);
@@ -114,13 +120,7 @@ function commonOptionLines(): string {
     return [renderFlag(key), key.default] as const;
   });
   const width = Math.min(44, Math.max(...rows.map(([flag]) => flag.length)));
-  return rows
-    .map(([flag, def]) =>
-      flag.length > width
-        ? `  ${flag}\n  ${" ".repeat(width)}  default: ${def}`
-        : `  ${flag.padEnd(width)}  default: ${def}`,
-    )
-    .join("\n");
+  return rows.map(([flag, def]) => formatOptionRow(flag, def, width)).join("\n");
 }
 
 export const HELP = `${USAGE}
@@ -171,10 +171,7 @@ function optionLines(): string {
   for (let i = 0; i < CONFIG_KEYS.length; i++) {
     const key = CONFIG_KEYS[i] as ConfigKeyDef;
     const [flag, def] = rows[i];
-    const line =
-      flag.length > width
-        ? `  ${flag}\n  ${" ".repeat(width)}  default: ${def}`
-        : `  ${flag.padEnd(width)}  default: ${def}`;
+    const line = formatOptionRow(flag, def, width);
     const area = areaOf(key.path);
     const lines = byArea.get(area) ?? [];
     lines.push(line);

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { processBatch, version } from "@afterpack/core";
 import { CONTACT_FOOTER } from "./args.js";
 import { dim } from "./format.js";
-import { run } from "./run.js";
+import { defaultCliStdout, run } from "./run.js";
 
 function readVersion(): string {
   try {
@@ -22,12 +22,7 @@ run({
   engine: { processBatch, version },
   logger: console,
   version: readVersion(),
-  stdout: {
-    isTTY: process.stdout.isTTY === true,
-    write: (chunk) => {
-      process.stdout.write(chunk);
-    },
-  },
+  stdout: defaultCliStdout(),
 })
   .then((code) => {
     process.exitCode = code;

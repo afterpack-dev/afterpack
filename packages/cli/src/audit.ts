@@ -3,15 +3,15 @@ import { EXIT, type ExitCode } from "./exit.js";
 import { bold, cyan, dim, green, header, red, severityColor, stripAnsi, yellow } from "./format.js";
 import {
   emitJson,
+  emitJsonError,
   type JsonDiagnostic,
-  jsonError,
   type OutputMode,
   sortDiagnostics,
 } from "./output.js";
 import type { CliLogger } from "./run.js";
 import { type FetchLike, RateLimitedError, streamSSE } from "./sse.js";
 
-export const AUDIT_USAGE = "usage: afterpack audit <url> [--diagnostics.format=text|json]";
+const AUDIT_USAGE = "usage: afterpack audit <url> [--diagnostics.format=text|json]";
 
 export const AUDIT_HELP = `${AUDIT_USAGE}
 
@@ -58,7 +58,7 @@ interface ScanResult {
   readability?: number;
 }
 
-export interface AuditDeps {
+interface AuditDeps {
   positionals: string[];
   logger: CliLogger;
   report: CliLogger;
@@ -187,17 +187,14 @@ function emitResult(deps: AuditDeps, url: string, result: ScanResult, code: Exit
 
 function fail(deps: AuditDeps, code: string, message: string, fix: string): ExitCode {
   if (deps.mode.format === "json") {
-    emitJson(
-      deps.logger,
-      jsonError({
-        version: deps.version,
-        command: "audit",
-        exitCode: EXIT.failure,
-        code,
-        message,
-        fix,
-      }),
-    );
+    emitJsonError(deps.logger, {
+      version: deps.version,
+      command: "audit",
+      exitCode: EXIT.failure,
+      code,
+      message,
+      fix,
+    });
     return EXIT.failure;
   }
   deps.logger.error(`\n  ${red("Error:")} ${message}`);
@@ -208,17 +205,14 @@ function fail(deps: AuditDeps, code: string, message: string, fix: string): Exit
 
 function misuse(deps: AuditDeps, code: string, message: string): ExitCode {
   if (deps.mode.format === "json") {
-    emitJson(
-      deps.logger,
-      jsonError({
-        version: deps.version,
-        command: "audit",
-        exitCode: EXIT.usage,
-        code,
-        message,
-        fix: AUDIT_USAGE,
-      }),
-    );
+    emitJsonError(deps.logger, {
+      version: deps.version,
+      command: "audit",
+      exitCode: EXIT.usage,
+      code,
+      message,
+      fix: AUDIT_USAGE,
+    });
     return EXIT.usage;
   }
   deps.logger.error(`afterpack: ${message}`);

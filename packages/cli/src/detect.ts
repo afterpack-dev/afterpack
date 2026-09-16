@@ -144,7 +144,10 @@ export interface DetectedOutput {
   reason: string;
 }
 
-export function detectBuildOutput(cwd: string): DetectedOutput | null {
+export function detectBuildOutput(
+  cwd: string,
+  framework?: Framework | null,
+): DetectedOutput | null {
   const present: { dir: string; mtime: number }[] = [];
   for (const dir of OUTPUT_DIRS) {
     const mtime = directoryMtime(cwd, dir);
@@ -152,9 +155,9 @@ export function detectBuildOutput(cwd: string): DetectedOutput | null {
   }
   if (present.length === 0) return null;
 
-  const framework = detectFramework(cwd);
-  if (framework && present.some((c) => c.dir === framework.outputDir)) {
-    return { dir: framework.outputDir, reason: `${framework.name} writes it` };
+  const resolved = framework === undefined ? detectFramework(cwd) : framework;
+  if (resolved && present.some((c) => c.dir === resolved.outputDir)) {
+    return { dir: resolved.outputDir, reason: `${resolved.name} writes it` };
   }
   const newest = present.reduce((best, c) => (c.mtime > best.mtime ? c : best));
   return { dir: newest.dir, reason: "the newest build output here" };

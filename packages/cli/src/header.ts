@@ -1,21 +1,13 @@
 import { bold, colorSupported, dim, gold, isCiTruthy } from "./format.js";
 import type { OutputMode } from "./output.js";
+import type { CliLogger, CliStdout } from "./run.js";
 
-export interface HeaderStdout {
-  isTTY: boolean;
-  write(chunk: string): void;
-}
-
-export interface HeaderLogger {
-  log(message: string): void;
-}
-
-export interface HeaderInput {
-  stdout: HeaderStdout;
+interface HeaderInput {
+  stdout: CliStdout;
   env: Record<string, string | undefined>;
   version: string;
   mode: OutputMode;
-  report: HeaderLogger;
+  report: CliLogger;
 }
 
 const WORDMARK = "AfterPack";
@@ -37,7 +29,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function sweep(stdout: HeaderStdout, version: string): Promise<void> {
+async function sweep(stdout: CliStdout, version: string): Promise<void> {
   for (let i = 1; i <= WORDMARK.length; i++) {
     const done = gold(bold(WORDMARK.slice(0, i)));
     const pending = dim(WORDMARK.slice(i));

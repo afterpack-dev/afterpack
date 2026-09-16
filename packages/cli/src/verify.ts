@@ -1,13 +1,13 @@
 import { existsSync, readFileSync } from "node:fs";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { PROTECTION_RECEIPT_FILE, verifyProtectionReceipt } from "@afterpack/integration-utils";
 import { CONTACT_FOOTER } from "./args.js";
 import { EXIT, type ExitCode } from "./exit.js";
-import { dim, green, red } from "./format.js";
-import { emitJson, jsonError, type OutputMode } from "./output.js";
+import { dim, green } from "./format.js";
+import { commandFailure, displayDir, emitJson, type OutputMode } from "./output.js";
 import type { CliLogger } from "./run.js";
 
-export const VERIFY_USAGE = "usage: afterpack verify [dir] [--diagnostics.format=text|json]";
+const VERIFY_USAGE = "usage: afterpack verify [dir] [--diagnostics.format=text|json]";
 
 export const VERIFY_HELP = `${VERIFY_USAGE}
 
@@ -52,7 +52,7 @@ export function readBuildId(dir: string): string | null {
   }
 }
 
-export interface VerifyDeps {
+interface VerifyDeps {
   cwd: string;
   logger: CliLogger;
   report: CliLogger;
@@ -69,29 +69,7 @@ function fail(
   fix: string,
   detail: string[] = [],
 ): ExitCode {
-  if (deps.mode.format === "json") {
-    emitJson(
-      deps.logger,
-      jsonError({ version: deps.version, command: "verify", exitCode, code, message, fix }),
-    );
-    return exitCode;
-  }
-  deps.logger.error(`${red("✗")} ${message}`);
-  if (detail.length > 0) {
-    deps.logger.error("");
-    for (const line of detail) deps.logger.error(`  ${line}`);
-  }
-  deps.logger.error("");
-  deps.logger.error(fix);
-  deps.logger.error("");
-  deps.logger.error(dim(CONTACT_FOOTER));
-  return exitCode;
-}
-
-function displayDir(cwd: string, dir: string): string {
-  const rel = relative(cwd, dir);
-  const path = rel === "" || rel.startsWith("..") ? dir : rel.split(sep).join("/");
-  return `${path}/`;
+  return commandFailure(deps, "verify", exitCode, code, message, fix, detail);
 }
 
 export function verify(deps: VerifyDeps): ExitCode {

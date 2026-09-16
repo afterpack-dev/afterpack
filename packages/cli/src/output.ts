@@ -1,3 +1,4 @@
+import { relative, sep } from "node:path";
 import {
   type AfterpackConfig,
   type ConfigIssue,
@@ -9,7 +10,9 @@ import {
   parseCliOptions,
   parseEnvOptions,
 } from "@afterpack/integration-utils";
-import { setColorEnabled } from "./format.js";
+import { CONTACT_FOOTER } from "./args.js";
+import type { ExitCode } from "./exit.js";
+import { dim, red, setColorEnabled } from "./format.js";
 import type { CliLogger } from "./run.js";
 
 export type DiagnosticsFormat = "text" | "json";
@@ -84,6 +87,15 @@ export function reportingLogger(logger: CliLogger, mode: OutputMode): CliLogger 
         ? (m: string) => logger.error(m)
         : (m: string) => logger.log(m);
   return { log, warn: (m) => logger.warn(m), error: (m) => logger.error(m) };
+}
+
+export function documentPath(cwd: string, filePath: string): string {
+  const rel = relative(cwd, filePath);
+  return rel === "" || rel.startsWith("..") ? filePath : rel.split(sep).join("/");
+}
+
+export function displayDir(cwd: string, dir: string): string {
+  return `${documentPath(cwd, dir)}/`;
 }
 
 export type CommandName = "obfuscate" | "verify" | "restore" | "audit";
@@ -185,4 +197,49 @@ export function jsonError(input: {
     ok: false,
     error: { code: input.code, message: input.message, fix: input.fix },
   };
+}
+
+export function emitJsonError(
+  logger: CliLogger,
+  input: {
+    version: string;
+    command: CommandName;
+    exitCode: number;
+    code: string;
+    message: string;
+    fix: string;
+  },
+): void {
+  emitJson(logger, jsonError(input));
+}
+
+export interface CommandFailDeps {
+  logger: CliLogger;
+  mode: OutputMode;
+  version: string;
+}
+
+export function commandFailure(
+  deps: CommandFailDeps,
+  command: CommandName,
+  exitCode: ExitCode,
+  code: string,
+  message: string,
+  fix: string,
+  detail: readonly string[] = [],
+): ExitCode {
+  if (deps.mode.format === "json") {
+    emitJsonError(deps.logger, { version: deps.version, command, exitCode, code, message, fix });
+    return exitCode;
+  }
+  deps.logger.error(`${red("✗")} ${message}`);
+  if (detail.length > 0) {
+    deps.logger.error("");
+    for (const line of detail) deps.logger.error(`  ${line}`);
+  }
+  deps.logger.error("");
+  deps.logger.error(fix);
+  deps.logger.error("");
+  deps.logger.error(dim(CONTACT_FOOTER));
+  return exitCode;
 }

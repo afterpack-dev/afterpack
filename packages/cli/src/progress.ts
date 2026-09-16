@@ -1,19 +1,11 @@
 import { dim, gold } from "./format.js";
 import type { OutputMode } from "./output.js";
+import type { CliLogger, CliStdout } from "./run.js";
 
-export interface ProgressStdout {
-  isTTY: boolean;
-  write(chunk: string): void;
-}
-
-export interface ProgressLogger {
-  log(message: string): void;
-}
-
-export interface WithProgressInput<T> {
-  stdout: ProgressStdout;
+interface WithProgressInput<T> {
+  stdout: CliStdout;
   mode: OutputMode;
-  report: ProgressLogger;
+  report: CliLogger;
   label: string;
   work: () => Promise<T>;
 }
@@ -23,7 +15,7 @@ const PULSE_BRIGHT = [true, true, false, false];
 const FRAME_MS = 120;
 const DEFER_MS = 150;
 
-function startSpinner(stdout: ProgressStdout, label: string): () => void {
+function startSpinner(stdout: CliStdout, label: string): () => void {
   let frame = 0;
   const timer = setInterval(() => {
     const glyph = SPINNER_FRAMES[frame % SPINNER_FRAMES.length];

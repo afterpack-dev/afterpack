@@ -9,8 +9,8 @@ import {
   readBackupManifest,
 } from "./backup.js";
 import { EXIT, type ExitCode } from "./exit.js";
-import { dim, green, red } from "./format.js";
-import { emitJson, jsonError, type OutputMode } from "./output.js";
+import { dim, green } from "./format.js";
+import { commandFailure, emitJson, type OutputMode } from "./output.js";
 import type { CliLogger } from "./run.js";
 
 export const RESTORE_USAGE = "usage: afterpack restore [dir]";
@@ -38,7 +38,7 @@ recorded file no longer matches, 64 on a usage error.
 
 ${dim(CONTACT_FOOTER)}`;
 
-export interface RestoreDeps {
+interface RestoreDeps {
   cwd: string;
   logger: CliLogger;
   report: CliLogger;
@@ -55,23 +55,7 @@ function fail(
   fix: string,
   detail: string[] = [],
 ): ExitCode {
-  if (deps.mode.format === "json") {
-    emitJson(
-      deps.logger,
-      jsonError({ version: deps.version, command: "restore", exitCode, code, message, fix }),
-    );
-    return exitCode;
-  }
-  deps.logger.error(`${red("✗")} ${message}`);
-  if (detail.length > 0) {
-    deps.logger.error("");
-    for (const line of detail) deps.logger.error(`  ${line}`);
-  }
-  deps.logger.error("");
-  deps.logger.error(fix);
-  deps.logger.error("");
-  deps.logger.error(dim(CONTACT_FOOTER));
-  return exitCode;
+  return commandFailure(deps, "restore", exitCode, code, message, fix, detail);
 }
 
 function displayDir(cwd: string, dir: string): string {

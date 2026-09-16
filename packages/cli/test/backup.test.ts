@@ -139,7 +139,8 @@ describe("matchAlreadyObfuscated", () => {
       pending,
     });
 
-    expect(matchAlreadyObfuscated(root, readBackupManifest(root) as never, [file])).toEqual([file]);
+    const current = captureOriginals(root, [file]);
+    expect(matchAlreadyObfuscated(readBackupManifest(root) as never, current)).toEqual([file]);
   });
 
   it("does not match once the file changes again (a fresh rebuild)", () => {
@@ -154,6 +155,7 @@ describe("matchAlreadyObfuscated", () => {
     });
 
     writeFileSync(file, "export const a = 1;");
-    expect(matchAlreadyObfuscated(root, readBackupManifest(root) as never, [file])).toEqual([]);
+    const current = captureOriginals(root, [file]);
+    expect(matchAlreadyObfuscated(readBackupManifest(root) as never, current)).toEqual([]);
   });
 });

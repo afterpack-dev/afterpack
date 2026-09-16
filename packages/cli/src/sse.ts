@@ -1,4 +1,4 @@
-export interface SSEEvent {
+interface SSEEvent {
   event: string;
   data: string;
 }
