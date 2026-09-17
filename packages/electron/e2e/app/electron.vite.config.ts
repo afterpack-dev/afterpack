@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { withAfterpackElectron } from "@afterpack/electron";
+import { withAfterpack } from "@afterpack/electron";
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 
 const expectations = JSON.parse(
@@ -11,7 +11,7 @@ const expectations = JSON.parse(
 // thing this package exists for: three legs, one FRESHLY DRAWN seed.
 const seed = process.env.AFTERPACK_FI_FREE_SEED === "1" ? undefined : expectations.seed;
 
-export default withAfterpackElectron(
+export default withAfterpack(
   defineConfig({
     main: { plugins: [externalizeDepsPlugin()] },
     preload: { plugins: [externalizeDepsPlugin()] },

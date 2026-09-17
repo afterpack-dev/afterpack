@@ -31,7 +31,7 @@ function install(config: NextConfigSurface, options: AfterpackNextOptions): Next
   };
 }
 
-export function withAfterpackNext<T extends object>(
+export function withAfterpack<T extends object>(
   nextConfig: T,
   options: AfterpackNextOptions = {},
 ): T {

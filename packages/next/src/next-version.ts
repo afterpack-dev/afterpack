@@ -47,10 +47,10 @@ export function assertSupportedNext(version: string | null): void {
   if (!found || !isBelow(found, floor)) return;
   throw new Error(
     `[${LABEL}] Next.js ${version} is too old for @afterpack/next, which needs ` +
-      `next >= ${MIN_NEXT_VERSION}. withAfterpackNext() installs Next's ` +
+      `next >= ${MIN_NEXT_VERSION}. withAfterpack() installs Next's ` +
       `\`compiler.runAfterProductionCompile\` hook, added in ${MIN_NEXT_VERSION}: on ${version} ` +
       "`next build` silently IGNORES it, exits 0, and ships your bundle AS CLEARTEXT. " +
-      `Upgrade to next@>=${MIN_NEXT_VERSION}, or drop withAfterpackNext() and obfuscate the ` +
+      `Upgrade to next@>=${MIN_NEXT_VERSION}, or drop withAfterpack() and obfuscate the ` +
       "build output with `npx afterpack@latest .next` as a separate step.",
   );
 }

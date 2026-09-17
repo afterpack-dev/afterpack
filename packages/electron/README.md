@@ -6,10 +6,10 @@ source map, a Protection Map) outside the tree your packager copies into `app.as
 
 ```js
 // electron.vite.config.ts
-import { withAfterpackElectron } from "@afterpack/electron";
+import { withAfterpack } from "@afterpack/electron";
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 
-export default withAfterpackElectron(
+export default withAfterpack(
   defineConfig({
     main: { plugins: [externalizeDepsPlugin()] },
     preload: { plugins: [externalizeDepsPlugin()] },
@@ -18,7 +18,7 @@ export default withAfterpackElectron(
 );
 ```
 
-`withAfterpackElectron` wires `@afterpack/vite` into every leg the config declares (never one it doesn't) and
+`withAfterpack` wires `@afterpack/vite` into every leg the config declares (never one it doesn't) and
 prints `wired into legs: main, preload, renderer`. Each leg obfuscates its own bundle before Vite
 writes it, and is **fail-closed**: an `error`/`critical` diagnostic, empty output, or V8 bytecode in
 the output fails the build rather than shipping unobfuscated code.
@@ -76,7 +76,7 @@ pinned, which is exactly this situation.
 
 | Toolchain | Wiring | One seed? |
 | --- | --- | --- |
-| **electron-vite** | `withAfterpackElectron(defineConfig({…}))` — one call | yes, automatic (one process) |
+| **electron-vite** | `withAfterpack(defineConfig({…}))` — one call | yes, automatic (one process) |
 | **electron-forge + plugin-vite** | `afterpackElectron({ leg })` in each of the three configs | yes, automatic (one process) |
 | **electron-forge + plugin-webpack** | `@afterpack/webpack` in each config | yes, automatic (one process) |
 | **vite-plugin-electron** | `afterpackElectron({ leg: "renderer" })`, placed **last** | yes — place it last so AfterPack's `generateBundle` seals the finished bundle |
@@ -119,7 +119,7 @@ this package sets per leg. The ones that matter most here:
 
 ```js
 // Heavier protection, reproducible per commit:
-withAfterpackElectron(config, { preset: "hard", seed: "git" });
+withAfterpack(config, { preset: "hard", seed: "git" });
 ```
 
 ## Configuration

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { withAfterpackNext } from "./index.js";
+import { withAfterpack } from "./index.js";
 import { assertSupportedNext, detectNextVersion, MIN_NEXT_VERSION } from "./next-version.js";
 
 let root: string;
@@ -53,15 +53,15 @@ describe("detectNextVersion", () => {
   });
 });
 
-describe("withAfterpackNext version guard", () => {
+describe("withAfterpack version guard", () => {
   it("throws at next.config load time on a Next that would ignore the hook", () => {
     vi.spyOn(process, "cwd").mockReturnValue(fakeNextInstall("14.2.30"));
-    expect(() => withAfterpackNext({})).toThrow(MIN_NEXT_VERSION);
+    expect(() => withAfterpack({})).toThrow(MIN_NEXT_VERSION);
   });
 
   it("installs the hook on a Next that runs it", () => {
     vi.spyOn(process, "cwd").mockReturnValue(fakeNextInstall(MIN_NEXT_VERSION));
-    const wrapped = withAfterpackNext({}) as {
+    const wrapped = withAfterpack({}) as {
       compiler?: { runAfterProductionCompile?: unknown };
     };
     expect(typeof wrapped.compiler?.runAfterProductionCompile).toBe("function");

@@ -7,19 +7,19 @@ artifacts (a source map, a Protection Map) next to each file.
 ```ts
 // next.config.ts
 import type { NextConfig } from "next";
-import { withAfterpackNext } from "@afterpack/next";
+import { withAfterpack } from "@afterpack/next";
 
 const nextConfig: NextConfig = {
   /* your config */
 };
 
-export default withAfterpackNext(nextConfig);
+export default withAfterpack(nextConfig);
 ```
 
-Next's other config form works the same way — `withAfterpackNext(async (phase, ctx) => ({ … }))`
+Next's other config form works the same way — `withAfterpack(async (phase, ctx) => ({ … }))`
 returns a wrapped function, not an object.
 
-That is the whole setup. There is **no postbuild script and no bin**: `withAfterpackNext` returns a
+That is the whole setup. There is **no postbuild script and no bin**: `withAfterpack` returns a
 config carrying Next's own [`compiler.runAfterProductionCompile`][hook] hook, which Next calls once,
 outside the bundler branch, right after compilation and before type-checking, prerendering and
 static export. So `next build` on its own produces obfuscated output — a CI job that invokes
@@ -66,7 +66,7 @@ it will upload maps of the pre-obfuscation code, which no longer describes what 
 `experimental.sri` is **refused**, with an error naming the conflict. Next computes each asset's
 integrity hash while writing it, before any build hook can run, and bakes it into every
 `<script integrity=…>`; rewriting the chunk afterwards makes the browser block it. Remove
-`experimental.sri`, or remove `withAfterpackNext`.
+`experimental.sri`, or remove `withAfterpack`.
 
 ## What it writes
 
@@ -80,7 +80,7 @@ It also appends the artifact guard globs (`.afterpack/`, `*.protectionMap.html`,
 
 ## Options
 
-Passed to `withAfterpackNext(config, options)` and closed over by the hook — no file, no second
+Passed to `withAfterpack(config, options)` and closed over by the hook — no file, no second
 resolution, nothing to drop them. They rank above `AFTERPACK_*` and `afterpack.json`, and every
 registry key works in all three places. All options are opt-out (**ON by default**) with a
 **production auto-flip**: because `next build` sets `NODE_ENV=production`, the production-safe
@@ -100,7 +100,7 @@ options always win.
 
 ```ts
 // Generate the Protection Map for a build (writes to gitignored .afterpack/):
-withAfterpackNext(nextConfig, { protectionMap: true });
+withAfterpack(nextConfig, { protectionMap: true });
 ```
 
 ## Feedback

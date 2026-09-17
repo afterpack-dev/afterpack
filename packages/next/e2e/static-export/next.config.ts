@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { withAfterpackNext } from "@afterpack/next";
+import { withAfterpack } from "@afterpack/next";
 import type { NextConfig } from "next";
 
 const expectations = JSON.parse(readFileSync(new URL("./expectations.json", import.meta.url), "utf8"));
@@ -23,4 +23,4 @@ const nextConfig: NextConfig = {
   generateBuildId: async () => "afterpack-fixture-build",
 };
 
-export default withAfterpackNext(nextConfig, { seed: expectations.seed });
+export default withAfterpack(nextConfig, { seed: expectations.seed });

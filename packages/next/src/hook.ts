@@ -31,7 +31,7 @@ const SRI_CONFLICT =
   "integrity hash while writing it, before any build hook runs, so obfuscating the chunk " +
   "afterwards leaves every <script integrity=...> pointing at bytes that no longer exist and the " +
   "browser blocks the script. Remove `experimental.sri` from next.config, or remove " +
-  "withAfterpackNext().";
+  "withAfterpack().";
 
 function readBuildIdFromManifest(distDir: string): string | null {
   try {

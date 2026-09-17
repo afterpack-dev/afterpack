@@ -101,7 +101,7 @@ function injectLegs<T extends object>(config: T, options: AfterpackElectronOptio
   }
   if (wired.length === 0) {
     throw new Error(
-      "[afterpack-electron] withAfterpackElectron() found no main/preload/renderer section on " +
+      "[afterpack-electron] withAfterpack() found no main/preload/renderer section on " +
         "this config — it must wrap an electron-vite config, not a plain Vite one.",
     );
   }
@@ -109,7 +109,7 @@ function injectLegs<T extends object>(config: T, options: AfterpackElectronOptio
   return config;
 }
 
-export function withAfterpackElectron<T>(config: T, options: AfterpackElectronOptions = {}): T {
+export function withAfterpack<T>(config: T, options: AfterpackElectronOptions = {}): T {
   if (typeof config === "function") {
     return ((env: unknown) => {
       const resolved = (config as (e: unknown) => unknown)(env);

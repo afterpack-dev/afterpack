@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { withAfterpackNext } from "@afterpack/next";
+import { withAfterpack } from "@afterpack/next";
 import type { NextConfig } from "next";
 
 const expectations = JSON.parse(readFileSync(new URL("./expectations.json", import.meta.url), "utf8"));
@@ -15,4 +15,4 @@ const nextConfig: NextConfig = {
 
 // Same wiring as ../next-16/: the obfuscation runs inside `next build` via
 // Next's `compiler.runAfterProductionCompile` hook, with no postbuild script.
-export default withAfterpackNext(nextConfig, { seed: expectations.seed });
+export default withAfterpack(nextConfig, { seed: expectations.seed });

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterpackVite } from "@afterpack/vite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { afterpackElectron, type ElectronLeg, withAfterpackElectron } from "./index.js";
+import { afterpackElectron, type ElectronLeg, withAfterpack } from "./index.js";
 import { resetNotices } from "./notices.js";
 
 vi.mock("@afterpack/vite", () => ({
@@ -51,7 +51,7 @@ describe("afterpackElectron — per-leg wiring", () => {
   });
 
   it("pins every leg to ONE project root — electron-vite roots the renderer at src/renderer", () => {
-    withAfterpackElectron({ main: {}, renderer: {} });
+    withAfterpack({ main: {}, renderer: {} });
     const roots = vi.mocked(afterpackVite).mock.calls.map((c) => c[0]?.projectRoot);
     expect(roots).toEqual([process.cwd(), process.cwd()]);
   });
@@ -62,10 +62,10 @@ describe("afterpackElectron — per-leg wiring", () => {
   });
 });
 
-describe("withAfterpackElectron — one call, every declared leg", () => {
+describe("withAfterpack — one call, every declared leg", () => {
   it("wires exactly the legs the config declares, appending to (not replacing) each leg's existing plugins", () => {
     const config = { main: {}, renderer: { plugins: [{ name: "react" }] } };
-    const out = withAfterpackElectron(config, { seed: 7 });
+    const out = withAfterpack(config, { seed: 7 });
     expect(out).toBe(config);
     expect(vi.mocked(afterpackVite).mock.calls.map((c) => c[0])).toEqual([
       { seed: 7, leg: "main", projectRoot: process.cwd() },
@@ -76,27 +76,25 @@ describe("withAfterpackElectron — one call, every declared leg", () => {
   });
 
   it("handles the function form of an electron-vite config", () => {
-    const fn = withAfterpackElectron(() => ({ main: {}, preload: {}, renderer: {} }));
+    const fn = withAfterpack(() => ({ main: {}, preload: {}, renderer: {} }));
     const resolved = (fn as () => { main: { plugins?: unknown[] } })();
     expect(resolved.main.plugins).toHaveLength(1);
     expect(vi.mocked(afterpackVite).mock.calls).toHaveLength(3);
   });
 
   it("handles the promise form of an electron-vite config", async () => {
-    const resolved = await withAfterpackElectron(Promise.resolve({ main: {} }));
+    const resolved = await withAfterpack(Promise.resolve({ main: {} }));
     expect((resolved as { main: { plugins?: unknown[] } }).main.plugins).toHaveLength(1);
   });
 
   it("handles an async function form", async () => {
-    const fn = withAfterpackElectron(async () => ({ renderer: {} }));
+    const fn = withAfterpack(async () => ({ renderer: {} }));
     const resolved = await (fn as () => Promise<{ renderer: { plugins?: unknown[] } }>)();
     expect(resolved.renderer.plugins).toHaveLength(1);
   });
 
   it("throws on a plain Vite config with no leg sections at all", () => {
-    expect(() => withAfterpackElectron({ plugins: [] })).toThrow(
-      /no main\/preload\/renderer section/,
-    );
+    expect(() => withAfterpack({ plugins: [] })).toThrow(/no main\/preload\/renderer section/);
   });
 });
 

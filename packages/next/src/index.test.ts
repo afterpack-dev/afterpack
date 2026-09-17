@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { PROTECTION_RECEIPT_FILE } from "@afterpack/integration-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __reset, __setProcessResult } from "../../../test/core-fake.js";
-import { withAfterpackNext } from "./index.js";
+import { withAfterpack } from "./index.js";
 
 interface Wrapped {
   compiler?: {
@@ -26,7 +26,7 @@ function projectWithBuiltChunk(): { projectDir: string; distDir: string; chunk: 
 
 function hookOf(config: object): (m: { projectDir: string; distDir: string }) => Promise<void> {
   const hook = (config as Wrapped).compiler?.runAfterProductionCompile;
-  if (!hook) throw new Error("withAfterpackNext did not install runAfterProductionCompile");
+  if (!hook) throw new Error("withAfterpack did not install runAfterProductionCompile");
   return hook;
 }
 
@@ -44,16 +44,16 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-describe("withAfterpackNext", () => {
+describe("withAfterpack", () => {
   it("carries the user's config through and adds the build hook", () => {
-    const wrapped = withAfterpackNext({ reactStrictMode: true, compiler: { removeConsole: true } });
+    const wrapped = withAfterpack({ reactStrictMode: true, compiler: { removeConsole: true } });
     expect(wrapped).toMatchObject({ reactStrictMode: true, compiler: { removeConsole: true } });
     expect(typeof hookOf(wrapped)).toBe("function");
   });
 
   it("obfuscates the client chunks from `next build` alone — no postbuild, no options file", async () => {
     const { projectDir, distDir, chunk } = projectWithBuiltChunk();
-    await hookOf(withAfterpackNext({}, { preset: "hard" }))({ projectDir, distDir });
+    await hookOf(withAfterpack({}, { preset: "hard" }))({ projectDir, distDir });
 
     expect(readFileSync(chunk, "utf8")).toContain("OBF:export const secret = 1;");
     expect(existsSync(join(projectDir, ".afterpack", "next-options.json"))).toBe(false);
@@ -62,7 +62,7 @@ describe("withAfterpackNext", () => {
 
   it("carries options straight into the engine, with no second resolution to drop them", async () => {
     const { projectDir, distDir } = projectWithBuiltChunk();
-    await hookOf(withAfterpackNext({}, { strings: { encode: false }, preset: "medium" }))({
+    await hookOf(withAfterpack({}, { strings: { encode: false }, preset: "medium" }))({
       projectDir,
       distDir,
     });
@@ -79,7 +79,7 @@ describe("withAfterpackNext", () => {
   it("COMPOSES with a user-supplied runAfterProductionCompile — theirs first, ours last", async () => {
     const { projectDir, distDir, chunk } = projectWithBuiltChunk();
     const seen: string[] = [];
-    const wrapped = withAfterpackNext({
+    const wrapped = withAfterpack({
       compiler: {
         runAfterProductionCompile: async () => {
           seen.push(readFileSync(chunk, "utf8"));
@@ -95,7 +95,7 @@ describe("withAfterpackNext", () => {
 
   it("accepts Next's other config form, the (phase, ctx) => config function", async () => {
     const { projectDir, distDir, chunk } = projectWithBuiltChunk();
-    const wrapped = withAfterpackNext(
+    const wrapped = withAfterpack(
       async (phase: string) => ({ reactStrictMode: phase === "phase-production-build" }),
       { seed: 7 },
     );
@@ -110,7 +110,7 @@ describe("withAfterpackNext", () => {
 
   it("lets a throwing user hook abort the build before anything is obfuscated", async () => {
     const { projectDir, distDir, chunk } = projectWithBuiltChunk();
-    const wrapped = withAfterpackNext({
+    const wrapped = withAfterpack({
       compiler: {
         runAfterProductionCompile: async () => {
           throw new Error("user hook said no");

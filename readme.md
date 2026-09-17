@@ -34,7 +34,7 @@ hooks the bundler directly, so the cleartext bundle is never written to disk at 
 | Package | Targets | Entry point |
 | --- | --- | --- |
 | [`@afterpack/vite`](packages/vite) | Vite 5–8 | `afterpackVite()` plugin |
-| [`@afterpack/next`](packages/next) | Next.js 14+ | `withAfterpackNext()` config wrapper |
+| [`@afterpack/next`](packages/next) | Next.js 14+ | `withAfterpack()` config wrapper |
 | [`@afterpack/webpack`](packages/webpack) | webpack 5 | `AfterpackWebpackPlugin` |
 | [`@afterpack/rollup`](packages/rollup) | Rollup 3–4 | `afterpackRollup()` plugin |
 | [`@afterpack/esbuild`](packages/esbuild) | esbuild 0.17+ | `afterpackEsbuild()` plugin |
