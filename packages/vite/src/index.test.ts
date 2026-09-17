@@ -319,6 +319,66 @@ describe("afterpackVite fail-closed + autorun", () => {
   });
 });
 
+describe("afterpackVite writeBundle (protection receipt)", () => {
+  beforeEach(() => {
+    __setProcessResult((input) => ({ code: `OBF:${input}`, sourceMap: null, protectionMap: null }));
+  });
+
+  it("writes .afterpack-protection.json in writeBundle for the files vite actually wrote", async () => {
+    const plugin = afterpackVite({});
+    // biome-ignore lint/suspicious/noExplicitAny: exercising Vite hooks directly in a test.
+    const p = plugin as any;
+    p.configResolved({ root, build: { outDir } });
+    const bundle = bundleOf(chunk("a.js", "export const a = 1;"));
+    await p.generateBundle.handler.call({}, { dir: outDir }, bundle);
+    const emitted = bundle["a.js"].code;
+    if (emitted === undefined) throw new Error("the pass left the chunk with no code");
+    writeFileSync(join(outDir, "a.js"), emitted);
+    await p.writeBundle();
+
+    const receiptPath = join(outDir, ".afterpack-protection.json");
+    expect(existsSync(receiptPath)).toBe(true);
+    const receipt = JSON.parse(readFileSync(receiptPath, "utf8"));
+    expect(receipt.files.map((f: { path: string }) => f.path)).toEqual(["a.js"]);
+  });
+
+  it("still writes the receipt on diagnostics.level=none, but says nothing about it", async () => {
+    const logged: string[] = [];
+    const spy = vi.spyOn(console, "log").mockImplementation((m: string) => {
+      logged.push(m);
+    });
+    try {
+      const plugin = afterpackVite({ diagnostics: { level: "none" } });
+      // biome-ignore lint/suspicious/noExplicitAny: exercising Vite hooks directly in a test.
+      const p = plugin as any;
+      p.configResolved({ root, build: { outDir } });
+      const bundle = bundleOf(chunk("a.js", "export const a = 1;"));
+      await p.generateBundle.handler.call({}, { dir: outDir }, bundle);
+      const emitted = bundle["a.js"].code;
+      if (emitted === undefined) throw new Error("the pass left the chunk with no code");
+      writeFileSync(join(outDir, "a.js"), emitted);
+      await p.writeBundle();
+
+      expect(existsSync(join(outDir, ".afterpack-protection.json"))).toBe(true);
+      expect(logged.join("\n")).not.toContain("protection receipt");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("does not write a receipt for a file vite never flushed to disk", async () => {
+    const plugin = afterpackVite({});
+    // biome-ignore lint/suspicious/noExplicitAny: exercising Vite hooks directly in a test.
+    const p = plugin as any;
+    p.configResolved({ root, build: { outDir } });
+    const bundle = bundleOf(chunk("a.js", "export const a = 1;"));
+    await p.generateBundle.handler.call({}, { dir: outDir }, bundle);
+    await p.writeBundle();
+
+    expect(existsSync(join(outDir, ".afterpack-protection.json"))).toBe(false);
+  });
+});
+
 describe("afterpackVite config() sourcemap auto-enable", () => {
   function runConfig(
     options: AfterpackViteOptions,

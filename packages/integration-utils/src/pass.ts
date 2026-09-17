@@ -37,7 +37,11 @@ import {
   type ReportPolicy,
   resolveReportPolicy,
 } from "./policy.js";
-import { detectAlreadyObfuscatedInputs, writeProtectionReceipt } from "./receipt.js";
+import {
+  detectAlreadyObfuscatedInputs,
+  type WriteProtectionReceiptInput,
+  writeProtectionReceipt,
+} from "./receipt.js";
 import type { EngineConfigSubset } from "./registry.js";
 import { resolveBuildSeed, type SeedOption, type SeedOrigin } from "./seed.js";
 import { discoverInputSourceMap } from "./source-map.js";
@@ -157,6 +161,7 @@ export interface ObfuscationPassResult {
   fileCount: number;
   protectionMapPath: string | null;
   receiptPath: string | null;
+  deferredReceipt: WriteProtectionReceiptInput | null;
   policy: ReportPolicy;
   seed: number | string;
   seedOrigin: SeedOrigin;
@@ -462,8 +467,7 @@ export async function runObfuscationPass(
   const telemetry = options.telemetry;
   const telemetryEnabled =
     telemetry != null && resolveTelemetryEnabled(artifactOptions.telemetry?.enabled, env);
-  const engineVersion =
-    telemetryEnabled || !options.emitToCaller ? await readEngineVersion(engine) : null;
+  const engineVersion = await readEngineVersion(engine);
   if (telemetry && telemetryEnabled) {
     const facts: TelemetryFacts = {
       label,
@@ -531,9 +535,11 @@ export async function runObfuscationPass(
   }
 
   const writtenFiles: string[] = [];
+  const emittedFiles: string[] = [];
   for (const { result: f, source } of verified) {
     if (options.emitToCaller) {
       outputs.push({ filePath: f.filePath, code: f.code, sourceMap: f.sourceMap ?? null });
+      emittedFiles.push(f.filePath);
       continue;
     }
     const written = writeArtifacts({
@@ -567,17 +573,27 @@ export async function runObfuscationPass(
   }
 
   let receiptPath: string | null = null;
-  if (!options.emitToCaller) {
-    receiptPath = writeProtectionReceipt({
+  let deferredReceipt: WriteProtectionReceiptInput | null = null;
+  const receiptFields = {
+    tool: label,
+    engineVersion,
+    seed,
+    seedOrigin: resolvedSeed.origin,
+    bundler: options.receipt?.bundler ?? "unknown",
+    buildId: options.receipt?.buildId ?? null,
+    transformed: transformedFiles,
+  };
+  if (options.emitToCaller) {
+    deferredReceipt = {
+      ...receiptFields,
       dir: combinedProtectionMap.buildDir,
-      tool: label,
-      engineVersion,
-      seed,
-      seedOrigin: resolvedSeed.origin,
-      bundler: options.receipt?.bundler ?? "unknown",
-      buildId: options.receipt?.buildId ?? null,
+      files: emittedFiles,
+    };
+  } else {
+    receiptPath = writeProtectionReceipt({
+      ...receiptFields,
+      dir: combinedProtectionMap.buildDir,
       files: writtenFiles,
-      transformed: transformedFiles,
     });
     if (style !== "cli") {
       logger.log(prefix(`wrote protection receipt -> ${receiptPath} (afterpack verify)`));
@@ -624,6 +640,7 @@ export async function runObfuscationPass(
     fileCount: files.length,
     protectionMapPath,
     receiptPath,
+    deferredReceipt,
     policy,
     seed,
     seedOrigin: resolvedSeed.origin,

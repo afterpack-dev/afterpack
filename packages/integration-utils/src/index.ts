@@ -83,6 +83,7 @@ export {
   sha256Of,
   verifyProtectionReceipt,
   type WriteProtectionReceiptInput,
+  writeDeferredProtectionReceipt,
   writeProtectionReceipt,
 } from "./receipt.js";
 export {

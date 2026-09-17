@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -135,6 +143,38 @@ describe("afterpackRollup generateBundle", () => {
     await expect(runPlugin({}, { dir: outDir }, bundle)).rejects.toThrow(/failed to obfuscate/);
     expect(bundle["a.js"].code).toBe("eval('x');");
     expect(readdirSync(outDir)).toEqual([]);
+  });
+});
+
+describe("afterpackRollup writeBundle (protection receipt)", () => {
+  it("writes .afterpack-protection.json in writeBundle for the files rollup actually wrote", async () => {
+    const plugin = afterpackRollup({});
+    const outputOptions = { dir: outDir };
+    const bundle = bundleOf(chunk("index.js", "export const a = 1;"));
+    // biome-ignore lint/suspicious/noExplicitAny: exercising the Rollup hooks directly in a test.
+    const p = plugin as any;
+    await p.generateBundle.handler.call({}, outputOptions, bundle);
+    const emitted = bundle["index.js"].code;
+    if (emitted === undefined) throw new Error("the pass left the chunk with no code");
+    writeFileSync(join(outDir, "index.js"), emitted);
+    await p.writeBundle(outputOptions, bundle);
+
+    const receiptPath = join(outDir, ".afterpack-protection.json");
+    expect(existsSync(receiptPath)).toBe(true);
+    const receipt = JSON.parse(readFileSync(receiptPath, "utf8"));
+    expect(receipt.files.map((f: { path: string }) => f.path)).toEqual(["index.js"]);
+  });
+
+  it("does not write a receipt for a file rollup never flushed to disk", async () => {
+    const plugin = afterpackRollup({});
+    const outputOptions = { dir: outDir };
+    const bundle = bundleOf(chunk("index.js", "export const a = 1;"));
+    // biome-ignore lint/suspicious/noExplicitAny: exercising the Rollup hooks directly in a test.
+    const p = plugin as any;
+    await p.generateBundle.handler.call({}, outputOptions, bundle);
+    await p.writeBundle(outputOptions, bundle);
+
+    expect(existsSync(join(outDir, ".afterpack-protection.json"))).toBe(false);
   });
 });
 

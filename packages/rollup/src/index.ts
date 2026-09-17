@@ -11,6 +11,8 @@ import {
   resolvePluginConfig,
   runObfuscationPass,
   scanDirectives,
+  type WriteProtectionReceiptInput,
+  writeDeferredProtectionReceipt,
 } from "@afterpack/integration-utils";
 import type { NormalizedOutputOptions, OutputBundle, Plugin } from "rollup";
 
@@ -42,6 +44,7 @@ export function afterpackRollup(options: AfterpackRollupOptions = {}): Plugin {
     { source: string; directives: CapturedDirective[]; renameGlobals: boolean }
   >();
   const captureDiagnostics: string[] = [];
+  const deferredReceiptByOutDir = new Map<string, WriteProtectionReceiptInput>();
 
   return {
     name: "afterpack-rollup",
@@ -145,7 +148,27 @@ export function afterpackRollup(options: AfterpackRollupOptions = {}): Plugin {
             applyBundleOutput(bundle as unknown as OutputBundleLike, entry, out, result.policy);
           }
         }
+        if (result.deferredReceipt) deferredReceiptByOutDir.set(outDir, result.deferredReceipt);
       },
+    },
+
+    writeBundle(outputOptions: NormalizedOutputOptions) {
+      const outDir = outputDir(outputOptions);
+      const deferred = outDir ? deferredReceiptByOutDir.get(outDir) : undefined;
+      if (!outDir || !deferred) return;
+      deferredReceiptByOutDir.delete(outDir);
+      try {
+        const receiptPath = writeDeferredProtectionReceipt(deferred);
+        if (receiptPath && settings.diagnostics?.level !== "none") {
+          console.log(
+            `[afterpack-rollup] wrote protection receipt -> ${receiptPath} (afterpack verify)`,
+          );
+        }
+      } catch (error) {
+        console.warn(
+          `[afterpack-rollup] failed to write protection receipt: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     },
   };
 }

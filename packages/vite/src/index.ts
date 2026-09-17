@@ -11,6 +11,8 @@ import {
   resolvePluginConfig,
   runObfuscationPass,
   scanDirectives,
+  type WriteProtectionReceiptInput,
+  writeDeferredProtectionReceipt,
 } from "@afterpack/integration-utils";
 import type { Plugin, ResolvedConfig, UserConfig } from "vite";
 
@@ -45,6 +47,7 @@ export function afterpackVite(options: AfterpackViteOptions = {}): Plugin {
     { source: string; directives: CapturedDirective[]; renameGlobals: boolean }
   >();
   const captureDiagnostics: string[] = [];
+  const deferredReceiptByOutDir = new Map<string, WriteProtectionReceiptInput>();
 
   const leg = options.leg;
   const label = leg ? `afterpack-vite:${leg}` : "afterpack-vite";
@@ -165,7 +168,24 @@ export function afterpackVite(options: AfterpackViteOptions = {}): Plugin {
             applyBundleOutput(bundle as unknown as OutputBundleLike, entry, out, result.policy);
           }
         }
+        if (result.deferredReceipt) deferredReceiptByOutDir.set(outDir, result.deferredReceipt);
       },
+    },
+
+    writeBundle() {
+      const deferred = deferredReceiptByOutDir.get(outDir);
+      if (!deferred) return;
+      deferredReceiptByOutDir.delete(outDir);
+      try {
+        const receiptPath = writeDeferredProtectionReceipt(deferred);
+        if (receiptPath && settings.diagnostics?.level !== "none") {
+          console.log(`[${label}] wrote protection receipt -> ${receiptPath} (afterpack verify)`);
+        }
+      } catch (error) {
+        console.warn(
+          `[${label}] failed to write protection receipt: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     },
   };
 }

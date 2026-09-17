@@ -46,6 +46,14 @@ export interface WriteProtectionReceiptInput {
   transformed: readonly string[];
 }
 
+export function writeDeferredProtectionReceipt(
+  deferred: WriteProtectionReceiptInput,
+): string | null {
+  const survivingFiles = deferred.files.filter((file) => existsSync(file));
+  if (survivingFiles.length === 0) return null;
+  return writeProtectionReceipt({ ...deferred, files: survivingFiles });
+}
+
 export function writeProtectionReceipt(input: WriteProtectionReceiptInput): string {
   const transformed = new Set(input.transformed);
   const receipt: ProtectionReceipt = {

@@ -112,6 +112,7 @@ const SURFACE = [
   "withSourceMappingURL",
   "verifyProtectionReceipt",
   "writeArtifacts",
+  "writeDeferredProtectionReceipt",
   "writeProtectionReceipt",
 ];
 

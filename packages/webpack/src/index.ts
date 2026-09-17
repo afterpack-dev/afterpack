@@ -14,7 +14,9 @@ import {
   resolvePluginConfig,
   runObfuscationPass,
   scanDirectives,
+  type WriteProtectionReceiptInput,
   withSourceMappingURL,
+  writeDeferredProtectionReceipt,
 } from "@afterpack/integration-utils";
 import type { Compilation, Compiler } from "webpack";
 
@@ -97,6 +99,10 @@ export class AfterpackWebpackPlugin {
   private readonly captured = new Map<string, CapturedSource>();
   private readonly seenByBuildHooksThisCompilation = new Set<string>();
   private readonly captureDiagnostics: string[] = [];
+  private readonly deferredReceiptByCompilation = new WeakMap<
+    Compilation,
+    WriteProtectionReceiptInput
+  >();
 
   constructor(options: AfterpackWebpackOptions = {}) {
     const resolved = resolvePluginConfig({
@@ -129,6 +135,24 @@ export class AfterpackWebpackPlugin {
         { name: PLUGIN_NAME, stage: compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_REPORT },
         () => this.obfuscate(compiler, compilation, context),
       );
+    });
+
+    compiler.hooks.afterEmit.tapPromise(PLUGIN_NAME, async (compilation) => {
+      const deferred = this.deferredReceiptByCompilation.get(compilation);
+      if (!deferred) return;
+      this.deferredReceiptByCompilation.delete(compilation);
+      try {
+        const receiptPath = writeDeferredProtectionReceipt(deferred);
+        if (receiptPath && this.settings.diagnostics?.level !== "none") {
+          console.log(
+            `[afterpack-webpack] wrote protection receipt -> ${receiptPath} (afterpack verify)`,
+          );
+        }
+      } catch (error) {
+        console.warn(
+          `[afterpack-webpack] failed to write protection receipt: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     });
   }
 
@@ -218,6 +242,9 @@ export class AfterpackWebpackPlugin {
       } else if (asset.mapName && compilation.getAsset(asset.mapName)) {
         compilation.deleteAsset(asset.mapName);
       }
+    }
+    if (result.deferredReceipt) {
+      this.deferredReceiptByCompilation.set(compilation, result.deferredReceipt);
     }
   }
 

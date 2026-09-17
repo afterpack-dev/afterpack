@@ -67,6 +67,10 @@ It also appends the artifact guard globs (`.afterpack/`, `*.protectionMap.html`,
 There is **no `foo.backup.<hash>.js`** on this plugin: there is no emitted file for a backup to sit
 beside. Setting `build.backup: true` warns rather than silently doing nothing.
 
+There is also **no `.afterpack-protection.json` protection receipt**: an Optimizer has no post-write
+hook to write one from, so `npx afterpack verify` has nothing to check on a Parcel build, and a later
+CLI pass over the same output cannot detect it was already obfuscated.
+
 The source map is returned to Parcel rather than written directly, so Parcel names and emits it with
 its own content hash. Per AfterPack's standard policy, maps are **off in production** — a map leads
 straight back to the source this pass exists to protect. Set `"sourceMap": { "enabled": true }` to override.

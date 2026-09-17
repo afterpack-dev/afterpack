@@ -1,6 +1,15 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PROTECTION_RECEIPT_FILE } from "@afterpack/integration-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __reset, __setProcessResult, engineCalls } from "../../../test/core-fake.js";
 import { AfterpackWebpackPlugin } from "./index.js";
@@ -39,6 +48,7 @@ function applyPlugin(
 ): (fixture: Fixture) => Promise<Map<string, FakeAsset>> {
   let tap: (() => Promise<void>) | undefined;
   let onCompilation: ((compilation: unknown) => void) | undefined;
+  let afterEmitTap: ((compilation: unknown) => Promise<void>) | undefined;
   const compiler = {
     outputPath: outDir,
     options: { context: root, devtool: false, ...compilerOptions },
@@ -61,6 +71,11 @@ function applyPlugin(
       compilation: {
         tap: (_name: string, fn: (compilation: unknown) => void) => {
           onCompilation = fn;
+        },
+      },
+      afterEmit: {
+        tapPromise: (_name: string, fn: (compilation: unknown) => Promise<void>) => {
+          afterEmitTap = fn;
         },
       },
     },
@@ -100,6 +115,7 @@ function applyPlugin(
     onCompilation(compilation);
     if (!tap) throw new Error("processAssets hook was not registered");
     await tap();
+    if (afterEmitTap) await afterEmitTap(compilation);
     return assets;
   };
 }
@@ -204,6 +220,26 @@ describe("AfterpackWebpackPlugin processAssets", () => {
     await expect(invoke({ assets, claimed: ["main.js"] })).rejects.toThrow();
     expect(assets.get("main.js")?.content).toBe("eval('x');");
     expect(readdirSync(outDir)).toEqual([]);
+  });
+});
+
+describe("AfterpackWebpackPlugin protection receipt", () => {
+  it("writes .afterpack-protection.json in afterEmit for the files webpack actually wrote", async () => {
+    writeFileSync(join(outDir, "main.js"), "OBF:export const a = 1;");
+    const invoke = applyPlugin(new AfterpackWebpackPlugin({}));
+    await invoke(fixture({ "main.js": "export const a = 1;" }, ["main.js"]));
+
+    const receiptPath = join(outDir, PROTECTION_RECEIPT_FILE);
+    expect(existsSync(receiptPath)).toBe(true);
+    const receipt = JSON.parse(readFileSync(receiptPath, "utf8"));
+    expect(receipt.files.map((f: { path: string }) => f.path)).toEqual(["main.js"]);
+  });
+
+  it("does not write a receipt for a file the bundler never flushed to disk", async () => {
+    const invoke = applyPlugin(new AfterpackWebpackPlugin({}));
+    await invoke(fixture({ "main.js": "export const a = 1;" }, ["main.js"]));
+
+    expect(existsSync(join(outDir, PROTECTION_RECEIPT_FILE))).toBe(false);
   });
 });
 
