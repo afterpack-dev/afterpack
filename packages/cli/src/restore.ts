@@ -1,16 +1,17 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { isAbsolute, relative, resolve, sep } from "node:path";
-import { sha256Of } from "@afterpack/integration-utils";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { basename, isAbsolute, relative, resolve } from "node:path";
+import { PROTECTION_RECEIPT_FILE, sha256Of } from "@afterpack/integration-utils";
 import { CONTACT_FOOTER } from "./args.js";
 import {
   absoluteFilePath,
   type BackupManifestFile,
   backupDir,
+  findBackupProjectRoot,
   readBackupManifest,
 } from "./backup.js";
 import { EXIT, type ExitCode } from "./exit.js";
 import { dim, green } from "./format.js";
-import { commandFailure, emitJson, type OutputMode } from "./output.js";
+import { commandFailure, displayDir, documentPath, emitJson, type OutputMode } from "./output.js";
 import type { CliLogger } from "./run.js";
 
 export const RESTORE_USAGE = "usage: afterpack restore [dir]";
@@ -20,21 +21,26 @@ export const RESTORE_HELP = `${RESTORE_USAGE}
 Restores the original, pre-obfuscation files that a previous \`afterpack\` run backed up to
 .afterpack/backup/, undoing that run in place.
 
-Refuses to touch a file whose current bytes no longer match what that run obfuscated it to —
-something changed it since, so restoring over it would clobber that change. A missing backup
-manifest is also a refusal: there is nothing to restore.
+Searches upward from [dir] (or the working directory) for the project root that holds
+.afterpack/backup/ — the same directory the \`afterpack\` run was launched from — so restore
+works whether it is pointed at that root or at the build directory beneath it.
+
+Verifies every recorded file against the hash it was obfuscated to BEFORE touching anything: if
+any file no longer matches, or the manifest itself is unreadable, restore changes nothing and
+fails closed. On success it deletes the backup and the stale protection receipt it recorded,
+leaving .afterpack/ itself in place.
 
 Arguments:
-  [dir]                    the project root that holds .afterpack/backup/ (default: the
-                           working directory)
+  [dir]                    a directory at or beneath the project root that holds
+                           .afterpack/backup/ (default: the working directory)
 
 Options:
   --diagnostics.format=<text|json>   json prints ONE document on stdout
                            (default: text)
   --help, -h               this help
 
-Exit codes: 0 when every recorded file was restored, 1 when there is no backup manifest or a
-recorded file no longer matches, 64 on a usage error.
+Exit codes: 0 when every recorded file was restored, 1 when there is no backup manifest, the
+manifest is unreadable, or a recorded file no longer matches, 64 on a usage error.
 
 ${dim(CONTACT_FOOTER)}`;
 
@@ -58,11 +64,14 @@ function fail(
   return commandFailure(deps, "restore", exitCode, code, message, fix, detail);
 }
 
-function displayDir(cwd: string, dir: string): string {
-  const rel = relative(cwd, dir);
-  const path = rel === "" ? "." : rel.startsWith("..") ? dir : rel.split(sep).join("/");
-  return `${path}/`;
+function isRecordedReceipt(projectRoot: string, receiptPath: string): boolean {
+  if (basename(receiptPath) !== PROTECTION_RECEIPT_FILE) return false;
+  const rel = relative(projectRoot, receiptPath);
+  return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel) && existsSync(receiptPath);
 }
+
+const NOTHING_TO_RESTORE_FIX =
+  "Run `afterpack <path>` first — restore reads the backup manifest that run writes.";
 
 export function restore(deps: RestoreDeps): ExitCode {
   const { cwd, positionals } = deps;
@@ -83,35 +92,48 @@ export function restore(deps: RestoreDeps): ExitCode {
       EXIT.failure,
       "PATH_NOT_FOUND",
       `path not found: ${requested}`,
-      "Point restore at the project root that holds .afterpack/backup/.",
+      "Point restore at the project root that holds .afterpack/backup/, or a directory beneath it.",
     );
   }
 
-  const manifest = readBackupManifest(target);
-  if (!manifest) {
+  const projectRoot = findBackupProjectRoot(target);
+  if (projectRoot === null) {
     return fail(
       deps,
       EXIT.failure,
       "NOTHING_TO_RESTORE",
       "Nothing to restore",
-      "Run `afterpack <path>` first — restore reads the backup manifest that run writes.",
+      NOTHING_TO_RESTORE_FIX,
     );
   }
 
-  const restored: BackupManifestFile[] = [];
+  const manifestResult = readBackupManifest(projectRoot);
+  if (manifestResult.status === "corrupt") {
+    return fail(
+      deps,
+      EXIT.failure,
+      "BACKUP_MANIFEST_CORRUPT",
+      "Backup manifest is unreadable",
+      `Delete ${documentPath(cwd, manifestResult.path)} and run \`afterpack <path>\` again — ` +
+        "a corrupt manifest cannot be restored from.",
+    );
+  }
+  if (manifestResult.status === "missing") {
+    return fail(
+      deps,
+      EXIT.failure,
+      "NOTHING_TO_RESTORE",
+      "Nothing to restore",
+      NOTHING_TO_RESTORE_FIX,
+    );
+  }
+  const manifest = manifestResult.manifest;
+
   const mismatched: BackupManifestFile[] = [];
   for (const entry of manifest.files) {
-    const currentPath = absoluteFilePath(target, entry.path);
+    const currentPath = absoluteFilePath(projectRoot, entry.path);
     const matches = existsSync(currentPath) && sha256Of(currentPath) === entry.obfuscatedSha256;
-    if (matches) restored.push(entry);
-    else mismatched.push(entry);
-  }
-
-  const dir = backupDir(target);
-  for (const entry of restored) {
-    const currentPath = absoluteFilePath(target, entry.path);
-    const backupPath = absoluteFilePath(dir, entry.path);
-    writeFileSync(currentPath, readFileSync(backupPath));
+    if (!matches) mismatched.push(entry);
   }
 
   if (mismatched.length > 0) {
@@ -120,12 +142,26 @@ export function restore(deps: RestoreDeps): ExitCode {
       deps,
       EXIT.failure,
       "RESTORE_MISMATCH",
-      `${mismatched.length} ${noun} changed since obfuscation — refusing to restore ${noun === "file" ? "it" : "them"}`,
-      `Restored the other ${restored.length}; rebuild ${mismatched.length === 1 ? "the file below" : "the files below"} from source instead of restoring over it.`,
+      `${mismatched.length} ${noun} changed since obfuscation — restoring nothing`,
+      `Rebuild ${noun === "file" ? "the file below" : "the files below"} from source, then run ` +
+        "`afterpack <path>` again before retrying restore.",
       mismatched.map((f) => f.path),
     );
   }
 
+  const dir = backupDir(projectRoot);
+  for (const entry of manifest.files) {
+    const currentPath = absoluteFilePath(projectRoot, entry.path);
+    const backupPath = absoluteFilePath(dir, entry.path);
+    writeFileSync(currentPath, readFileSync(backupPath));
+  }
+
+  if (manifest.receiptPath && isRecordedReceipt(projectRoot, manifest.receiptPath)) {
+    rmSync(manifest.receiptPath, { force: true });
+  }
+  rmSync(dir, { recursive: true, force: true });
+
+  const restored = manifest.files;
   if (deps.mode.format === "json") {
     emitJson(deps.logger, {
       afterpack: deps.version,
@@ -142,7 +178,7 @@ export function restore(deps: RestoreDeps): ExitCode {
           diagnostics: [],
         })),
       diagnostics: [],
-      summary: { directory: target, files: restored.length },
+      summary: { directory: documentPath(cwd, projectRoot), files: restored.length },
       artifacts: {},
     });
     return EXIT.ok;

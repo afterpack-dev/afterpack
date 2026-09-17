@@ -39,6 +39,7 @@ const SURFACE = [
   "EnvLike",
   "EnvParseResult",
   "GitBuildContext",
+  "findUpward",
   "GlobReserved",
   "InMemoryInput",
   "InMemoryOutput",

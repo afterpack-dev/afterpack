@@ -52,7 +52,7 @@ export {
   type PassTiming,
   runObfuscationPass,
 } from "./pass.js";
-export type { ArtifactMode } from "./paths.js";
+export { type ArtifactMode, findUpward } from "./paths.js";
 export {
   type AfterpackPluginOptions,
   applyResolvedKey,

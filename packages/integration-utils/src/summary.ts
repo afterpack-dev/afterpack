@@ -7,12 +7,17 @@ export interface PassSummaryInput {
   outputBytes: number;
   unobfuscatedCount: number;
   noOpCount: number;
+  elapsedMs: number;
 }
 
 function fmtBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+export function fmtElapsed(ms: number): string {
+  return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
 }
 
 export function formatPassSummary(
@@ -28,6 +33,6 @@ export function formatPassSummary(
       : "") + (input.noOpCount > 0 ? ` · ${input.noOpCount} no-op (unchanged)` : "");
   return (
     `${head} Protected ${input.fileCount} ${files} · ` +
-    `${fmtBytes(input.inputBytes)} → ${fmtBytes(input.outputBytes)}${tail}`
+    `${fmtBytes(input.inputBytes)} → ${fmtBytes(input.outputBytes)}${tail} · ${fmtElapsed(input.elapsedMs)}`
   );
 }

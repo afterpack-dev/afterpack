@@ -91,11 +91,13 @@ export function reportingLogger(logger: CliLogger, mode: OutputMode): CliLogger 
 
 export function documentPath(cwd: string, filePath: string): string {
   const rel = relative(cwd, filePath);
-  return rel === "" || rel.startsWith("..") ? filePath : rel.split(sep).join("/");
+  if (rel === "") return ".";
+  return rel.startsWith("..") ? filePath : rel.split(sep).join("/");
 }
 
 export function displayDir(cwd: string, dir: string): string {
-  return `${documentPath(cwd, dir)}/`;
+  const rel = documentPath(cwd, dir);
+  return rel === "." ? "./" : `${rel}/`;
 }
 
 export type CommandName = "obfuscate" | "verify" | "restore" | "audit";

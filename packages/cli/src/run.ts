@@ -8,6 +8,7 @@ import {
   type EngineBatchResult,
   type EngineDiagnostic,
   type EngineFileResult,
+  getPath,
   type ObfuscationEngine,
   type ObfuscationPassResult,
   type ResolvedPluginConfig,
@@ -486,6 +487,7 @@ async function runObfuscationAndBackup(input: {
       protectedRoot: input.buildDir,
       cliVersion: input.version,
       pending: input.pendingBackups,
+      receiptPath: result?.receiptPath ?? null,
     });
   }
 
@@ -500,8 +502,10 @@ function renderNextSteps(input: {
   projectRoot: string;
   receiptPath: string | null | undefined;
   backupWritten: WriteBackupsResult | null;
+  hasConfiguredKey: boolean;
 }): void {
-  const { report, cwd, env, stdout, projectRoot, receiptPath, backupWritten } = input;
+  const { report, cwd, env, stdout, projectRoot, receiptPath, backupWritten, hasConfiguredKey } =
+    input;
   if (receiptPath) {
     report.log(`  receipt  ${documentPath(cwd, receiptPath)}`);
   }
@@ -517,7 +521,7 @@ function renderNextSteps(input: {
   if (backupWritten !== null && backupWritten.count > 0) {
     report.log(alignRow("undo", "afterpack restore"));
   }
-  if (stdout.isTTY && !env.AFTERPACK_KEY && !isCiTruthy(env.CI)) {
+  if (stdout.isTTY && !hasConfiguredKey && !isCiTruthy(env.CI)) {
     report.log(dim(alignRow("pro", "10 MB/month free · https://www.afterpack.dev/login")));
   }
 }
@@ -673,7 +677,13 @@ export async function run(deps: CliDeps): Promise<number> {
   const parsed = toRunOptions(resolved.config);
   const projectRoot = projectRootFor(cwd, resolved.configFile);
   const backupEnabled = parsed.artifactOptions.build?.backup ?? true;
-  if (resolved.configFile) report.log(`afterpack: using ${resolved.configFile}`);
+  const configuredKey = getPath(resolved.config, "key");
+  const hasConfiguredKey =
+    (typeof configuredKey === "string" && configuredKey !== "") ||
+    (typeof env.AFTERPACK_KEY === "string" && env.AFTERPACK_KEY !== "");
+  if (resolved.configFile) {
+    report.log(`afterpack: using ${documentPath(cwd, resolved.configFile)}`);
+  }
   if (parsed.build?.autorun === false) {
     if (mode.format === "json") {
       emitJson(logger, {
@@ -697,6 +707,17 @@ export async function run(deps: CliDeps): Promise<number> {
     const bare = resolveBareRun({ cwd, logger, mode, version, report });
     if ("exitCode" in bare) return bare.exitCode;
     requested = bare.requested;
+  } else {
+    const explicitTarget = isAbsolute(requested) ? requested : resolve(cwd, requested);
+    if (
+      existsSync(explicitTarget) &&
+      statSync(explicitTarget).isDirectory() &&
+      existsSync(join(explicitTarget, "package.json"))
+    ) {
+      const bare = resolveBareRun({ cwd: explicitTarget, logger, mode, version, report });
+      if ("exitCode" in bare) return bare.exitCode;
+      requested = join(explicitTarget, bare.requested);
+    }
   }
 
   const target = isAbsolute(requested) ? requested : resolve(cwd, requested);
@@ -711,7 +732,11 @@ export async function run(deps: CliDeps): Promise<number> {
   const isDirectory = statSync(target).isDirectory();
   const buildDir = isDirectory ? target : dirname(target);
 
-  const files = collectJsFiles(target, { include: parsed.pathsInclude });
+  const nestedProjects: string[] = [];
+  const files = collectJsFiles(target, {
+    include: parsed.pathsInclude,
+    onNestedProject: (dir) => nestedProjects.push(dir),
+  });
   if (files.length === 0) {
     return refuseHere(
       EXIT.failure,
@@ -725,7 +750,25 @@ export async function run(deps: CliDeps): Promise<number> {
     );
   }
 
-  const backupManifest = readBackupManifest(projectRoot);
+  if (nestedProjects.length > 0) {
+    const shown = nestedProjects.slice(0, 3).map((dir) => displayDir(cwd, dir));
+    const more = nestedProjects.length > 3 ? `, +${nestedProjects.length - 3} more` : "";
+    const plural = nestedProjects.length === 1 ? "" : "s";
+    notice.warn(
+      `${yellow("⚠")} Skipped ${shown.join(", ")}${more} — nested project${plural}, not build ` +
+        `output. Protect ${nestedProjects.length === 1 ? "it" : "each"} from its own directory.`,
+    );
+  }
+
+  const backupManifestResult = readBackupManifest(projectRoot);
+  if (backupManifestResult.status === "corrupt") {
+    notice.warn(
+      `${yellow("⚠")} Backup manifest is unreadable: ${documentPath(cwd, backupManifestResult.path)} — ` +
+        "the already-obfuscated check cannot use it.",
+    );
+  }
+  const backupManifest =
+    backupManifestResult.status === "ok" ? backupManifestResult.manifest : null;
   const pendingBackups: PendingBackup[] =
     backupEnabled || backupManifest ? captureOriginals(projectRoot, files) : [];
   if (backupManifest) {
@@ -820,6 +863,7 @@ export async function run(deps: CliDeps): Promise<number> {
     projectRoot,
     receiptPath: result?.receiptPath,
     backupWritten,
+    hasConfiguredKey,
   });
   return exitCode;
 }

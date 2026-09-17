@@ -227,6 +227,53 @@ describe("run — the Pro key reaches the engine from every documented channel",
   });
 });
 
+describe("run — the Pro upsell line is suppressed whenever a key resolves from ANY layer", () => {
+  function invokeTTY(argv: string[], env: Record<string, string | undefined> = {}) {
+    return run({
+      argv,
+      cwd: root,
+      engine: { processBatch },
+      logger,
+      version: "9.9.9",
+      env,
+      stdout: { isTTY: true, write: () => {} },
+    });
+  }
+
+  it("shows the pro line on an interactive Free build with no key anywhere", async () => {
+    writeFileSync(join(buildDir, "app.js"), "export const a = 1;");
+    expect(await invokeTTY(["dist", "--protectionMap.enabled=false"])).toBe(0);
+    expect(out.join("\n")).toContain("10 MB/month free");
+  });
+
+  it("suppresses it when the key comes from --key", async () => {
+    writeFileSync(join(buildDir, "app.js"), "export const a = 1;");
+    expect(await invokeTTY(["dist", "--protectionMap.enabled=false", "--key=ap_live_cli"])).toBe(0);
+    expect(out.join("\n")).not.toContain("10 MB/month free");
+  });
+
+  it("suppresses it when the key comes from afterpack.json", async () => {
+    writeFileSync(join(buildDir, "app.js"), "export const a = 1;");
+    writeFileSync(join(root, "afterpack.json"), JSON.stringify({ key: "ap_live_file" }));
+    expect(await invokeTTY(["dist", "--protectionMap.enabled=false"])).toBe(0);
+    expect(out.join("\n")).not.toContain("10 MB/month free");
+  });
+
+  it("suppresses it when the key comes from the environment", async () => {
+    writeFileSync(join(buildDir, "app.js"), "export const a = 1;");
+    expect(
+      await invokeTTY(["dist", "--protectionMap.enabled=false"], { AFTERPACK_KEY: "ap_live_env" }),
+    ).toBe(0);
+    expect(out.join("\n")).not.toContain("10 MB/month free");
+  });
+
+  it("still suppresses it in CI even with no key at all", async () => {
+    writeFileSync(join(buildDir, "app.js"), "export const a = 1;");
+    expect(await invokeTTY(["dist", "--protectionMap.enabled=false"], { CI: "true" })).toBe(0);
+    expect(out.join("\n")).not.toContain("10 MB/month free");
+  });
+});
+
 describe("run — a single FILE target", () => {
   it("obfuscates one plain-JS file in place and touches nothing beside it", async () => {
     const file = join(root, "app.js");
@@ -305,11 +352,12 @@ describe("run — node_modules", () => {
     );
   });
 
-  it("reads the nearest afterpack.json and names it", async () => {
+  it("reads the nearest afterpack.json and names it, relative to cwd — never an absolute path", async () => {
     writeFileSync(join(buildDir, "app.js"), "export const a = 1;");
     writeFileSync(join(root, "afterpack.json"), JSON.stringify({ preset: "medium" }));
     expect(await invoke(["dist", "--protectionMap.enabled=false"])).toBe(0);
-    expect(out.join("\n")).toContain(join(root, "afterpack.json"));
+    expect(out.join("\n")).toContain("using afterpack.json");
+    expect(out.join("\n")).not.toContain(root);
     expect(JSON.parse(engineCalls[0].configJson).preset).toBe("medium");
   });
 

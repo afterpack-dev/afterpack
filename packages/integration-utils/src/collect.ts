@@ -21,13 +21,14 @@ function statOrNull(path: string): Stats | null {
 
 export interface CollectJsOptions {
   include?: readonly string[];
+  onNestedProject?: (dir: string) => void;
 }
 
 export function collectJsFiles(target: string, options: CollectJsOptions = {}): string[] {
   const stat = statOrNull(target);
   if (!stat) return [];
   if (!stat.isDirectory()) return isCollectableJs(basename(target)) ? [target] : [];
-  return walkJs(target, options.include ?? [], false);
+  return walkJs(target, options.include ?? [], false, options.onNestedProject);
 }
 
 function entriesOf(dir: string): Dirent[] {
@@ -46,7 +47,16 @@ function kindOf(entry: Dirent, full: string): "dir" | "file" | null {
   return stat.isDirectory() ? "dir" : "file";
 }
 
-function walkJs(dir: string, include: readonly string[], readmitted: boolean): string[] {
+function isNestedProject(dir: string): boolean {
+  return existsSync(join(dir, "package.json"));
+}
+
+function walkJs(
+  dir: string,
+  include: readonly string[],
+  readmitted: boolean,
+  onNestedProject?: (dir: string) => void,
+): string[] {
   const out: string[] = [];
   for (const entry of entriesOf(dir)) {
     const name = entry.name;
@@ -55,8 +65,12 @@ function walkJs(dir: string, include: readonly string[], readmitted: boolean): s
     if (kind === null) continue;
     if (kind === "dir") {
       const skipped = name === NODE_MODULES;
+      if (!skipped && !readmitted && isNestedProject(full)) {
+        onNestedProject?.(full);
+        continue;
+      }
       if (skipped && !include.some((pattern) => reachesInto(pattern, full))) continue;
-      out.push(...walkJs(full, include, readmitted || skipped));
+      out.push(...walkJs(full, include, readmitted || skipped, onNestedProject));
     } else if (isCollectableJs(name)) {
       if (readmitted && !include.some((pattern) => matchesPath(pattern, full))) continue;
       out.push(full);

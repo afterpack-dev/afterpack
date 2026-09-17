@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
-import { sha256Of } from "@afterpack/integration-utils";
+import { findUpward, sha256Of } from "@afterpack/integration-utils";
 
 const BACKUP_MANIFEST_FILE = "manifest.json";
+const BACKUP_MANIFEST_RELATIVE = join(".afterpack", "backup", BACKUP_MANIFEST_FILE);
 
 export interface BackupManifestFile {
   path: string;
@@ -11,11 +12,12 @@ export interface BackupManifestFile {
   obfuscatedSha256: string;
 }
 
-interface BackupManifest {
+export interface BackupManifest {
   schema: 1;
   timestamp: string;
   protectedRoot: string;
   cliVersion: string;
+  receiptPath: string | null;
   files: BackupManifestFile[];
 }
 
@@ -29,6 +31,13 @@ export function backupDir(projectRoot: string): string {
 
 export function backupManifestPath(projectRoot: string): string {
   return join(backupDir(projectRoot), BACKUP_MANIFEST_FILE);
+}
+
+export function findBackupProjectRoot(startDir: string): string | null {
+  const manifestPath = findUpward(startDir, BACKUP_MANIFEST_RELATIVE, {
+    stopAtDir: (dir) => existsSync(join(dir, ".git")),
+  });
+  return manifestPath ? dirname(dirname(dirname(manifestPath))) : null;
 }
 
 function toPosixPath(value: string): string {
@@ -66,16 +75,21 @@ export function captureOriginals(projectRoot: string, files: readonly string[]):
   });
 }
 
-export function readBackupManifest(projectRoot: string): BackupManifest | null {
+export type BackupManifestResult =
+  | { status: "missing" }
+  | { status: "corrupt"; path: string }
+  | { status: "ok"; manifest: BackupManifest };
+
+export function readBackupManifest(projectRoot: string): BackupManifestResult {
   const path = backupManifestPath(projectRoot);
-  if (!existsSync(path)) return null;
+  if (!existsSync(path)) return { status: "missing" };
   try {
     const parsed = JSON.parse(readFileSync(path, "utf8")) as Partial<BackupManifest>;
-    if (parsed.schema !== 1 || !Array.isArray(parsed.files)) return null;
-    if (typeof parsed.protectedRoot !== "string") return null;
-    return parsed as BackupManifest;
+    if (parsed.schema !== 1 || !Array.isArray(parsed.files)) return { status: "corrupt", path };
+    if (typeof parsed.protectedRoot !== "string") return { status: "corrupt", path };
+    return { status: "ok", manifest: parsed as BackupManifest };
   } catch {
-    return null;
+    return { status: "corrupt", path };
   }
 }
 
@@ -84,6 +98,7 @@ interface WriteBackupsInput {
   protectedRoot: string;
   cliVersion: string;
   pending: readonly PendingBackup[];
+  receiptPath: string | null;
 }
 
 export interface WriteBackupsResult {
@@ -111,6 +126,7 @@ export function writeBackups(input: WriteBackupsInput): WriteBackupsResult {
     timestamp: new Date().toISOString(),
     protectedRoot: input.protectedRoot,
     cliVersion: input.cliVersion,
+    receiptPath: input.receiptPath,
     files: files.sort((a, b) => a.path.localeCompare(b.path)),
   };
   const manifestPath = backupManifestPath(input.projectRoot);

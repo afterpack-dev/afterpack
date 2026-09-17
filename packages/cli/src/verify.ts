@@ -4,7 +4,7 @@ import { PROTECTION_RECEIPT_FILE, verifyProtectionReceipt } from "@afterpack/int
 import { CONTACT_FOOTER } from "./args.js";
 import { EXIT, type ExitCode } from "./exit.js";
 import { dim, green } from "./format.js";
-import { commandFailure, displayDir, emitJson, type OutputMode } from "./output.js";
+import { commandFailure, displayDir, documentPath, emitJson, type OutputMode } from "./output.js";
 import type { CliLogger } from "./run.js";
 
 const VERIFY_USAGE = "usage: afterpack verify [dir] [--diagnostics.format=text|json]";
@@ -104,7 +104,9 @@ export function verify(deps: VerifyDeps): ExitCode {
       `no protection receipt found for ${requested}`,
       "A receipt is written by the run that obfuscated the tree — run `afterpack <dir>`, or " +
         "build again through the framework plugin, then point verify at that output directory.",
-      candidates(target).map((c) => `looked in ${join(c, PROTECTION_RECEIPT_FILE)}`),
+      candidates(target).map(
+        (c) => `looked in ${documentPath(cwd, join(c, PROTECTION_RECEIPT_FILE))}`,
+      ),
     );
   }
 
@@ -114,7 +116,7 @@ export function verify(deps: VerifyDeps): ExitCode {
       deps,
       EXIT.failure,
       "RECEIPT_MISMATCH",
-      `${dir} FAILED verification: ${problems.join("; ")}`,
+      `${documentPath(cwd, dir)} FAILED verification: ${problems.join("; ")}`,
       "Rebuild the tree with the AfterPack front door and verify the fresh output; " +
         "never deploy a tree whose receipt does not match.",
       problems,
@@ -139,7 +141,7 @@ export function verify(deps: VerifyDeps): ExitCode {
         })),
       diagnostics: [],
       summary: {
-        directory: dir,
+        directory: documentPath(cwd, dir),
         tool: receipt?.tool ?? null,
         bundler: receipt?.bundler ?? null,
         buildId: receipt?.buildId ?? null,

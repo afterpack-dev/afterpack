@@ -121,6 +121,53 @@ describe("collectJsFiles", () => {
       join("node_modules", "left-pad", "index.js"),
     ]);
   });
+
+  it("never descends into a nested subdirectory that has its own package.json", () => {
+    mkdirSync(join(root, "widget"), { recursive: true });
+    writeFileSync(join(root, "app.js"), "1");
+    writeFileSync(join(root, "widget", "package.json"), "{}");
+    writeFileSync(join(root, "widget", "index.js"), "2");
+
+    expect(rel(collectJsFiles(root))).toEqual(["app.js"]);
+  });
+
+  it("reports every skipped nested project so the caller can say what it left alone", () => {
+    mkdirSync(join(root, "widget"), { recursive: true });
+    mkdirSync(join(root, "a", "standalone"), { recursive: true });
+    writeFileSync(join(root, "app.js"), "1");
+    writeFileSync(join(root, "widget", "package.json"), "{}");
+    writeFileSync(join(root, "widget", "index.js"), "2");
+    writeFileSync(join(root, "a", "standalone", "package.json"), "{}");
+    writeFileSync(join(root, "a", "standalone", "server.js"), "3");
+
+    const skipped: string[] = [];
+    const files = collectJsFiles(root, { onNestedProject: (dir) => skipped.push(dir) });
+
+    expect(rel(files)).toEqual(["app.js"]);
+    expect(rel(skipped).sort()).toEqual([join("a", "standalone"), "widget"]);
+  });
+
+  it("skips a nested project several levels deep, not just an immediate child", () => {
+    mkdirSync(join(root, "a", "b", "widget"), { recursive: true });
+    writeFileSync(join(root, "app.js"), "1");
+    writeFileSync(join(root, "a", "b", "other.js"), "2");
+    writeFileSync(join(root, "a", "b", "widget", "package.json"), "{}");
+    writeFileSync(join(root, "a", "b", "widget", "index.js"), "3");
+
+    expect(rel(collectJsFiles(root))).toEqual([join("a", "b", "other.js"), "app.js"]);
+  });
+
+  it("does not skip node_modules readmitted by include, even though every package has its own package.json", () => {
+    mkdirSync(join(root, "node_modules", "left-pad"), { recursive: true });
+    writeFileSync(join(root, "app.js"), "1");
+    writeFileSync(join(root, "node_modules", "left-pad", "package.json"), "{}");
+    writeFileSync(join(root, "node_modules", "left-pad", "index.js"), "2");
+
+    expect(rel(collectJsFiles(root, { include: ["**/node_modules/**"] }))).toEqual([
+      "app.js",
+      join("node_modules", "left-pad", "index.js"),
+    ]);
+  });
 });
 
 describe("collectSourceMaps", () => {

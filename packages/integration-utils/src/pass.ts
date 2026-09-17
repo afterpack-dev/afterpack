@@ -613,6 +613,7 @@ export async function runObfuscationPass(
         outputBytes,
         unobfuscatedCount: unobfuscatedFiles.length,
         noOpCount: noOp,
+        elapsedMs: totalMs,
       },
       style,
       options.colorGlyph,
