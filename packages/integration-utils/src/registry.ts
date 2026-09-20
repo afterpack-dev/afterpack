@@ -133,6 +133,15 @@ export const CONFIG_KEYS = [
     default: "unset; the count is reported but never fails a build",
   },
   {
+    path: "strings.preserveLiterals",
+    shape: "list",
+    scope: "program",
+    tier: "free",
+    surface: "engine",
+    item: { kind: "string" },
+    default: "[]",
+  },
+  {
     path: "paths.include",
     shape: "list",
     scope: "program",
@@ -836,7 +845,12 @@ export interface EngineConfigSubset {
   preset?: string;
   complexity?: number;
   inflation?: { max?: number | string };
-  strings?: { encode?: boolean; minLength?: number; leaks?: { max?: number } };
+  strings?: {
+    encode?: boolean;
+    minLength?: number;
+    leaks?: { max?: number };
+    preserveLiterals?: string[];
+  };
   paths?: { exclude?: string[] };
   identifiers?: {
     rename?: boolean;
