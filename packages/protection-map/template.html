@@ -4418,7 +4418,6 @@ async function afterpackInflateBase64Gzip(b64) {
     var cat = CATEGORY_LABEL[g.category] || (g.category || "").toLowerCase();
     var caption = [cat, g.phase].filter(Boolean).join(" · ");
     var delta = [];
-    if (g.entropyGain) delta.push("+" + g.entropyGain + "H");
     if (g.sizeDeltaEst) delta.push((g.sizeDeltaEst >= 0 ? "+" : "") + g.sizeDeltaEst + "B");
     return '<div class="chain-step">' +
       '<div class="chain-rail"><span class="chain-dot"></span><span class="chain-line"></span></div>' +
