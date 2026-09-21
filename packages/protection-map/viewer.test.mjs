@@ -670,3 +670,45 @@ test("L. the weak-spots header states its count, at 0 and at N", async () => {
   assert.equal(weak.inspectorSummary(weak.FILES[1], { regionIdx: 0 }), "Preserved");
   assert.equal(weak.inspectorSummary(weak.FILES[1], null), "no selection");
 });
+
+test("M. heat is PER-FILE RELATIVE: a file's hottest region(s) paint red, its coolest positive region stays faint, score<=0/preserved never gets heat", async () => {
+  const v = await loadViewer(docWithMachineryAsLastFile());
+  const app = v.FILES[0];
+  assert.equal(app.regions[0].raw.score, 53);
+  assert.equal(app.regions[1].raw.score, 71);
+  assert.equal(
+    app.regions[0].heatNorm,
+    1,
+    "the lowest positive score in the file normalizes to the faint floor, never to 0 (0 is reserved for score<=0/preserved so the two never look alike)",
+  );
+  assert.equal(
+    app.regions[1].heatNorm,
+    100,
+    "the highest score in the file always normalizes to 100 (red), regardless of its absolute value",
+  );
+
+  v.paintCode(app);
+  const html = v.byId("code-body").innerHTML;
+  const bgFor = (idx) => {
+    const m = html.match(
+      new RegExp(`style="background:(rgba\\([^)]*\\))"[^>]*data-region-idx="${idx}"`),
+    );
+    return m ? m[1] : null;
+  };
+  assert.equal(bgFor(0), "rgba(255,242,191,0.104)", "the coolest region in this file paints faint");
+  assert.equal(
+    bgFor(1),
+    "rgba(182,32,32,0.500)",
+    "the hottest region in this file paints red, at the alpha cap",
+  );
+
+  const mach = v.FILES[1];
+  assert.equal(mach.regions[0].raw.score, 0);
+  assert.equal(mach.regions[0].heatNorm, 0, "a score-0 region never carries a heat metric");
+  assert.equal(mach.regions[1].raw.score, 44);
+  assert.equal(
+    mach.regions[1].heatNorm,
+    100,
+    "a file with exactly one positive-score region treats it as that file's own max -- it paints red, not mid-ramp",
+  );
+});

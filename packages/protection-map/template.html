@@ -51,17 +51,19 @@
   /* the whole-file "machinery bucket" wash -- deliberately near-neutral */
   --wash: #f3f3f3;
 
-  /* protection heatmap: sequential single-hue GOLD, warm(low score) -> deep bronze(high score).
-     Every stop is composited at <= 0.5 alpha over the page ground (see tokenAlpha),
-     so the LOW stops are deliberately saturated rather than near-white -- a pale
-     stop washed to 28% alpha makes an attributed token effectively invisible. */
-  --heat-0: #f2d68c;
-  --heat-1: #e8c268;
-  --heat-2: #d6a844;
-  --heat-3: #bf8e2a;
-  --heat-4: #a67818;
-  --heat-5: #8e6413;
-  --heat-6: #78500f;
+  /* protection heatmap: sequential PER-FILE RELATIVE ramp, none(low score in
+     this file) -> yellow -> RED (high score in this file). Every stop is
+     composited at <= 0.5 alpha over the page ground (see tokenAlpha), and the
+     alpha floor is now low on purpose: the file's coolest positive-score
+     region should read as barely-there, so only its hottest region(s) read
+     unmistakably red. */
+  --heat-0: #fff3c2;
+  --heat-1: #ffde85;
+  --heat-2: #ffc247;
+  --heat-3: #fa940f;
+  --heat-4: #e6650f;
+  --heat-5: #d1381a;
+  --heat-6: #b62020;
 
   /* cost lens: sequential single-hue amber, pale(cheap) -> deep(costly) */
   --cost-0: #f8e3d5;
@@ -155,15 +157,14 @@
 
     --wash: #252526;
 
-    /* dark ramp: bronze -> SATURATED gold. It deliberately does NOT climb to a
-       pale gold any more. The ground moved from near-black (#020202) to VS
-       Code's #1f1f1f, and at the wash's 0.5 alpha cap a pale-gold top stop
-       composites into the mid-tones, where NOTHING contrasts -- body text over
-       #fcea85@0.5 over #1f1f1f measures 2.33:1. Capping the ramp's luminance
-       (not its chroma) keeps "hot" unmistakable while restoring 4.6:1. The
-       low->high separation is carried by alpha (0.28 -> 0.5) + saturation. */
-    --heat-0: #5a3d0c; --heat-1: #6d4a0d; --heat-2: #80570e; --heat-3: #92640e;
-    --heat-4: #a06f0f; --heat-5: #ac790f; --heat-6: #b8830f;
+    /* dark ramp: dim bronze -> SATURATED red. It deliberately does NOT climb to
+       a pale top stop. The ground is VS Code's #1f1f1f, and at the wash's 0.5
+       alpha cap a pale top stop composites into the mid-tones, where NOTHING
+       contrasts. Capping the ramp's luminance (not its chroma) keeps "hot"
+       unmistakable while staying legible. The low->high separation is carried
+       by alpha (0.10 -> 0.5) + hue (amber -> red) + saturation. */
+    --heat-0: #543912; --heat-1: #714514; --heat-2: #8e4e15; --heat-3: #b15416;
+    --heat-4: #d14b1a; --heat-5: #df3c2a; --heat-6: #df4949;
 
     --cost-0: #2a1c11; --cost-1: #482b14; --cost-2: #6d411c; --cost-3: #955823;
     --cost-4: #bf6f29; --cost-5: #e78b3c; --cost-6: #fca765;
@@ -206,8 +207,8 @@
   --surface-hover: #e8e8e8; --scrollbar: #c9c9c9; --border: #e5e5e5; --border-strong: #cecece;
   --text-primary: #262626; --text-secondary: #616161; --text-muted: #767676;
   --brand: #a06a12; --brand-hover: #b57317; --brand-ink: #ffffff; --focus-ring: #a06a12; --wash: #f3f3f3;
-  --heat-0: #f2d68c; --heat-1: #e8c268; --heat-2: #d6a844; --heat-3: #bf8e2a;
-  --heat-4: #a67818; --heat-5: #8e6413; --heat-6: #78500f;
+  --heat-0: #fff3c2; --heat-1: #ffde85; --heat-2: #ffc247; --heat-3: #fa940f;
+  --heat-4: #e6650f; --heat-5: #d1381a; --heat-6: #b62020;
   --cost-0: #f8e3d5; --cost-1: #eec9ae; --cost-2: #dda780; --cost-3: #c48350;
   --cost-4: #a45f24; --cost-5: #7f4406; --cost-6: #5a2d00;
   --band-safety: #d4d4d4; --band-reflection: #bdbdbd; --band-skip: #969696;
@@ -229,8 +230,8 @@
   --surface-hover: #2a2d2e; --scrollbar: #4f4f4f; --border: #2b2b2b; --border-strong: #3c3c3c;
   --text-primary: #cccccc; --text-secondary: #9d9d9d; --text-muted: #8c8c8c;
   --brand: #eaae3d; --brand-hover: #fcea85; --brand-ink: #0a0a0a; --focus-ring: #eaae3d; --wash: #252526;
-  --heat-0: #5a3d0c; --heat-1: #6d4a0d; --heat-2: #80570e; --heat-3: #92640e;
-  --heat-4: #a06f0f; --heat-5: #ac790f; --heat-6: #b8830f;
+  --heat-0: #543912; --heat-1: #714514; --heat-2: #8e4e15; --heat-3: #b15416;
+  --heat-4: #d14b1a; --heat-5: #df3c2a; --heat-6: #df4949;
   --cost-0: #2a1c11; --cost-1: #482b14; --cost-2: #6d411c; --cost-3: #955823;
   --cost-4: #bf6f29; --cost-5: #e78b3c; --cost-6: #fca765;
   --band-safety: #2a2a2a; --band-reflection: #333333; --band-skip: #474747;
@@ -1722,9 +1723,9 @@ details[open] > .details-summary::before { transform: rotate(90deg); }
     <div id="directive-legend"></div>
   </div>
   <div class="popover-section">
-    <span class="eyebrow" id="legend-title">Scale · Protection</span>
+    <span class="eyebrow" id="legend-title">Scale · Protection (per file)</span>
     <div class="legend-bar" id="legend-bar"></div>
-    <div class="legend-labels" id="legend-labels"><span>low</span><span>high</span></div>
+    <div class="legend-labels" id="legend-labels"><span>low in file</span><span>high in file</span></div>
   </div>
   <div class="popover-section">
     <span class="eyebrow">Engine</span>
@@ -1941,32 +1942,31 @@ async function afterpackInflateBase64Gzip(b64) {
     for (var i = 0; i <= 6; i++) out.push(readVar("--" + prefix + "-" + i));
     return out;
   }
-  // token wash: alpha climbs with score/cost so hotter code reads more
-  // saturated, capped well below 1 so the page's own text color stays
-  // legible painted straight on top (no per-token ink swap needed).
-  // The FLOOR matters as much as the cap: at the old 0.16 a low/mid-score region
-  // was a rumour, not a highlight. It now starts at 0.28 (an attributed span is
-  // always plainly visible) and still tops out at 0.5 -- the cap is unchanged, so
-  // the worst-case body-text-over-brightest-stop contrast is no worse than before.
-  function tokenAlpha(m) { return m <= 0 ? 0 : Math.min(0.5, 0.28 + (m / 100) * 0.22); }
-  // Renamed BASELINE wash: a faint teal (--class-renamed hue), deliberately much
-  // weaker than a region's gold floor (tokenAlpha starts at 0.28) so a mostly-
-  // renamed file reads as a low, even baseline with the hardened regions standing
-  // out hot on top. Different HUE (teal vs gold) as well as lower alpha, so the two
-  // tiers never blur together. Never applied where a region covers the token --
-  // the region always wins (see the run builder / painter). EYEBALL: tune here.
+  // token wash: alpha climbs with the region's PER-FILE relative heat metric
+  // (see heatNorm), so the file's own hottest region(s) read most saturated,
+  // capped well below 1 so the page's own text color stays legible painted
+  // straight on top (no per-token ink swap needed). The floor is deliberately
+  // low now: a low-normalized region (the file's coolest positive-score
+  // region) should read as barely-there, not as a rumour of the old flat
+  // 0.28 floor -- the whole point of the relative ramp is none -> yellow -> red.
+  function tokenAlpha(m) { return m <= 0 ? 0 : Math.min(0.5, 0.10 + (m / 100) * 0.42); }
+  // Renamed BASELINE wash: a faint teal (--class-renamed hue). Different HUE
+  // (teal vs the heat ramp's gold/red) so it never blurs into region heat even
+  // where the two land at similar alpha. Never applied where a region covers
+  // the token -- the region always wins (see the run builder / painter).
+  // EYEBALL: tune here.
   var RENAMED_WASH_ALPHA = 0.16;
   // EXTRACTED wash: the `Globals` lane (a property name / free global routed
-  // through the constant pool) sits one tier ABOVE the rename baseline and below
-  // any real region. Same teal hue -- both are class-1, injective, pool-recoverable
-  // re-encodings -- but a step more saturated, so the two compact lanes read as
-  // related-but-distinct and neither can be mistaken for the gold region heat
-  // (whose floor is 0.28, still clear of this). EYEBALL: tune here.
+  // through the constant pool) sits one tier ABOVE the rename baseline. Same
+  // teal hue -- both are class-1, injective, pool-recoverable re-encodings --
+  // but a step more saturated, so the two compact lanes read as
+  // related-but-distinct. EYEBALL: tune here.
   var EXTRACTED_WASH_ALPHA = 0.22;
   // per-line wash is near-eliminated: ordinary and low-region lines get NO tint
-  // (kills the old distracting grey "zebra"), so the gold heat lives at the TOKEN
-  // level. Only a line whose covered span is DOMINATED by high-score region tokens
-  // carries a whisper (>= 60 avg metric), capped very low to stay clean in dark.
+  // (kills the old distracting grey "zebra"), so the heat lives at the TOKEN
+  // level. Only a line whose covered span is DOMINATED by tokens that are hot
+  // RELATIVE to this file carries a whisper (>= 60 avg normalized metric),
+  // capped very low to stay clean in dark.
   function lineAlpha(m) { return m < 60 ? 0 : Math.min(0.07, ((m - 60) / 40) * 0.07); }
   function heatSolid(score) { return rampColor(currentRamp("heat"), Math.max(0, Math.min(100, score)) / 100); }
 
@@ -2902,6 +2902,20 @@ async function afterpackInflateBase64Gzip(b64) {
     var machinery = regions.filter(function (r) { return r.isMachinery; })[0] || null;
     var realRegions = regions.filter(function (r) { return !r.isMachinery; });
 
+    var heatPositive = [], heatMax = 0;
+    realRegions.forEach(function (r) {
+      var s = r.raw.score || 0;
+      if (s > heatMax) heatMax = s;
+      if (s > 0) heatPositive.push(s);
+    });
+    var heatMinPos = heatPositive.length ? Math.min.apply(null, heatPositive) : 0;
+    regions.forEach(function (r) {
+      var s = r.raw.score || 0;
+      if (s <= 0) { r.heatNorm = 0; return; }
+      var norm = heatMax === heatMinPos ? 100 : ((s - heatMinPos) / (heatMax - heatMinPos)) * 100;
+      r.heatNorm = Math.max(1, norm);
+    });
+
     var spotlights = (fdoc.spotlights || []).map(function (s, idx) {
       var span = s.span || [0, 0];
       var startChar = byteToChar(span[0]);
@@ -3469,7 +3483,7 @@ async function afterpackInflateBase64Gzip(b64) {
   var codeBody = document.getElementById("code-body");
 
   function metricForRegion(region) {
-    return region ? (region.raw.score || 0) : 0;
+    return region ? (region.heatNorm || 0) : 0;
   }
   // A region the engine left literal ON PURPOSE (module specifier / directive /
   // public key ...) -- either flagged with a `preservedReason`, or a real
@@ -4282,7 +4296,7 @@ async function afterpackInflateBase64Gzip(b64) {
     var ramp = currentRamp("heat");
     var stops = ramp.map(function (c, i) { return c + " " + ((i / (ramp.length - 1)) * 100).toFixed(1) + "%"; });
     bar.style.background = "linear-gradient(to right, " + stops.join(", ") + ")";
-    labels.innerHTML = "<span>low</span><span>high score</span>";
+    labels.innerHTML = "<span>low in file</span><span>high in file</span>";
   }
 
   function renderEngineInfo(file) {
