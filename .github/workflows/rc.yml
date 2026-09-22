@@ -18,9 +18,78 @@ permissions:
   id-token: write
 
 jobs:
+  pro-path:
+    name: Pro cloud path (staging)
+    runs-on: ubuntu-latest
+    # The key lives in an environment, so it reaches this job and nothing else.
+    # A pull request from a fork is never given secrets at all, which is why
+    # this check is here and not in the contributor lane.
+    environment: staging-pro
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      # A throwaway project rather than an e2e fixture: this is the paid path,
+      # and it should not break because a fixture's layout moved.
+      - name: A build with a key runs on the Pro engine
+        env:
+          AFTERPACK_KEY: ${{ secrets.AFTERPACK_KEY }}
+          AFTERPACK_API_URL: ${{ vars.AFTERPACK_API_URL }}
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/pro" && mkdir -p "$RUNNER_TEMP/pro/dist"
+          echo '{"name":"pro-path-check","private":true}' > "$RUNNER_TEMP/pro/package.json"
+          echo 'export const k="paid";export function f(a){return a*2}' > "$RUNNER_TEMP/pro/dist/app.js"
+          node packages/cli/dist/cli.js "$RUNNER_TEMP/pro/dist" \
+            --protectionMap.enabled=false --telemetry.enabled=false
+          ENGINE=$(node -p "require('$RUNNER_TEMP/pro/dist/.afterpack-protection.json').engine")
+          echo "receipt records engine: $ENGINE"
+          if [ "$ENGINE" != "cloud" ]; then
+            echo "a build with a Pro key did not run on the cloud engine (receipt says '$ENGINE')" >&2
+            exit 1
+          fi
+
+      # The guarantee that matters: a key that the API refuses must FAIL the
+      # build, never quietly produce free-tier output.
+      - name: A build with a rejected key fails closed
+        env:
+          AFTERPACK_KEY: ap_v1_0000000000000000000000000000000000000000
+          AFTERPACK_API_URL: ${{ vars.AFTERPACK_API_URL }}
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/closed" && mkdir -p "$RUNNER_TEMP/closed/dist"
+          echo '{"name":"fail-closed-check","private":true}' > "$RUNNER_TEMP/closed/package.json"
+          SOURCE='export const k="paid";export function f(a){return a*2}'
+          printf '%s' "$SOURCE" > "$RUNNER_TEMP/closed/dist/app.js"
+          if node packages/cli/dist/cli.js "$RUNNER_TEMP/closed/dist" \
+            --protectionMap.enabled=false --telemetry.enabled=false; then
+            echo "a rejected key produced a successful build" >&2
+            exit 1
+          fi
+          if [ "$(cat "$RUNNER_TEMP/closed/dist/app.js")" != "$SOURCE" ]; then
+            echo "a rejected key rewrote the input" >&2
+            exit 1
+          fi
+          if [ -f "$RUNNER_TEMP/closed/dist/.afterpack-protection.json" ]; then
+            echo "a rejected key still wrote a protection receipt" >&2
+            exit 1
+          fi
+
   publish:
     name: Test and publish a release candidate
     runs-on: ubuntu-latest
+    needs: pro-path
     environment: npm
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
