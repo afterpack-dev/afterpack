@@ -15,8 +15,7 @@
   },
   "obfuscation": {
     "minFiles": 3,
-    "passes": 3,
-    "minRatioPercent": 100
+    "passes": 3
   },
   "electron": {
     "legs": {

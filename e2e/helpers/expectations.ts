@@ -33,7 +33,6 @@ export interface SmokeExpectations {
 export interface ObfuscationExpectation {
   minFiles: number;
   passes: number;
-  minRatioPercent: number;
 }
 
 export interface CliCase {

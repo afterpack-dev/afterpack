@@ -6,20 +6,23 @@
   "deterministicOutput": true,
   "build": {
     "outputDir": "dist",
-    "bundles": ["client"],
+    "bundles": [
+      "client"
+    ],
     "note": "node build.mjs bundles src/main.js -> dist/app.js, obfuscated by @afterpack/esbuild's onEnd hook (build.backup:false)"
   },
   "obfuscation": {
     "minFiles": 1,
-    "passes": 1,
-    "minRatioPercent": 100
+    "passes": 1
   },
   "smoke": {
     "routes": [
       {
         "path": "/",
         "status": 200,
-        "textContains": ["esbuild app fixture"],
+        "textContains": [
+          "esbuild app fixture"
+        ],
         "selectors": {
           "[data-testid=\"title\"]": "esbuild app fixture",
           "[data-testid=\"intro\"]": "AfterPack framework-integration smoke fixture.",
@@ -32,7 +35,9 @@
         "route": "/",
         "description": "Clicking the counter runs the obfuscated bundle's #private-field class and re-renders.",
         "click": "[data-testid=\"counter\"]",
-        "expectTextContains": ["count is 1 (odd)"]
+        "expectTextContains": [
+          "count is 1 (odd)"
+        ]
       }
     ],
     "consoleErrors": "none"

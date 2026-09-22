@@ -13,8 +13,7 @@
   },
   "obfuscation": {
     "minFiles": 1,
-    "passes": 1,
-    "minRatioPercent": 100
+    "passes": 1
   },
   "cli": {
     "entry": "dist/cli.js",

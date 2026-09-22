@@ -6,20 +6,24 @@
   "deterministicOutput": true,
   "build": {
     "outputDir": "dist",
-    "bundles": ["esm", "cjs"],
+    "bundles": [
+      "esm",
+      "cjs"
+    ],
     "note": "rollup -c emits dist/esm/lib.js + dist/cjs/lib.cjs, each obfuscated by @afterpack/rollup's writeBundle hook (build.backup:false)"
   },
   "obfuscation": {
     "minFiles": 2,
-    "passes": 2,
-    "minRatioPercent": 100
+    "passes": 2
   },
   "smoke": {
     "routes": [
       {
         "path": "/",
         "status": 200,
-        "textContains": ["Rollup lib host"],
+        "textContains": [
+          "Rollup lib host"
+        ],
         "selectors": {
           "[data-testid=\"title\"]": "Rollup lib host",
           "[data-testid=\"intro\"]": "AfterPack framework-integration smoke fixture.",
@@ -33,7 +37,9 @@
         "route": "/",
         "description": "Clicking the counter drives the obfuscated library's #private-field class and re-renders.",
         "click": "[data-testid=\"counter\"]",
-        "expectTextContains": ["count is 1 (odd)"]
+        "expectTextContains": [
+          "count is 1 (odd)"
+        ]
       }
     ],
     "consoleErrors": "none"

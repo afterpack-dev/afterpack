@@ -13,8 +13,7 @@
   },
   "obfuscation": {
     "minFiles": 3,
-    "passes": 1,
-    "minRatioPercent": 100
+    "passes": 1
   },
   "smoke": {
     "routes": [

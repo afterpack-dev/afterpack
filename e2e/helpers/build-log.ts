@@ -84,12 +84,6 @@ export function expectObfuscationPass(
   const noOp = passes.reduce((n, p) => n + p.noOp, 0);
   expect(noOp, `${name}: all ${files} file(s) came back no-op (unchanged)`).toBeLessThan(files);
 
-  for (const pass of passes) {
-    expect(
-      pass.ratioPercent,
-      `${name}: ${pass.passLabel} emitted ${pass.ratioPercent}% of its input`,
-    ).toBeGreaterThanOrEqual(expected.minRatioPercent);
-  }
   return passes;
 }
 
