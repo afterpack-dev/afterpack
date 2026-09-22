@@ -39,6 +39,7 @@ import {
 } from "./policy.js";
 import {
   detectAlreadyObfuscatedInputs,
+  type EngineSource,
   type WriteProtectionReceiptInput,
   writeProtectionReceipt,
 } from "./receipt.js";
@@ -574,8 +575,11 @@ export async function runObfuscationPass(
 
   let receiptPath: string | null = null;
   let deferredReceipt: WriteProtectionReceiptInput | null = null;
+  const engineSource: EngineSource | null =
+    batch.source === "local" || batch.source === "cloud" ? batch.source : null;
   const receiptFields = {
     tool: label,
+    engine: engineSource,
     engineVersion,
     seed,
     seedOrigin: resolvedSeed.origin,
@@ -603,7 +607,6 @@ export async function runObfuscationPass(
   const writeEndedAt = Date.now();
   const writeMs = writeEndedAt - engineEndedAt;
   const totalMs = writeEndedAt - passStartedAt;
-  const engineSource = batch.source === "local" || batch.source === "cloud" ? batch.source : null;
   const cloudMs = engineSource === "cloud" ? engineMs : null;
   const timing: PassTiming = {
     totalMs,

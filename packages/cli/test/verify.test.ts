@@ -32,6 +32,7 @@ function protectedBuild(opts: { transformed?: boolean } = {}): { distDir: string
   writeProtectionReceipt({
     dir: distDir,
     tool: "@afterpack/next",
+    engine: "cloud",
     engineVersion: "9.9.9-test",
     seed: 4242,
     seedOrigin: "option",

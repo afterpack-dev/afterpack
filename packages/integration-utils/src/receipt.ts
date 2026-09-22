@@ -11,9 +11,12 @@ export interface ProtectionReceiptFile {
   transformed: boolean;
 }
 
+export type EngineSource = "local" | "cloud";
+
 export interface ProtectionReceipt {
   schema: 1;
   tool: string;
+  engine: EngineSource | null;
   engineVersion: string | null;
   seed: string;
   seedOrigin: string;
@@ -37,6 +40,7 @@ function receiptPathOf(dir: string, file: string): string {
 export interface WriteProtectionReceiptInput {
   dir: string;
   tool: string;
+  engine: EngineSource | null;
   engineVersion: string | null;
   seed: number | string;
   seedOrigin: string;
@@ -59,6 +63,7 @@ export function writeProtectionReceipt(input: WriteProtectionReceiptInput): stri
   const receipt: ProtectionReceipt = {
     schema: 1,
     tool: input.tool,
+    engine: input.engine,
     engineVersion: input.engineVersion,
     seed: String(input.seed),
     seedOrigin: input.seedOrigin,

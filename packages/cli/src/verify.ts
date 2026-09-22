@@ -143,6 +143,7 @@ export function verify(deps: VerifyDeps): ExitCode {
       summary: {
         directory: documentPath(cwd, dir),
         tool: receipt?.tool ?? null,
+        engine: receipt?.engine ?? null,
         bundler: receipt?.bundler ?? null,
         buildId: receipt?.buildId ?? null,
         seed: receipt?.seed ?? null,
@@ -155,9 +156,11 @@ export function verify(deps: VerifyDeps): ExitCode {
     return EXIT.ok;
   }
 
+  const engine = receipt?.engine === "cloud" ? " · AfterPack Pro" : "";
   deps.report.log(
     `${green("✓")} Verified ${files.length} ${files.length === 1 ? "file" : "files"} · ` +
-      displayDir(deps.cwd, dir),
+      displayDir(deps.cwd, dir) +
+      engine,
   );
   return EXIT.ok;
 }

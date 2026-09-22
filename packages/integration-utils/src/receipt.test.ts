@@ -22,6 +22,7 @@ function receiptAt(dir: string, files: string[]): string {
   return writeProtectionReceipt({
     dir,
     tool: "afterpack-test",
+    engine: "local",
     engineVersion: null,
     seed: 1,
     seedOrigin: "fresh",
