@@ -261,9 +261,9 @@ describe("reporter", () => {
   });
 
   it("honors AFTERPACK_API_URL, the same override the cloud client reads", async () => {
-    const h = harness({ AFTERPACK_API_URL: "https://staging-api.afterpack.dev/" });
+    const h = harness({ AFTERPACK_API_URL: "https://api.example.com/" });
     await createTelemetryReporter(h.deps)(facts());
-    expect(h.calls[0].url).toBe(`https://staging-api.afterpack.dev${TELEMETRY_ENDPOINT_PATH}`);
+    expect(h.calls[0].url).toBe(`https://api.example.com${TELEMETRY_ENDPOINT_PATH}`);
   });
 
   it("persists only an id and two timestamps — no build history", async () => {
