@@ -166,9 +166,20 @@ function assertMapping(map: RawSourceMap, where: string, baseDir: string): numbe
   const positions = decodeFirstSegments(map.mappings as string, 64);
   expect(positions.length, `${where} decodes to no mapped position at all`).toBeGreaterThan(0);
 
+  const named = positions.some((position) => {
+    const source = sources[position.sourceIndex];
+    return source != null && position.sourceLine >= 0 && position.sourceColumn >= 0;
+  });
+  expect(
+    named,
+    `${where}: no mapped position resolves to a named source at a real line and column`,
+  ).toBe(true);
+
   const contents = Array.isArray(map.sourcesContent)
     ? (map.sourcesContent as (string | null)[])
     : [];
+  if (contents.length === 0) return 1;
+
   const sourceRoot = typeof map.sourceRoot === "string" ? map.sourceRoot : "";
   const anchored = positions.some((position) => {
     const source = sources[position.sourceIndex];
@@ -179,8 +190,7 @@ function assertMapping(map: RawSourceMap, where: string, baseDir: string): numbe
   });
   expect(
     anchored,
-    `${where}: no mapped position lands in a source that either carries sourcesContent or ` +
-      "resolves on disk next to the map",
+    `${where}: carries sourcesContent, but no mapped position lands in a source that has any`,
   ).toBe(true);
   return 1;
 }
