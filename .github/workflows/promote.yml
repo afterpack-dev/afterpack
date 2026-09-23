@@ -135,8 +135,9 @@ jobs:
         with:
           node-version: 22
 
-      # A MAJOR engine bump is a deliberate migration, never an automatic
-      # commit: it fails here so a human does it.
+      # A breaking engine bump is a deliberate migration, never an automatic
+      # commit: it fails here so a human does it. Under major 0 a minor
+      # change is breaking, exactly like a major.
       - name: Repin @afterpack/core across every package
         run: |
           NEXT="${{ github.event.client_payload.version }}"
@@ -148,16 +149,20 @@ jobs:
             console.error(`::error::'${next}' is not a stable version`);
             process.exit(1);
           }
-          const nextMajor = next.split(".")[0];
+          const breakingLine = (v) => {
+            const [major, minor] = v.split(".");
+            return major === "0" ? `0.${minor}` : major;
+          };
+          const nextLine = breakingLine(next);
           let changed = 0;
           for (const dir of fs.readdirSync("packages")) {
             const file = `packages/${dir}/package.json`;
             const pkg = JSON.parse(fs.readFileSync(file, "utf8"));
             const current = pkg.dependencies?.["@afterpack/core"];
             if (!current) continue;
-            const currentMajor = current.replace(/^[~^]/, "").split(".")[0];
-            if (currentMajor !== nextMajor) {
-              console.error(`::error::${file} pins ${current}; ${next} is a major change`);
+            const currentLine = breakingLine(current.replace(/^[~^]/, ""));
+            if (currentLine !== nextLine) {
+              console.error(`::error::${file} pins ${current}; ${next} is a breaking change`);
               process.exit(1);
             }
             pkg.dependencies["@afterpack/core"] = `~${next}`;
