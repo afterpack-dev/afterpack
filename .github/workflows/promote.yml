@@ -121,6 +121,9 @@ jobs:
     name: Bump the engine pin
     if: github.event_name == 'repository_dispatch'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -165,8 +168,8 @@ jobs:
           NODE
           echo "ENGINE_VERSION=$NEXT" >> "$GITHUB_ENV"
 
-      # Pushing to main is the point: it triggers rc.yml, which tests against
-      # the new engine and cuts the RC a maintainer then promotes.
+      # A push made with GITHUB_TOKEN never triggers another workflow, so the
+      # RC is dispatched explicitly; workflow_dispatch is the documented exception.
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
@@ -179,3 +182,10 @@ jobs:
           git add packages/*/package.json pnpm-lock.yaml
           git commit -m "chore(deps): bump @afterpack/core to $ENGINE_VERSION"
           git push origin main
+          echo "BUMPED=1" >> "$GITHUB_ENV"
+
+      - name: Cut the RC against the new engine
+        if: env.BUMPED == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run rc.yml --ref main
