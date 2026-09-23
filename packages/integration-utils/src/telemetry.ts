@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { EngineDiagnostic, EngineDiagnosticData } from "./diagnostics.js";
+import { type NoticeLogger, reportNotices } from "./notices.js";
 import type { EnvLike, Preset } from "./policy.js";
 
 const API_URL_ENV_VAR = "AFTERPACK_API_URL";
@@ -296,7 +297,7 @@ interface TelemetryState {
 
 export interface TelemetryReporterDeps {
   env?: EnvLike;
-  logger?: { log(message: string): void };
+  logger?: NoticeLogger;
   fetchImpl?: typeof fetch;
   now?: () => number;
   stateFile?: string;
@@ -335,6 +336,25 @@ function telemetryUrl(env: EnvLike): string {
   return `${base}${TELEMETRY_ENDPOINT_PATH}`;
 }
 
+const TELEMETRY_BODY_LIMIT = 64 * 1024;
+
+async function reportTelemetryNotices(
+  response: Response | undefined,
+  logger: NoticeLogger,
+): Promise<void> {
+  if (!response || response.status !== 202 || typeof response.text !== "function") return;
+  const text = await response.text();
+  if (text.length > TELEMETRY_BODY_LIMIT) return;
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    return;
+  }
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return;
+  reportNotices((body as { notices?: unknown }).notices, logger);
+}
+
 export function createTelemetryReporter(deps: TelemetryReporterDeps = {}): TelemetryReporter {
   const env = deps.env ?? (process.env as EnvLike);
   const logger = deps.logger ?? console;
@@ -365,12 +385,13 @@ export function createTelemetryReporter(deps: TelemetryReporterDeps = {}): Telem
 
       const fetchImpl = deps.fetchImpl ?? globalThis.fetch;
       if (typeof fetchImpl !== "function") return;
-      await fetchImpl(telemetryUrl(env), {
+      const response = await fetchImpl(telemetryUrl(env), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
         signal: AbortSignal.timeout(timeoutMs),
       });
+      await reportTelemetryNotices(response, logger);
     } catch {}
   };
 }

@@ -12,6 +12,13 @@ export {
   type OutputBundleLike,
 } from "./bundle.js";
 export { type CollectJsOptions, collectJsFiles, collectSourceMaps } from "./collect.js";
+export {
+  type ClientIdentity,
+  CloudApiError,
+  type CloudErrorKind,
+  CoreVersionError,
+  resolveClientIdentity,
+} from "./compat.js";
 export { CONFIG_FILE_NAME, type LoadedConfigFile, loadConfigFile } from "./config-file.js";
 export {
   type CliParseResult,
@@ -37,6 +44,13 @@ export {
 } from "./directives.js";
 export type { GitBuildContext } from "./git.js";
 export type { CapturedModule } from "./map-color.js";
+export {
+  type CloudNotice,
+  type NoticeLogger,
+  type NoticeSeverity,
+  type SafeNotice,
+  sanitizeNotices,
+} from "./notices.js";
 export {
   type CombinedProtectionMapTarget,
   type EngineBatchResult,

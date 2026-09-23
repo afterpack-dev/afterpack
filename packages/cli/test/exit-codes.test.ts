@@ -2,7 +2,17 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { __reset, __setProcessResult, engineCalls, processBatch } from "../../../test/core-fake.js";
+import {
+  __reset,
+  __setBatchDecorator,
+  __setBatchError,
+  __setProcessResult,
+  batchCalls,
+  cloudErrorMessage,
+  engineCalls,
+  napiError,
+  processBatch,
+} from "../../../test/core-fake.js";
 import { HELP_ALL } from "../src/args.js";
 import { EXIT_CODE_HELP } from "../src/exit.js";
 import { run } from "../src/run.js";
@@ -105,6 +115,7 @@ describe("the exit-code contract", () => {
     expect(EXIT_CODE_HELP).toContain("1   total failure");
     expect(EXIT_CODE_HELP).toContain("2   partial");
     expect(EXIT_CODE_HELP).toContain("3   size cap");
+    expect(EXIT_CODE_HELP).toContain("6   update required");
     expect(EXIT_CODE_HELP).toContain("64  misuse");
     expect(HELP_ALL).toContain(EXIT_CODE_HELP);
     __setProcessResult((input) => ({
@@ -118,6 +129,102 @@ describe("the exit-code contract", () => {
       ],
     }));
     expect(await invoke(["dist", ...QUIET])).toBe(0);
+  });
+
+  it("6 — the cloud API requires a newer core: a fixed update line, the server's words, nothing written", async () => {
+    __setBatchError(
+      napiError(
+        "AFTERPACK_CLOUD_UPGRADE_REQUIRED",
+        cloudErrorMessage({
+          code: "DIAG_CLIENT_UPGRADE_REQUIRED",
+          message: "clients below 0.2.0 are no longer served",
+          details: { minVersion: "0.2.0" },
+          notices: [
+            {
+              severity: "warning",
+              code: "UPGRADE",
+              message: "upgrade guide",
+              url: "https://www.afterpack.dev/docs/upgrade",
+            },
+          ],
+        }),
+      ),
+    );
+    const code = await run({
+      argv: ["dist", ...QUIET, "--key=ap_live_x"],
+      cwd: root,
+      engine: { processBatch },
+      logger,
+      version: "0.1.0",
+      env: {},
+      stdout: { isTTY: false, write: () => {} },
+      client: { packageName: "afterpack", packageVersion: "0.1.0", coreVersion: "0.1.0" },
+    });
+    expect(code).toBe(6);
+    const text = [...err, ...warn, ...out].join("\n");
+    expect(text).toContain("@afterpack/core 0.2.0 or newer (installed 0.1.0)");
+    expect(text).toContain("clients below 0.2.0 are no longer served");
+    expect(text).toContain("npm install afterpack@latest");
+    expect(text).toContain("https://www.afterpack.dev/docs/upgrade");
+    expect(text).not.toContain("--paths.exclude");
+    expect(readFileSync(join(buildDir, "app.js"), "utf8")).toBe("export const a = 1;");
+  });
+
+  it("6 — a retired cloud API, reported in JSON with the server's code", async () => {
+    __setBatchError(
+      napiError(
+        "AFTERPACK_CLOUD_SUNSET",
+        cloudErrorMessage({ code: "DIAG_API_SUNSET", message: "this API version is retired" }),
+      ),
+    );
+    expect(await invoke(["dist", ...QUIET, "--diagnostics.format=json"])).toBe(6);
+    expect(document()).toMatchObject({
+      exitCode: 6,
+      ok: false,
+      error: { code: "DIAG_API_SUNSET" },
+    });
+  });
+
+  it("6 — an installed core below this afterpack's floor never reaches the engine", async () => {
+    const code = await run({
+      argv: ["dist", ...QUIET],
+      cwd: root,
+      engine: { processBatch },
+      logger,
+      version: "0.1.0",
+      env: {},
+      stdout: { isTTY: false, write: () => {} },
+      client: { packageName: "afterpack", packageVersion: "0.1.0", coreVersion: "0.0.9" },
+    });
+    expect(code).toBe(6);
+    expect(err.join("\n")).toContain("update @afterpack/core");
+    expect(batchCalls).toHaveLength(0);
+  });
+
+  it("1 — any other cloud API error keeps its CODE: message and is not an update", async () => {
+    __setBatchError(
+      napiError(
+        "AFTERPACK_CLOUD_API",
+        cloudErrorMessage({ code: "QUOTA_EXCEEDED", message: "monthly allowance used" }),
+      ),
+    );
+    expect(await invoke(["dist", ...QUIET])).toBe(1);
+    expect(err.join("\n")).toContain("QUOTA_EXCEEDED: monthly allowance used");
+    expect(err.join("\n")).not.toContain("npm install");
+
+    err = [];
+    out = [];
+    expect(await invoke(["dist", ...QUIET, "--diagnostics.format=json"])).toBe(1);
+    expect(document()).toMatchObject({ exitCode: 1, error: { code: "QUOTA_EXCEEDED" } });
+  });
+
+  it("1 — a file with a status this CLI does not know is a failure, never written", async () => {
+    __setBatchDecorator((result) => ({
+      ...result,
+      files: result.files.map((f) => ({ ...f, status: "skipped" })),
+    }));
+    expect(await invoke(["dist", ...QUIET])).toBe(1);
+    expect(readFileSync(join(buildDir, "app.js"), "utf8")).toBe("export const a = 1;");
   });
 
   it("64 — an unknown flag, a malformed value, a doubled path", async () => {

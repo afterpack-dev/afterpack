@@ -184,9 +184,24 @@ describe("the build context a build hands the cloud client", () => {
     expect(JSON.stringify(config)).not.toContain("git");
   });
 
+  it("carries the client identity as flat keys next to git, never nested", () => {
+    expect(
+      JSON.parse(
+        buildContextJson(
+          { commitSha: SHA, ref: "main" },
+          { clientVersion: "0.1.0", client: "afterpack/0.1.0" },
+        ) ?? "null",
+      ),
+    ).toEqual({ commitSha: SHA, ref: "main", clientVersion: "0.1.0", client: "afterpack/0.1.0" });
+    expect(buildContextJson(null, { clientVersion: "0.1.0", client: null })).toBe(
+      JSON.stringify({ clientVersion: "0.1.0" }),
+    );
+  });
+
   it("is `undefined` when nothing was detected", () => {
     for (const git of [null, undefined, detectGitContext(null, noRepo())]) {
       expect(buildContextJson(git)).toBeUndefined();
+      expect(buildContextJson(git, { clientVersion: null, client: null })).toBeUndefined();
     }
   });
 });

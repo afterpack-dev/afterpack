@@ -6,6 +6,7 @@ import {
   collectSourceMaps,
   createTelemetryReporter,
   type ObfuscationEngine,
+  resolveClientIdentity,
   resolvePluginConfig,
   runObfuscationPass,
   withSourceMappingURL,
@@ -132,6 +133,7 @@ export async function runAfterpackHook(input: AfterpackHookInput): Promise<void>
   await runObfuscationPass({
     files,
     engine,
+    client: resolveClientIdentity(import.meta.url),
     telemetry: createTelemetryReporter(),
     label: LABEL,
     gitignoreDir: projectDir,

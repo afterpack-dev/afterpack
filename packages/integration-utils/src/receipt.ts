@@ -5,6 +5,8 @@ import { findUpward } from "./paths.js";
 
 export const PROTECTION_RECEIPT_FILE = ".afterpack-protection.json";
 
+export const PROTECTION_RECEIPT_SCHEMA = 1;
+
 export interface ProtectionReceiptFile {
   path: string;
   sha256: string;
@@ -14,7 +16,7 @@ export interface ProtectionReceiptFile {
 export type EngineSource = "local" | "cloud";
 
 export interface ProtectionReceipt {
-  schema: 1;
+  schema: number;
   tool: string;
   engine: EngineSource | null;
   engineVersion: string | null;
@@ -61,7 +63,7 @@ export function writeDeferredProtectionReceipt(
 export function writeProtectionReceipt(input: WriteProtectionReceiptInput): string {
   const transformed = new Set(input.transformed);
   const receipt: ProtectionReceipt = {
-    schema: 1,
+    schema: PROTECTION_RECEIPT_SCHEMA,
     tool: input.tool,
     engine: input.engine,
     engineVersion: input.engineVersion,
@@ -99,11 +101,48 @@ function parseReceipt(path: string): ProtectionReceipt | string {
     return `${path} is not a protection receipt object`;
   }
   const receipt = raw as Partial<ProtectionReceipt>;
-  if (receipt.schema !== 1) {
+  if (
+    typeof receipt.schema !== "number" ||
+    !Number.isInteger(receipt.schema) ||
+    receipt.schema < PROTECTION_RECEIPT_SCHEMA
+  ) {
     return `${path} has schema ${String(receipt.schema)}, which this afterpack cannot read`;
   }
   if (!Array.isArray(receipt.files)) return `${path} lists no files`;
+  if (!receipt.files.every(isReceiptFile)) return `${path} lists a file entry it cannot read`;
   return receipt as ProtectionReceipt;
+}
+
+function isReceiptFile(value: unknown): value is ProtectionReceiptFile {
+  if (typeof value !== "object" || value === null) return false;
+  const entry = value as Partial<ProtectionReceiptFile>;
+  return typeof entry.path === "string" && typeof entry.sha256 === "string";
+}
+
+function newerReceiptSchema(path: string): number | null {
+  try {
+    const raw = JSON.parse(readFileSync(path, "utf8")) as { schema?: unknown };
+    const schema = raw?.schema;
+    return typeof schema === "number" &&
+      Number.isInteger(schema) &&
+      schema > PROTECTION_RECEIPT_SCHEMA
+      ? schema
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export class UnreadableReceiptError extends Error {
+  readonly receiptPath: string;
+  readonly schema: number;
+
+  constructor(message: string, receiptPath: string, schema: number) {
+    super(message);
+    this.name = "UnreadableReceiptError";
+    this.receiptPath = receiptPath;
+    this.schema = schema;
+  }
 }
 
 export function verifyProtectionReceipt(
@@ -168,7 +207,17 @@ export function detectAlreadyObfuscatedInputs(
   if (!dir) return null;
   const receiptPath = join(dir, PROTECTION_RECEIPT_FILE);
   const parsed = parseReceipt(receiptPath);
-  if (typeof parsed === "string") return null;
+  if (typeof parsed === "string") {
+    const schema = newerReceiptSchema(receiptPath);
+    if (schema === null) return null;
+    throw new UnreadableReceiptError(
+      `${receiptPath} was written by a newer AfterPack (receipt schema ${schema}), so this ` +
+        "version cannot tell whether these files are already obfuscated — update afterpack, " +
+        "or rebuild from source and delete the receipt before running it again.",
+      receiptPath,
+      schema,
+    );
+  }
   const outputHashes = new Set(parsed.files.map((f) => f.sha256));
   if (outputHashes.size === 0) return null;
   const matches = files.filter((file) => {

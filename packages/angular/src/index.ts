@@ -4,6 +4,7 @@ import {
   type AfterpackPluginOptions,
   collectJsFiles,
   createTelemetryReporter,
+  resolveClientIdentity,
   resolvePluginConfig,
   runObfuscationPass,
 } from "@afterpack/integration-utils";
@@ -52,6 +53,7 @@ export async function afterpackAngular(options: AfterpackAngularOptions = {}): P
   await runObfuscationPass({
     files,
     engine: { processBatch, version },
+    client: resolveClientIdentity(import.meta.url),
     telemetry: createTelemetryReporter(),
     label: "afterpack-angular",
     gitignoreDir: cwd,

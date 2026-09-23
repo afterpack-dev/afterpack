@@ -187,8 +187,21 @@ export function buildEngineConfig(options: BuildEngineConfigOptions): EngineConf
   return config;
 }
 
-export function buildContextJson(git: GitBuildContext | null | undefined): string | undefined {
-  return git ? JSON.stringify(git) : undefined;
+export interface ClientContext {
+  clientVersion?: string | null;
+  client?: string | null;
+}
+
+export function buildContextJson(
+  git: GitBuildContext | null | undefined,
+  client: ClientContext = {},
+): string | undefined {
+  const context: Record<string, string> = {};
+  if (git?.commitSha) context.commitSha = git.commitSha;
+  if (git?.ref) context.ref = git.ref;
+  if (client.clientVersion) context.clientVersion = client.clientVersion;
+  if (client.client) context.client = client.client;
+  return Object.keys(context).length > 0 ? JSON.stringify(context) : undefined;
 }
 
 export function buildEngineConfigJson(options: BuildEngineConfigOptions): string {

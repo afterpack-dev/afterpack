@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs";
 import { processBatch, version } from "@afterpack/core";
+import { resolveClientIdentity } from "@afterpack/integration-utils";
 import { CONTACT_FOOTER } from "./args.js";
 import { dim } from "./format.js";
 import { defaultCliStdout, run } from "./run.js";
@@ -23,6 +24,7 @@ run({
   logger: console,
   version: readVersion(),
   stdout: defaultCliStdout(),
+  client: resolveClientIdentity(import.meta.url),
 })
   .then((code) => {
     process.exitCode = code;

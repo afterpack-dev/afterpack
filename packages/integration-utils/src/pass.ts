@@ -10,6 +10,13 @@ import {
   writeCombinedProtectionMap,
 } from "./artifacts.js";
 import {
+  assertSupportedCore,
+  type ClientIdentity,
+  clientString,
+  safeVersionString,
+  toCloudApiError,
+} from "./compat.js";
+import {
   AlreadyObfuscatedError,
   collectDiagnostics,
   type DiagnosticsSummary,
@@ -26,6 +33,7 @@ import {
 } from "./directives.js";
 import { detectGitContext } from "./git.js";
 import { type CapturedModule, colorRegions, type DecodedSourceMap } from "./map-color.js";
+import { type CloudNotice, reportNotices, sanitizeServerText } from "./notices.js";
 import {
   type AfterpackArtifactOptions,
   buildContextJson,
@@ -77,6 +85,8 @@ export interface EngineBatchResult {
   successCount: number;
   failureCount: number;
   source: string;
+  notices?: CloudNotice[];
+  engineVersion?: string;
 }
 
 export interface ObfuscationEngine {
@@ -142,6 +152,7 @@ export interface ObfuscationPassOptions {
   diagnostics?: DiagnosticsVerbosity;
   telemetry?: TelemetryReporter;
   clientVersion?: string;
+  client?: ClientIdentity | null;
   logger?: Logger;
   startedAt?: number;
   summaryStyle?: PassSummaryStyle;
@@ -196,6 +207,21 @@ function parseSourceMap(json: string | null | undefined): DecodedSourceMap | nul
   }
 }
 
+function fileFailure(f: EngineFileResult, source: string): string | null {
+  if (f.status !== "success") {
+    const reason = sanitizeServerText(f.error);
+    if (reason) return reason;
+    return f.status === "failure"
+      ? "empty output"
+      : `the engine reported status "${sanitizeServerText(f.status, 32)}"`;
+  }
+  if (typeof f.unobfuscated !== "boolean") {
+    return "the engine result does not say whether the file was obfuscated";
+  }
+  if (f.code === "" && source.trim() !== "") return sanitizeServerText(f.error) || "empty output";
+  return null;
+}
+
 async function readEngineVersion(engine: ObfuscationEngine): Promise<string | null> {
   try {
     return (await engine.version?.()) ?? null;
@@ -227,6 +253,7 @@ export async function runObfuscationPass(
   const logger = silenceSummaryLines(options.logger ?? DEFAULT_LOGGER, options.diagnostics);
   const prefix = (message: string): string => `[${label}] ${message}`;
   const style: PassSummaryStyle = options.summaryStyle ?? "plugin";
+  assertSupportedCore(options.client, prefix);
 
   const onDiskFiles = options.inputs ? files.filter((f) => !options.inputs?.has(f)) : files;
   const onDiskBytes = new Map<string, Buffer>(
@@ -444,8 +471,21 @@ export async function runObfuscationPass(
   }
   const engineStartedAt = Date.now();
   const prepMs = engineStartedAt - passStartedAt;
-  const batch = await engine.processBatch(inputs, configJson, buildContextJson(git));
+  const contextJson = buildContextJson(git, {
+    clientVersion: options.client?.coreVersion,
+    client: clientString(options.client),
+  });
+  let batch: EngineBatchResult;
+  try {
+    batch = await engine.processBatch(inputs, configJson, contextJson);
+  } catch (error) {
+    const cloud = toCloudApiError(error, { identity: options.client, prefix });
+    if (!cloud) throw error;
+    reportNotices(cloud.notices, logger, prefix);
+    throw cloud;
+  }
   const engineEndedAt = Date.now();
+  reportNotices(batch.notices, logger, prefix);
   const engineMs = engineEndedAt - engineStartedAt;
 
   const collected = collectDiagnostics(batch.files);
@@ -468,7 +508,9 @@ export async function runObfuscationPass(
   const telemetry = options.telemetry;
   const telemetryEnabled =
     telemetry != null && resolveTelemetryEnabled(artifactOptions.telemetry?.enabled, env);
-  const engineVersion = await readEngineVersion(engine);
+  const engineVersion =
+    (batch.source === "cloud" ? safeVersionString(batch.engineVersion) : null) ??
+    (await readEngineVersion(engine));
   if (telemetry && telemetryEnabled) {
     const facts: TelemetryFacts = {
       label,
@@ -479,7 +521,7 @@ export async function runObfuscationPass(
       preset: options.preset,
       complexity: options.complexity,
       engineVersion,
-      clientVersion: options.clientVersion ?? null,
+      clientVersion: options.clientVersion ?? options.client?.packageVersion ?? null,
     };
     await telemetry(facts);
   }
@@ -498,8 +540,9 @@ export async function runObfuscationPass(
     if (source === undefined) {
       throw new Error(prefix(`no captured source for engine-returned path ${f.filePath}`));
     }
-    if (f.status === "failure" || (f.code === "" && source.trim() !== "")) {
-      throw new Error(prefix(`failed to obfuscate ${f.filePath}: ${f.error ?? "empty output"}`));
+    const failure = fileFailure(f, source);
+    if (failure !== null) {
+      throw new Error(prefix(`failed to obfuscate ${f.filePath}: ${failure}`));
     }
 
     inputBytes += Buffer.byteLength(source);

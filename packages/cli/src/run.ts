@@ -2,6 +2,9 @@ import { existsSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import {
   AlreadyObfuscatedError,
+  type ClientIdentity,
+  CloudApiError,
+  CoreVersionError,
   collectJsFiles,
   createTelemetryReporter,
   DIAG_ALREADY_OBFUSCATED,
@@ -83,6 +86,7 @@ export interface CliDeps {
   env?: Record<string, string | undefined>;
   stdout?: CliStdout;
   fetchImpl?: (url: string, init?: RequestInit) => Promise<Response>;
+  client?: ClientIdentity | null;
 }
 
 const DIRECTIVES_UNSUPPORTED =
@@ -157,7 +161,7 @@ function alignRow(label: string, value: string): string {
 }
 
 function fileStatus(file: CapturedFile): string {
-  if (file.status === "failure") return "failed";
+  if (file.status !== "success") return "failed";
   if (file.unobfuscated) return "unobfuscated";
   return file.bytesOut === file.bytesIn && file.diagnostics.length === 0
     ? "unchanged"
@@ -199,7 +203,7 @@ function buildDocument(input: {
       files: files.length,
       transformed: input.transformed.size,
       unobfuscated: files.filter((f) => f.unobfuscated).length,
-      failed: files.filter((f) => f.status === "failure").length,
+      failed: files.filter((f) => f.status !== "success").length,
       bytesIn: files.reduce((n, f) => n + f.bytesIn, 0),
       bytesOut: files.reduce((n, f) => n + f.bytesOut, 0),
       ...(result ? { seed: result.seed, seedOrigin: result.seedOrigin } : {}),
@@ -432,6 +436,7 @@ async function runObfuscationAndBackup(input: {
   backupEnabled: boolean;
   projectRoot: string;
   pendingBackups: readonly PendingBackup[];
+  client: ClientIdentity | null;
 }): Promise<{
   captured: CapturedFile[];
   result: ObfuscationPassResult | null;
@@ -463,6 +468,7 @@ async function runObfuscationAndBackup(input: {
           artifactOptions: { ...input.parsed.artifactOptions, build: { backup: false } },
           telemetry: createTelemetryReporter({ logger: input.notice }),
           clientVersion: input.version,
+          client: input.client,
           seed: input.parsed.seed,
           preset: input.parsed.preset,
           complexity: input.parsed.complexity,
@@ -546,6 +552,38 @@ function refuseAlreadyObfuscated(
   }
   renderAlreadyObfuscated(logger, cwd, error);
   return EXIT.failure;
+}
+
+function refuseUpdate(
+  logger: CliLogger,
+  mode: OutputMode,
+  version: string,
+  error: CloudApiError | CoreVersionError,
+): ExitCode {
+  if (error instanceof CloudApiError && error.kind === "api") {
+    return refuse({
+      logger,
+      mode,
+      version,
+      command: "obfuscate",
+      exitCode: EXIT.failure,
+      code: error.apiCode ?? error.code,
+      message: error.message,
+      fix: "Nothing was written; your build output was left exactly as your bundler wrote it.",
+    });
+  }
+  const code =
+    error instanceof CloudApiError ? (error.apiCode ?? error.code) : "CORE_VERSION_UNSUPPORTED";
+  return refuse({
+    logger,
+    mode,
+    version,
+    command: "obfuscate",
+    exitCode: EXIT.updateRequired,
+    code,
+    message: error.message,
+    fix: `Update, then build again: ${error.fix}`,
+  });
 }
 
 export function defaultCliStdout(): CliStdout {
@@ -807,10 +845,14 @@ export async function run(deps: CliDeps): Promise<number> {
     backupEnabled,
     projectRoot,
     pendingBackups,
+    client: deps.client ?? null,
   });
 
   if (failureError instanceof AlreadyObfuscatedError) {
     return refuseAlreadyObfuscated(logger, cwd, mode, version, failureError);
+  }
+  if (failureError instanceof CloudApiError || failureError instanceof CoreVersionError) {
+    return refuseUpdate(logger, mode, version, failureError);
   }
 
   const diagnostics = captured.flatMap((f) => f.diagnostics);

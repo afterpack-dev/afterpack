@@ -201,6 +201,7 @@ that cannot reach the cloud **fails closed** at exit `1`; it never falls back to
 | `3` | Size cap. `inflation.max` could not reach the complexity target (`DIAG_SIZE_CAP_REACHED`). |
 | `4` | **Reserved** — a Pro feature without a key, or a lapsed entitlement. Documented, never emitted. |
 | `5` | **Reserved** — runtime reflection detected without `reflection.allow`. Documented, never emitted. |
+| `6` | Update required. The AfterPack cloud API no longer serves this `@afterpack/core` (or has retired the API version it speaks), or the installed `@afterpack/core` is older than this package supports. Prints a fixed `npm install …@latest` line and the server's reason; nothing is written. |
 | `64` | Misuse. An unknown flag or command, a malformed value, or a doubled path argument. |
 
 Every non-zero exit prints one actionable line naming the fix. Fail-closed: nothing ships partially

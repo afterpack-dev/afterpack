@@ -1,3 +1,5 @@
+import { sanitizeServerText } from "./notices.js";
+
 export type EngineSeverity = "info" | "error" | "critical";
 
 export interface EngineSpan {
@@ -45,6 +47,8 @@ interface CollectedDiagnostics {
 }
 
 const MAX_INSTANCES_PER_CODE = 5;
+
+const DIAGNOSTIC_MESSAGE_LIMIT = 4000;
 
 const MAX_CODES_IN_SUMMARY = 6;
 
@@ -115,7 +119,7 @@ export function formatDiagnostic(d: EngineDiagnostic): string {
   const parts = [`${d.severity} ${d.code}`];
   const locator = formatLocator(d);
   if (locator) parts.push(locator);
-  const message = d.message.replace(/\s+/g, " ").trim();
+  const message = sanitizeServerText(d.message, DIAGNOSTIC_MESSAGE_LIMIT);
   if (message) parts.push(message);
   const data = formatData(d.data);
   if (data) parts.push(data);

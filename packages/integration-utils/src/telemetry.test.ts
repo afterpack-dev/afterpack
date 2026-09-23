@@ -273,3 +273,60 @@ describe("reporter", () => {
     expect(Object.keys(state).sort()).toEqual(["installId", "noticeShownAt", "rotatedAt"]);
   });
 });
+
+describe("notices on the telemetry response", () => {
+  function reporterAnswering(response: Response) {
+    const h = harness();
+    const warns: string[] = [];
+    const fetchImpl = (async () => response) as unknown as typeof fetch;
+    const report = createTelemetryReporter({
+      ...h.deps,
+      fetchImpl,
+      logger: { log: (m: string) => h.logs.push(m), warn: (m: string) => warns.push(m) },
+    });
+    return { report, logs: h.logs, warns };
+  }
+
+  it("prints the sanitized notices of a 202 body", async () => {
+    const esc = String.fromCharCode(0x1b);
+    const { report, logs, warns } = reporterAnswering(
+      new Response(
+        JSON.stringify({
+          accepted: true,
+          notices: [
+            {
+              severity: "warning",
+              code: "OLD_CORE",
+              message: `${esc}[31mplease update${esc}[0m`,
+              url: "https://www.afterpack.dev/docs/upgrade",
+            },
+            { severity: "info", code: "X", message: "hello", url: "http://evil.test/" },
+          ],
+        }),
+        { status: 202 },
+      ),
+    );
+    await report(facts());
+    expect(warns).toEqual([
+      "AfterPack warning: please update https://www.afterpack.dev/docs/upgrade",
+    ]);
+    expect(logs).toContain("AfterPack notice: hello");
+    expect(logs.join("\n")).not.toContain("evil.test");
+  });
+
+  it("ignores a body that is not a 202, not JSON, or carries no notices", async () => {
+    for (const response of [
+      new Response(JSON.stringify({ notices: [{ severity: "info", message: "x" }] }), {
+        status: 200,
+      }),
+      new Response("<html>edge page</html>", { status: 202 }),
+      new Response(JSON.stringify({ accepted: true }), { status: 202 }),
+      new Response(null, { status: 202 }),
+    ]) {
+      const { report, logs, warns } = reporterAnswering(response);
+      await expect(report(facts())).resolves.toBeUndefined();
+      expect([...logs, ...warns].filter((l) => l.startsWith("AfterPack notice"))).toEqual([]);
+      expect(warns).toEqual([]);
+    }
+  });
+});

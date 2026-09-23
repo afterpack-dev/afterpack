@@ -5,6 +5,7 @@ import {
   type AfterpackPluginOptions,
   collectJsFiles,
   createTelemetryReporter,
+  resolveClientIdentity,
   resolvePluginConfig,
   runObfuscationPass,
 } from "@afterpack/integration-utils";
@@ -53,6 +54,7 @@ export function afterpackEsbuild(options: AfterpackEsbuildOptions = {}): Plugin 
         await runObfuscationPass({
           files,
           engine: { processBatch, version },
+          client: resolveClientIdentity(import.meta.url),
           telemetry: createTelemetryReporter(),
           label: "afterpack-esbuild",
           gitignoreDir: cwd,

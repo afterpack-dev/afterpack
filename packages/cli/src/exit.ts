@@ -7,6 +7,7 @@ export const EXIT = {
   sizeCap: 3,
   proRequired: 4,
   reflection: 5,
+  updateRequired: 6,
   usage: 64,
 } as const;
 
@@ -22,6 +23,8 @@ export const EXIT_CODE_HELP = `Exit codes:
       \`--allowUnobfuscated\`
   3   size cap — \`inflation.max\` could not reach the complexity target
       (${SIZE_CAP_CODE})
+  6   update required — the AfterPack cloud API, or this afterpack, needs a
+      newer @afterpack/core; nothing was written
   64  misuse — an unknown flag or command, or a malformed value`;
 
 export function failureExitCode(diagnostics: readonly EngineDiagnostic[]): ExitCode {

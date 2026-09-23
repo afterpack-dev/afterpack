@@ -6,6 +6,8 @@ import {
   detectAlreadyObfuscatedInputs,
   PROTECTION_RECEIPT_FILE,
   sha256Of,
+  UnreadableReceiptError,
+  verifyProtectionReceipt,
   writeProtectionReceipt,
 } from "./receipt.js";
 
@@ -51,7 +53,7 @@ describe("detectAlreadyObfuscatedInputs", () => {
     expect(detectAlreadyObfuscatedInputs([a], dir)).toBeNull();
   });
 
-  it("is no signal for a receipt on a schema this reader does not know", () => {
+  it("reads the fields it knows from a newer receipt schema, so the guard still fires", () => {
     const dir = join(root, "dist");
     mkdirSync(dir, { recursive: true });
     const a = join(dir, "a.js");
@@ -60,10 +62,59 @@ describe("detectAlreadyObfuscatedInputs", () => {
       join(dir, PROTECTION_RECEIPT_FILE),
       JSON.stringify({
         schema: 99,
+        futureField: { anything: true },
+        files: [{ path: "a.js", sha256: sha256Of(a), transformed: true, extra: 1 }],
+      }),
+    );
+    expect(detectAlreadyObfuscatedInputs([a], dir)?.files).toEqual([a]);
+  });
+
+  it("refuses loudly on a newer schema whose files it cannot read, never treating them as unprotected", () => {
+    const dir = join(root, "dist");
+    mkdirSync(dir, { recursive: true });
+    const a = join(dir, "a.js");
+    writeFileSync(a, "export const a = 1;");
+    writeFileSync(
+      join(dir, PROTECTION_RECEIPT_FILE),
+      JSON.stringify({ schema: 2, outputs: { "a.js": sha256Of(a) } }),
+    );
+    expect(() => detectAlreadyObfuscatedInputs([a], dir)).toThrow(UnreadableReceiptError);
+    expect(() => detectAlreadyObfuscatedInputs([a], dir)).toThrow(/receipt schema 2/);
+  });
+
+  it("verifies a newer-schema receipt by the fields it knows", () => {
+    const dir = join(root, "dist");
+    mkdirSync(dir, { recursive: true });
+    const a = join(dir, "a.js");
+    writeFileSync(a, "OBF");
+    writeFileSync(
+      join(dir, PROTECTION_RECEIPT_FILE),
+      JSON.stringify({
+        schema: 3,
+        buildId: null,
         files: [{ path: "a.js", sha256: sha256Of(a), transformed: true }],
       }),
     );
-    expect(detectAlreadyObfuscatedInputs([a], dir)).toBeNull();
+    const verification = verifyProtectionReceipt(dir);
+    expect(verification.problems).toEqual([]);
+    expect(verification.receipt?.schema).toBe(3);
+  });
+
+  it("is no signal for a receipt on a schema older than the first, or not a number", () => {
+    const dir = join(root, "dist");
+    mkdirSync(dir, { recursive: true });
+    const a = join(dir, "a.js");
+    writeFileSync(a, "export const a = 1;");
+    for (const schema of [0, "1", 1.5, null]) {
+      writeFileSync(
+        join(dir, PROTECTION_RECEIPT_FILE),
+        JSON.stringify({
+          schema,
+          files: [{ path: "a.js", sha256: sha256Of(a), transformed: true }],
+        }),
+      );
+      expect(detectAlreadyObfuscatedInputs([a], dir)).toBeNull();
+    }
   });
 
   it("finds a match when the receipt sits exactly at startDir", () => {

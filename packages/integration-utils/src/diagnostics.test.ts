@@ -297,3 +297,16 @@ describe("formatAlreadyObfuscatedMessage", () => {
     expect(message).not.toContain("more");
   });
 });
+
+describe("formatDiagnostic on server-supplied text", () => {
+  it("strips terminal escapes and control characters from the message", () => {
+    const esc = String.fromCharCode(0x1b);
+    expect(
+      formatDiagnostic({
+        severity: "error",
+        code: "DIAG_PARSE_ERROR",
+        message: `${esc}[2J${esc}[31mbad${esc}[0m\r\ntoken${String.fromCharCode(7)}`,
+      }),
+    ).toBe("error DIAG_PARSE_ERROR · bad token");
+  });
+});
