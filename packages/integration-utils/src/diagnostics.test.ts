@@ -75,6 +75,33 @@ describe("formatDiagnostic", () => {
 });
 
 describe("parseDiagnosticsJson", () => {
+  it("strips escape sequences and control characters from every printed field", () => {
+    const ESC = String.fromCharCode(0x1b);
+    const parsed = parseDiagnosticsJson(
+      JSON.stringify([
+        {
+          severity: `error${ESC}[2J`,
+          code: `DIAG_${ESC}]8;;https://evil.example${String.fromCharCode(0x07)}X`,
+          message: "m",
+          file: `/src/a${ESC}[1A.ts`,
+          span: { startByte: `1${ESC}[2J`, endByte: 2 },
+          data: { kind: "parse", note: `n${ESC}[5mote`, count: 2, list: [`${ESC}[2J`] },
+        },
+      ]),
+    );
+    const d = parsed?.diagnostics[0];
+    expect(d).toMatchObject({
+      severity: "error",
+      code: "DIAG_X",
+      file: "/src/a.ts",
+      span: null,
+      data: { kind: "parse", note: "note", count: 2 },
+    });
+    expect(formatDiagnostic(d as EngineDiagnostic)).toBe(
+      'error DIAG_X · /src/a.ts · m · note="note" count=2',
+    );
+  });
+
   it("distinguishes a genuinely clean file from an absent lane", () => {
     expect(parseDiagnosticsJson("[]")).toEqual({ diagnostics: [], malformed: 0 });
     expect(parseDiagnosticsJson(undefined)).toBeNull();

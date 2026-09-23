@@ -133,7 +133,10 @@ function newerReceiptSchema(path: string): number | null {
   }
 }
 
+export const DIAG_RECEIPT_UNREADABLE = "DIAG_RECEIPT_UNREADABLE";
+
 export class UnreadableReceiptError extends Error {
+  readonly code = DIAG_RECEIPT_UNREADABLE;
   readonly receiptPath: string;
   readonly schema: number;
 
@@ -202,6 +205,7 @@ export function detectAlreadyObfuscatedInputs(
   files: readonly string[],
   startDir: string,
   bytesByPath?: ReadonlyMap<string, Uint8Array>,
+  prefix: (message: string) => string = (m) => m,
 ): AlreadyObfuscatedInputs | null {
   const dir = findReceiptDir(startDir);
   if (!dir) return null;
@@ -211,9 +215,11 @@ export function detectAlreadyObfuscatedInputs(
     const schema = newerReceiptSchema(receiptPath);
     if (schema === null) return null;
     throw new UnreadableReceiptError(
-      `${receiptPath} was written by a newer AfterPack (receipt schema ${schema}), so this ` +
-        "version cannot tell whether these files are already obfuscated — update afterpack, " +
-        "or rebuild from source and delete the receipt before running it again.",
+      prefix(
+        `${receiptPath} was written by a newer AfterPack (receipt schema ${schema}), so this ` +
+          "version cannot tell whether these files are already obfuscated — update afterpack, " +
+          "or rebuild from source and delete the receipt before running it again.",
+      ),
       receiptPath,
       schema,
     );

@@ -89,12 +89,19 @@ export function isBelowVersion(version: string | null | undefined, minimum: stri
   return false;
 }
 
-function updateTarget(identity: ClientIdentity | null | undefined): string {
-  return identity?.packageName ?? CORE_PACKAGE;
-}
+export const CLI_PACKAGE = "afterpack";
 
-export function updateCommand(identity: ClientIdentity | null | undefined): string {
-  return `npm install ${updateTarget(identity)}@latest`;
+export function updateCommand(
+  identity: ClientIdentity | null | undefined,
+  minVersion?: string | null,
+): string {
+  const core = `${CORE_PACKAGE}@${safeVersionString(minVersion) ?? "latest"}`;
+  const name = identity?.packageName;
+  const install =
+    name && name !== CORE_PACKAGE ? `npm install ${name}@latest ${core}` : `npm install ${core}`;
+  return name === CLI_PACKAGE
+    ? `${install} (or, without a local install: npx ${CLI_PACKAGE}@latest)`
+    : install;
 }
 
 export class CoreVersionError extends Error {
@@ -219,7 +226,7 @@ function describeCloudFailure(
     return `cloud obfuscation failed: ${code}${body.message || "the API refused the request"}`;
   }
   const installed = identity?.coreVersion ? ` (installed ${identity.coreVersion})` : "";
-  const fix = updateCommand(identity);
+  const fix = updateCommand(identity, minVersion);
   if (kind === "sunset") {
     return (
       `the AfterPack cloud API this ${CORE_PACKAGE}${installed} talks to has been retired — ` +
@@ -258,7 +265,7 @@ export function toCloudApiError(
     details: body.details,
     notices: sanitizeNotices(body.notices),
     minVersion,
-    fix: updateCommand(options.identity),
+    fix: updateCommand(options.identity, minVersion),
     cause: error,
   });
 }

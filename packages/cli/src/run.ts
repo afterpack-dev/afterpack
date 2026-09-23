@@ -17,6 +17,7 @@ import {
   type ResolvedPluginConfig,
   resolvePluginConfig,
   runObfuscationPass,
+  UnreadableReceiptError,
 } from "@afterpack/integration-utils";
 import {
   type CliRunOptions,
@@ -853,6 +854,18 @@ export async function run(deps: CliDeps): Promise<number> {
   }
   if (failureError instanceof CloudApiError || failureError instanceof CoreVersionError) {
     return refuseUpdate(logger, mode, version, failureError);
+  }
+  if (failureError instanceof UnreadableReceiptError) {
+    return refuse({
+      logger,
+      mode,
+      version,
+      command: "obfuscate",
+      exitCode: EXIT.failure,
+      code: failureError.code,
+      message: failureError.message,
+      fix: "Update afterpack, or rebuild from source and delete the receipt, then run it again.",
+    });
   }
 
   const diagnostics = captured.flatMap((f) => f.diagnostics);

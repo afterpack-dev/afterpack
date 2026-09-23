@@ -62,6 +62,44 @@ function isEngineDiagnostic(value: unknown): value is EngineDiagnostic {
   );
 }
 
+const DIAGNOSTIC_CODE_LIMIT = 64;
+
+const DIAGNOSTIC_SEVERITY_LIMIT = 16;
+
+const DIAGNOSTIC_FIELD_LIMIT = 500;
+
+function sanitizeSpan(span: unknown): EngineSpan | null {
+  if (typeof span !== "object" || span === null) return null;
+  const { startByte, endByte } = span as Record<string, unknown>;
+  if (typeof startByte !== "number" || typeof endByte !== "number") return null;
+  if (!Number.isFinite(startByte) || !Number.isFinite(endByte)) return null;
+  return { startByte, endByte };
+}
+
+function sanitizeData(data: unknown): EngineDiagnosticData | null {
+  if (typeof data !== "object" || data === null || Array.isArray(data)) return null;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data)) {
+    const safeKey = sanitizeServerText(key, DIAGNOSTIC_CODE_LIMIT);
+    if (safeKey === "") continue;
+    out[safeKey] =
+      typeof value === "string" ? sanitizeServerText(value, DIAGNOSTIC_FIELD_LIMIT) : value;
+  }
+  return typeof out.kind === "string" ? (out as EngineDiagnosticData) : null;
+}
+
+function sanitizeDiagnostic(d: EngineDiagnostic): EngineDiagnostic {
+  const out: EngineDiagnostic = {
+    ...d,
+    severity: sanitizeServerText(d.severity, DIAGNOSTIC_SEVERITY_LIMIT) as EngineSeverity,
+    code: sanitizeServerText(d.code, DIAGNOSTIC_CODE_LIMIT),
+  };
+  if (d.file != null) out.file = sanitizeServerText(d.file, DIAGNOSTIC_FIELD_LIMIT) || null;
+  if (d.span != null) out.span = sanitizeSpan(d.span);
+  if (d.data != null) out.data = sanitizeData(d.data);
+  return out;
+}
+
 export function parseDiagnosticsJson(json: string | null | undefined): ParsedDiagnostics | null {
   if (json == null) return null;
   let parsed: unknown;
@@ -71,7 +109,7 @@ export function parseDiagnosticsJson(json: string | null | undefined): ParsedDia
     return null;
   }
   if (!Array.isArray(parsed)) return null;
-  const diagnostics = parsed.filter(isEngineDiagnostic);
+  const diagnostics = parsed.filter(isEngineDiagnostic).map(sanitizeDiagnostic);
   return { diagnostics, malformed: parsed.length - diagnostics.length };
 }
 
@@ -110,7 +148,9 @@ function formatData(data: EngineDiagnosticData | null | undefined): string | nul
   const pairs: string[] = [];
   for (const [key, value] of Object.entries(data)) {
     if (key === "kind" || value === null || value === undefined) continue;
-    pairs.push(typeof value === "string" ? `${key}="${value}"` : `${key}=${String(value)}`);
+    const text = sanitizeServerText(String(value), DIAGNOSTIC_FIELD_LIMIT);
+    if (typeof value === "string") pairs.push(`${key}="${text}"`);
+    else if (text !== "") pairs.push(`${key}=${text}`);
   }
   return pairs.length > 0 ? pairs.join(" ") : null;
 }

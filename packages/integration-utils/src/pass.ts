@@ -267,6 +267,7 @@ export async function runObfuscationPass(
       onDiskFiles,
       combinedProtectionMap.buildDir,
       onDiskBytes,
+      prefix,
     );
     if (already) {
       throw new AlreadyObfuscatedError(

@@ -224,6 +224,41 @@ describe("cloud per-file diagnostics", () => {
   });
 });
 
+describe("server-supplied diagnostic fields", () => {
+  it("reach the terminal with escape sequences and control characters stripped", async () => {
+    const BEL = String.fromCharCode(0x07);
+    __setProcessResult(() => ({
+      code: "",
+      diagnostics: [
+        {
+          severity: `info${ESC}[2J`,
+          code: `DIAG_NOTE${String.fromCharCode(0x08)}`,
+          message: "noted",
+        },
+        {
+          severity: "error",
+          code: `DIAG_${ESC}]8;;https://evil.example${BEL}X`,
+          message: `bad${ESC}[31m input`,
+        },
+      ],
+    }));
+    __setBatchDecorator((result) => asCloudBatch(result));
+    const cap = capture();
+    const error = await runObfuscationPass(options({ logger: cap.logger })).catch(
+      (e: unknown) => e as Error,
+    );
+    expect(error).toBeInstanceOf(Error);
+    const printed = `${cap.all()}\n${(error as Error).message}`;
+    expect(printed).not.toContain(ESC);
+    expect(printed).not.toContain(BEL);
+    expect(printed).not.toContain(String.fromCharCode(0x08));
+    expect(printed).not.toContain("evil.example");
+    expect(printed).toContain("error DIAG_X");
+    expect(printed).toContain(": DIAG_X: bad input");
+    expect(readFileSync(file, "utf8")).toBe("export const a = 1;");
+  });
+});
+
 describe("the result status rule", () => {
   it("fails a file with an unknown status and writes nothing", async () => {
     __setBatchDecorator((result) => ({
@@ -301,7 +336,8 @@ describe("cloud refusals thrown by processBatch", () => {
     expect(cloud.minVersion).toBe("0.2.0");
     expect(cloud.message).toContain("[afterpack-test]");
     expect(cloud.message).toContain("@afterpack/core 0.2.0 or newer (installed 0.1.2-rc.9)");
-    expect(cloud.message).toContain("npm install @afterpack/vite@latest");
+    expect(cloud.fix).toBe("npm install @afterpack/vite@latest @afterpack/core@0.2.0");
+    expect(cloud.message).toContain(`update: ${cloud.fix}.`);
     expect(cloud.message).toContain("this core is too old");
     expect(cap.warnings).toContain(
       "[afterpack-test] AfterPack warning: see the guide https://afterpack.dev/docs/upgrade",

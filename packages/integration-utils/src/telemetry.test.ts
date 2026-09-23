@@ -314,6 +314,24 @@ describe("notices on the telemetry response", () => {
     expect(logs.join("\n")).not.toContain("evil.test");
   });
 
+  it("does not read a body whose declared length is over the cap", async () => {
+    const body = JSON.stringify({ notices: [{ severity: "warning", message: "too big" }] });
+    const response = new Response(body, {
+      status: 202,
+      headers: { "content-length": String(1024 * 1024) },
+    });
+    let textReads = 0;
+    const read = response.text.bind(response);
+    response.text = () => {
+      textReads += 1;
+      return read();
+    };
+    const { report, warns } = reporterAnswering(response);
+    await report(facts());
+    expect(warns).toEqual([]);
+    expect(textReads).toBe(0);
+  });
+
   it("ignores a body that is not a 202, not JSON, or carries no notices", async () => {
     for (const response of [
       new Response(JSON.stringify({ notices: [{ severity: "info", message: "x" }] }), {

@@ -343,6 +343,11 @@ async function reportTelemetryNotices(
   logger: NoticeLogger,
 ): Promise<void> {
   if (!response || response.status !== 202 || typeof response.text !== "function") return;
+  const declared = Number(response.headers?.get?.("content-length"));
+  if (Number.isFinite(declared) && declared > TELEMETRY_BODY_LIMIT) {
+    await response.body?.cancel().catch(() => {});
+    return;
+  }
   const text = await response.text();
   if (text.length > TELEMETRY_BODY_LIMIT) return;
   let body: unknown;

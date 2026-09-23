@@ -164,7 +164,9 @@ describe("the exit-code contract", () => {
     const text = [...err, ...warn, ...out].join("\n");
     expect(text).toContain("@afterpack/core 0.2.0 or newer (installed 0.1.0)");
     expect(text).toContain("clients below 0.2.0 are no longer served");
-    expect(text).toContain("npm install afterpack@latest");
+    expect(text).toContain(
+      "Update, then build again: npm install afterpack@latest @afterpack/core@0.2.0 (or, without a local install: npx afterpack@latest)",
+    );
     expect(text).toContain("https://www.afterpack.dev/docs/upgrade");
     expect(text).not.toContain("--paths.exclude");
     expect(readFileSync(join(buildDir, "app.js"), "utf8")).toBe("export const a = 1;");
@@ -198,7 +200,23 @@ describe("the exit-code contract", () => {
     });
     expect(code).toBe(6);
     expect(err.join("\n")).toContain("update @afterpack/core");
+    expect(err.join("\n")).toContain(
+      "Update, then build again: npm install afterpack@latest @afterpack/core@latest (or, without a local install: npx afterpack@latest)",
+    );
     expect(batchCalls).toHaveLength(0);
+  });
+
+  it("1 — a receipt written by a newer AfterPack is refused with its own code, not BUILD_FAILED", async () => {
+    writeFileSync(
+      join(buildDir, ".afterpack-protection.json"),
+      JSON.stringify({ schema: 9, outputs: {} }),
+    );
+    expect(await invoke(["dist", ...QUIET, "--diagnostics.format=json"])).toBe(1);
+    expect(document()).toMatchObject({
+      exitCode: 1,
+      error: { code: "DIAG_RECEIPT_UNREADABLE" },
+    });
+    expect(readFileSync(join(buildDir, "app.js"), "utf8")).toBe("export const a = 1;");
   });
 
   it("1 — any other cloud API error keeps its CODE: message and is not an update", async () => {

@@ -23,6 +23,16 @@ describe("sanitizeServerText", () => {
     expect(sanitizeServerText(raw)).toBe("ab c defg");
   });
 
+  it("strips bidi overrides and zero-width characters that could spoof how a line reads", () => {
+    const u = (code: number) => String.fromCharCode(code);
+    expect(
+      sanitizeServerText(
+        `upd${u(0x200b)}ate ${u(0x202e)}exe.txt${u(0x202c)} ${u(0x2067)}x${u(0x2069)}${u(0xfeff)}`,
+      ),
+    ).toBe("update exe.txt x");
+    expect(sanitizeServerText(`a${u(0x2028)}b${u(0x2029)}c`)).toBe("a b c");
+  });
+
   it("caps at 500 characters", () => {
     expect(sanitizeServerText("x".repeat(2000))).toHaveLength(NOTICE_MESSAGE_LIMIT);
     expect(NOTICE_MESSAGE_LIMIT).toBe(500);

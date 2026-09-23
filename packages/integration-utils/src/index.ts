@@ -90,11 +90,13 @@ export {
   type TransformKind,
 } from "./policy.js";
 export {
+  DIAG_RECEIPT_UNREADABLE,
   PROTECTION_RECEIPT_FILE,
   type ProtectionReceipt,
   type ProtectionReceiptFile,
   type ProtectionVerification,
   sha256Of,
+  UnreadableReceiptError,
   verifyProtectionReceipt,
   type WriteProtectionReceiptInput,
   writeDeferredProtectionReceipt,

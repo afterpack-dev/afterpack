@@ -31,6 +31,16 @@ function isControl(code: number): boolean {
   return code < 0x20 || (code >= 0x7f && code <= 0x9f);
 }
 
+function isInvisibleFormat(code: number): boolean {
+  return (
+    code === 0x061c ||
+    (code >= 0x200b && code <= 0x200f) ||
+    (code >= 0x202a && code <= 0x202e) ||
+    (code >= 0x2060 && code <= 0x2069) ||
+    code === 0xfeff
+  );
+}
+
 function skipCsi(text: string, from: number): number {
   let i = from;
   while (i < text.length) {
@@ -75,6 +85,15 @@ function stripTerminalControls(text: string): string {
     }
     if (isControl(c)) {
       out += c === 0x09 || c === 0x0a || c === 0x0d ? " " : "";
+      i += 1;
+      continue;
+    }
+    if (c === 0x2028 || c === 0x2029) {
+      out += " ";
+      i += 1;
+      continue;
+    }
+    if (isInvisibleFormat(c)) {
       i += 1;
       continue;
     }

@@ -17,6 +17,7 @@ import {
   releaseTriple,
   resolveClientIdentity,
   toCloudApiError,
+  updateCommand,
 } from "./compat.js";
 
 let root: string;
@@ -122,9 +123,15 @@ describe("assertSupportedCore", () => {
   it("refuses a core below the floor, naming the update", () => {
     expect(() => assertSupportedCore(identity("0.0.9"))).toThrow(CoreVersionError);
     expect(() => assertSupportedCore(identity("0.0.9"))).toThrow(/update @afterpack\/core/);
-    expect(() => assertSupportedCore(identity("0.0.9"))).toThrow(
-      /npm install @afterpack\/rollup@latest/,
-    );
+    const error = (() => {
+      try {
+        assertSupportedCore(identity("0.0.9"));
+      } catch (e) {
+        return e as CoreVersionError;
+      }
+    })();
+    expect(error?.fix).toBe("npm install @afterpack/rollup@latest @afterpack/core@latest");
+    expect(error?.message).toContain(error?.fix);
   });
 
   it("accepts the floor itself, its prereleases, and an unknown core", () => {
@@ -208,10 +215,14 @@ describe("toCloudApiError", () => {
     expect(error).toBeInstanceOf(CloudApiError);
     expect(error?.minVersion).toBe("0.3.0");
     expect(error?.apiCode).toBe("DIAG_CLIENT_UPGRADE_REQUIRED");
-    expect(error?.fix).toBe("npm install afterpack@latest");
+    expect(error?.fix).toBe(
+      "npm install afterpack@latest @afterpack/core@0.3.0 (or, without a local install: npx afterpack@latest)",
+    );
     expect(error?.message).toContain("[afterpack] the AfterPack cloud API requires");
     expect(error?.message).toContain("@afterpack/core 0.3.0 or newer (installed 0.1.0)");
-    expect(error?.message).toContain("update: npm install afterpack@latest");
+    expect(error?.message).toContain(
+      "update: npm install afterpack@latest @afterpack/core@0.3.0 (or, without a local install: npx afterpack@latest).",
+    );
     expect(error?.notices).toEqual([
       { severity: "warning", code: "N", message: "notice text", url: null },
     ]);
@@ -249,6 +260,34 @@ describe("toCloudApiError", () => {
     );
     expect(toCloudApiError(napiError(CLOUD_API, "cloud obfuscation failed: X: y"))?.message).toBe(
       "cloud obfuscation failed: X: y",
+    );
+  });
+});
+
+describe("updateCommand", () => {
+  const as = (packageName: string | null) => ({
+    packageName,
+    packageVersion: "0.1.0",
+    coreVersion: "0.1.0",
+  });
+
+  it("names the caller and pins @afterpack/core to the server's minVersion", () => {
+    expect(updateCommand(as("@afterpack/vite"), "0.2.1")).toBe(
+      "npm install @afterpack/vite@latest @afterpack/core@0.2.1",
+    );
+    expect(updateCommand(as("@afterpack/vite"), null)).toBe(
+      "npm install @afterpack/vite@latest @afterpack/core@latest",
+    );
+    expect(updateCommand(as("@afterpack/vite"), "0.2.1; rm -rf ~")).toBe(
+      "npm install @afterpack/vite@latest @afterpack/core@latest",
+    );
+    expect(updateCommand(null, "0.2.1")).toBe("npm install @afterpack/core@0.2.1");
+    expect(updateCommand(as("@afterpack/core"), "0.2.1")).toBe("npm install @afterpack/core@0.2.1");
+  });
+
+  it("offers npx afterpack@latest to a CLI run without a local install", () => {
+    expect(updateCommand(as("afterpack"), "0.2.1")).toBe(
+      "npm install afterpack@latest @afterpack/core@0.2.1 (or, without a local install: npx afterpack@latest)",
     );
   });
 });
