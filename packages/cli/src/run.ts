@@ -555,36 +555,42 @@ function refuseAlreadyObfuscated(
   return EXIT.failure;
 }
 
-function refuseUpdate(
-  logger: CliLogger,
-  mode: OutputMode,
-  version: string,
-  error: CloudApiError | CoreVersionError,
-): ExitCode {
-  if (error instanceof CloudApiError && error.kind === "api") {
-    return refuse({
-      logger,
-      mode,
-      version,
-      command: "obfuscate",
-      exitCode: EXIT.failure,
-      code: error.apiCode ?? error.code,
-      message: error.message,
-      fix: "Nothing was written; your build output was left exactly as your bundler wrote it.",
-    });
+function refusalFor(
+  error: unknown,
+): { exitCode: ExitCode; code: string; message: string; fix: string } | null {
+  if (error instanceof CloudApiError) {
+    const code = error.apiCode ?? error.code;
+    return error.kind === "api"
+      ? {
+          exitCode: EXIT.failure,
+          code,
+          message: error.message,
+          fix: "Nothing was written; your build output was left exactly as your bundler wrote it.",
+        }
+      : {
+          exitCode: EXIT.updateRequired,
+          code,
+          message: error.message,
+          fix: `Update, then build again: ${error.fix}`,
+        };
   }
-  const code =
-    error instanceof CloudApiError ? (error.apiCode ?? error.code) : "CORE_VERSION_UNSUPPORTED";
-  return refuse({
-    logger,
-    mode,
-    version,
-    command: "obfuscate",
-    exitCode: EXIT.updateRequired,
-    code,
-    message: error.message,
-    fix: `Update, then build again: ${error.fix}`,
-  });
+  if (error instanceof CoreVersionError) {
+    return {
+      exitCode: EXIT.updateRequired,
+      code: error.code,
+      message: error.message,
+      fix: `Update, then build again: ${error.fix}`,
+    };
+  }
+  if (error instanceof UnreadableReceiptError) {
+    return {
+      exitCode: EXIT.failure,
+      code: error.code,
+      message: error.message,
+      fix: "Update afterpack, or rebuild from source and delete the receipt, then run it again.",
+    };
+  }
+  return null;
 }
 
 export function defaultCliStdout(): CliStdout {
@@ -852,20 +858,9 @@ export async function run(deps: CliDeps): Promise<number> {
   if (failureError instanceof AlreadyObfuscatedError) {
     return refuseAlreadyObfuscated(logger, cwd, mode, version, failureError);
   }
-  if (failureError instanceof CloudApiError || failureError instanceof CoreVersionError) {
-    return refuseUpdate(logger, mode, version, failureError);
-  }
-  if (failureError instanceof UnreadableReceiptError) {
-    return refuse({
-      logger,
-      mode,
-      version,
-      command: "obfuscate",
-      exitCode: EXIT.failure,
-      code: failureError.code,
-      message: failureError.message,
-      fix: "Update afterpack, or rebuild from source and delete the receipt, then run it again.",
-    });
+  const refusal = refusalFor(failureError);
+  if (refusal !== null) {
+    return refuse({ logger, mode, version, command: "obfuscate", ...refusal });
   }
 
   const diagnostics = captured.flatMap((f) => f.diagnostics);

@@ -90,47 +90,44 @@ export interface ProtectionVerification {
   problems: string[];
 }
 
-function parseReceipt(path: string): ProtectionReceipt | string {
+type ParsedReceipt =
+  | { receipt: ProtectionReceipt; error?: undefined }
+  | { error: string; newerSchema: number | null };
+
+function parseReceipt(path: string): ParsedReceipt {
   let raw: unknown;
   try {
     raw = JSON.parse(readFileSync(path, "utf8")) as unknown;
   } catch (error) {
-    return `${path} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`;
+    const reason = error instanceof Error ? error.message : String(error);
+    return { error: `${path} is not valid JSON: ${reason}`, newerSchema: null };
   }
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
-    return `${path} is not a protection receipt object`;
+    return { error: `${path} is not a protection receipt object`, newerSchema: null };
   }
   const receipt = raw as Partial<ProtectionReceipt>;
+  const schema = receipt.schema;
+  const newerSchema =
+    typeof schema === "number" && Number.isInteger(schema) && schema > PROTECTION_RECEIPT_SCHEMA
+      ? schema
+      : null;
+  const fail = (error: string): ParsedReceipt => ({ error, newerSchema });
   if (
-    typeof receipt.schema !== "number" ||
-    !Number.isInteger(receipt.schema) ||
-    receipt.schema < PROTECTION_RECEIPT_SCHEMA
+    typeof schema !== "number" ||
+    !Number.isInteger(schema) ||
+    schema < PROTECTION_RECEIPT_SCHEMA
   ) {
-    return `${path} has schema ${String(receipt.schema)}, which this afterpack cannot read`;
+    return fail(`${path} has schema ${String(schema)}, which this afterpack cannot read`);
   }
-  if (!Array.isArray(receipt.files)) return `${path} lists no files`;
-  if (!receipt.files.every(isReceiptFile)) return `${path} lists a file entry it cannot read`;
-  return receipt as ProtectionReceipt;
+  if (!Array.isArray(receipt.files)) return fail(`${path} lists no files`);
+  if (!receipt.files.every(isReceiptFile)) return fail(`${path} lists a file entry it cannot read`);
+  return { receipt: receipt as ProtectionReceipt };
 }
 
 function isReceiptFile(value: unknown): value is ProtectionReceiptFile {
   if (typeof value !== "object" || value === null) return false;
   const entry = value as Partial<ProtectionReceiptFile>;
   return typeof entry.path === "string" && typeof entry.sha256 === "string";
-}
-
-function newerReceiptSchema(path: string): number | null {
-  try {
-    const raw = JSON.parse(readFileSync(path, "utf8")) as { schema?: unknown };
-    const schema = raw?.schema;
-    return typeof schema === "number" &&
-      Number.isInteger(schema) &&
-      schema > PROTECTION_RECEIPT_SCHEMA
-      ? schema
-      : null;
-  } catch {
-    return null;
-  }
 }
 
 export const DIAG_RECEIPT_UNREADABLE = "DIAG_RECEIPT_UNREADABLE";
@@ -156,10 +153,11 @@ export function verifyProtectionReceipt(
   if (!existsSync(receiptPath)) {
     return { receiptPath, receipt: null, problems: [`no protection receipt at ${receiptPath}`] };
   }
-  const parsed = parseReceipt(receiptPath);
-  if (typeof parsed === "string") {
-    return { receiptPath, receipt: null, problems: [parsed] };
+  const result = parseReceipt(receiptPath);
+  if (result.error !== undefined) {
+    return { receiptPath, receipt: null, problems: [result.error] };
   }
+  const parsed = result.receipt;
 
   const problems: string[] = [];
   if (expectedBuildId != null && parsed.buildId !== expectedBuildId) {
@@ -210,9 +208,9 @@ export function detectAlreadyObfuscatedInputs(
   const dir = findReceiptDir(startDir);
   if (!dir) return null;
   const receiptPath = join(dir, PROTECTION_RECEIPT_FILE);
-  const parsed = parseReceipt(receiptPath);
-  if (typeof parsed === "string") {
-    const schema = newerReceiptSchema(receiptPath);
+  const result = parseReceipt(receiptPath);
+  if (result.error !== undefined) {
+    const schema = result.newerSchema;
     if (schema === null) return null;
     throw new UnreadableReceiptError(
       prefix(
@@ -224,7 +222,7 @@ export function detectAlreadyObfuscatedInputs(
       schema,
     );
   }
-  const outputHashes = new Set(parsed.files.map((f) => f.sha256));
+  const outputHashes = new Set(result.receipt.files.map((f) => f.sha256));
   if (outputHashes.size === 0) return null;
   const matches = files.filter((file) => {
     const bytes = bytesByPath?.get(file);

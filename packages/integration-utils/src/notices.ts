@@ -106,6 +106,7 @@ function stripTerminalControls(text: string): string {
 export function sanitizeServerText(value: unknown, limit = NOTICE_MESSAGE_LIMIT): string {
   if (typeof value !== "string") return "";
   const clean = stripTerminalControls(value).replace(/\s+/g, " ").trim();
+  if (clean.length <= limit) return clean;
   const chars = Array.from(clean);
   return chars.length > limit ? chars.slice(0, limit).join("") : clean;
 }

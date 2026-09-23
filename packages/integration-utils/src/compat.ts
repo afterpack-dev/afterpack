@@ -9,6 +9,7 @@ import {
   sanitizeServerText,
 } from "./notices.js";
 import { findUpward } from "./paths.js";
+import { isPlainObject } from "./registry.js";
 
 export const MIN_CORE_VERSION = "0.1.0";
 
@@ -58,13 +59,20 @@ function installedCoreVersion(moduleUrl: string | URL): string | null {
   }
 }
 
+const identities = new Map<string, ClientIdentity>();
+
 export function resolveClientIdentity(moduleUrl: string | URL): ClientIdentity {
+  const key = String(moduleUrl);
+  const cached = identities.get(key);
+  if (cached) return cached;
   const own = ownPackage(moduleUrl);
-  return {
+  const identity: ClientIdentity = {
     packageName: own?.name ?? null,
     packageVersion: own?.version ?? null,
     coreVersion: installedCoreVersion(moduleUrl),
   };
+  identities.set(key, identity);
+  return identity;
 }
 
 export function clientString(identity: ClientIdentity | null | undefined): string | null {
@@ -193,19 +201,15 @@ export class CloudApiError extends Error {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 export function parseCloudErrorMessage(raw: string): CloudErrorBody {
   try {
     const parsed = JSON.parse(raw) as unknown;
-    if (isRecord(parsed)) {
+    if (isPlainObject(parsed)) {
       const code = sanitizeServerText(parsed.code, API_CODE_LIMIT);
       return {
         code: code === "" ? null : code,
         message: sanitizeServerText(parsed.message),
-        details: isRecord(parsed.details) ? parsed.details : null,
+        details: isPlainObject(parsed.details) ? parsed.details : null,
         notices: Array.isArray(parsed.notices) ? (parsed.notices as CloudNotice[]) : null,
       };
     }
@@ -218,6 +222,7 @@ function describeCloudFailure(
   body: CloudErrorBody,
   minVersion: string | null,
   identity: ClientIdentity | null | undefined,
+  fix: string,
 ): string {
   const server = body.message ? ` Server: ${body.message}` : "";
   if (kind === "api") {
@@ -226,7 +231,6 @@ function describeCloudFailure(
     return `cloud obfuscation failed: ${code}${body.message || "the API refused the request"}`;
   }
   const installed = identity?.coreVersion ? ` (installed ${identity.coreVersion})` : "";
-  const fix = updateCommand(identity, minVersion);
   if (kind === "sunset") {
     return (
       `the AfterPack cloud API this ${CORE_PACKAGE}${installed} talks to has been retired — ` +
@@ -247,7 +251,7 @@ export function toCloudApiError(
     prefix?: (message: string) => string;
   } = {},
 ): CloudApiError | null {
-  if (!isRecord(error) && !(error instanceof Error)) return null;
+  if (!isPlainObject(error) && !(error instanceof Error)) return null;
   const code = (error as { code?: unknown }).code;
   if (typeof code !== "string") return null;
   const kind = KIND_BY_CODE[code];
@@ -256,8 +260,9 @@ export function toCloudApiError(
   const body = parseCloudErrorMessage(typeof rawMessage === "string" ? rawMessage : "");
   const minVersion = safeVersionString(body.details?.minVersion);
   const prefix = options.prefix ?? ((m: string) => m);
+  const fix = updateCommand(options.identity, minVersion);
   return new CloudApiError({
-    message: prefix(describeCloudFailure(kind, body, minVersion, options.identity)),
+    message: prefix(describeCloudFailure(kind, body, minVersion, options.identity, fix)),
     code,
     kind,
     apiCode: body.code,
@@ -265,7 +270,7 @@ export function toCloudApiError(
     details: body.details,
     notices: sanitizeNotices(body.notices),
     minVersion,
-    fix: updateCommand(options.identity, minVersion),
+    fix,
     cause: error,
   });
 }
