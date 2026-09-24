@@ -4,14 +4,24 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { LINEAGE_EMBED_CAP, renderProtectionMapHtml } from "./render-core.mjs";
 
 function usageAndExit() {
-  console.error("usage: node render.mjs <protmap.json> <template.html> <out.html> [--no-lineage]");
+  console.error(
+    "usage: afterpack-protection-map <protmap.json> <out.html> [--template <file>] [--no-lineage]",
+  );
   process.exit(2);
 }
 
 function main() {
-  const [, , jsonPath, templatePath, outPath, ...rest] = process.argv;
-  if (!jsonPath || !templatePath || !outPath) usageAndExit();
-  const includeLineage = !rest.includes("--no-lineage");
+  const positional = [];
+  let includeLineage = true;
+  let templatePath;
+  const args = process.argv.slice(2);
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--no-lineage") includeLineage = false;
+    else if (args[i] === "--template") templatePath = args[++i] ?? usageAndExit();
+    else positional.push(args[i]);
+  }
+  const [jsonPath, outPath] = positional;
+  if (!jsonPath || !outPath || positional.length > 2) usageAndExit();
 
   let raw;
   try {
@@ -22,16 +32,21 @@ function main() {
   }
 
   let template;
-  try {
-    template = readFileSync(templatePath, "utf8");
-  } catch (err) {
-    console.error(`failed to read template ${templatePath}: ${err.message}`);
-    process.exit(1);
+  if (templatePath) {
+    try {
+      template = readFileSync(templatePath, "utf8");
+    } catch (err) {
+      console.error(`failed to read template ${templatePath}: ${err.message}`);
+      process.exit(1);
+    }
   }
 
   let result;
   try {
-    result = renderProtectionMapHtml(raw, { template, includeLineage });
+    result = renderProtectionMapHtml(
+      raw,
+      template ? { template, includeLineage } : { includeLineage },
+    );
   } catch (err) {
     console.error(err.message);
     process.exit(1);

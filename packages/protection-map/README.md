@@ -17,7 +17,7 @@ If you have Protection Map data as JSON, render it with the bundled command. The
 with the package:
 
 ```sh
-npx afterpack-protection-map report.json node_modules/@afterpack/protection-map/template.html protection-map.html
+npx afterpack-protection-map report.json protection-map.html
 ```
 
 Add `--no-lineage` for a smaller file without the per-region transform history.
