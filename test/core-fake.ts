@@ -1,7 +1,9 @@
+import type { ProtectionMap } from "../packages/protection-map/index.js";
+
 export interface EngineCall {
   input: string;
   config: Record<string, unknown>;
-  inputSourceMap?: string;
+  sourceMap?: string;
   regions?: unknown[];
 }
 
@@ -34,10 +36,10 @@ export interface FakeDiagnostic {
 }
 
 export interface FakeFileResult {
-  filePath: string;
+  path: string;
   code: string;
   sourceMap?: string;
-  protectionMap?: unknown;
+  protectionMap?: ProtectionMap;
   status: "success" | "failure";
   error?: string;
   unobfuscated: boolean;
@@ -68,19 +70,52 @@ export function __setBatchError(error: Error): void {
   batchError = error;
 }
 
-export function napiError(code: string, message: string): Error {
-  return Object.assign(new Error(message), { code });
+export type FakeCloudErrorCode =
+  | "AFTERPACK_CLOUD_UPGRADE_REQUIRED"
+  | "AFTERPACK_CLOUD_SUNSET"
+  | "AFTERPACK_CLOUD_API";
+
+export class ObfuscationError extends Error {
+  readonly diagnostics: FakeDiagnostic[];
+  readonly code?: FakeCloudErrorCode;
+  readonly details?: Record<string, unknown> | null;
+  readonly notices?: FakeNotice[] | null;
+
+  constructor(
+    message: string,
+    diagnostics: FakeDiagnostic[],
+    cloud?: {
+      code: FakeCloudErrorCode;
+      details: Record<string, unknown> | null;
+      notices: FakeNotice[] | null;
+    },
+  ) {
+    super(message);
+    this.name = "ObfuscationError";
+    this.diagnostics = diagnostics;
+    if (cloud !== undefined) {
+      this.code = cloud.code;
+      this.details = cloud.details;
+      this.notices = cloud.notices;
+    }
+  }
 }
 
-export function cloudErrorMessage(body: {
-  code: string;
-  message: string;
-  details?: Record<string, unknown> | null;
-  notices?: FakeNotice[] | null;
-}): string {
-  return JSON.stringify({
-    code: body.code,
-    message: body.message,
+export function cloudRefusal(
+  code: FakeCloudErrorCode,
+  body: {
+    message: string;
+    apiCode?: string;
+    details?: Record<string, unknown> | null;
+    notices?: FakeNotice[] | null;
+  },
+): ObfuscationError {
+  const diagnostics: FakeDiagnostic[] =
+    body.apiCode === undefined
+      ? []
+      : [{ severity: "error", code: body.apiCode, message: body.message, file: null, span: null }];
+  return new ObfuscationError(body.message, diagnostics, {
+    code,
     details: body.details ?? null,
     notices: body.notices ?? null,
   });
@@ -154,7 +189,7 @@ export function __reset(): void {
 }
 
 export async function processBatch(
-  files: Array<{ filePath: string; source: string; inputSourceMap?: string; regions?: unknown[] }>,
+  files: Array<{ path: string; source: string; sourceMap?: string; regions?: unknown[] }>,
   config: unknown,
   buildContext?: unknown,
 ): Promise<FakeBatchResult> {
@@ -168,13 +203,13 @@ export async function processBatch(
     engineCalls.push({
       input: f.source,
       config: configRecord,
-      inputSourceMap: f.inputSourceMap,
+      sourceMap: f.sourceMap,
       regions: f.regions,
     });
     const pr = impl(f.source, configRecord) as {
       code: string;
       sourceMap?: string | null;
-      protectionMap?: unknown;
+      protectionMap?: ProtectionMap | null;
       unobfuscated?: boolean;
       diagnostics?: FakeDiagnostic[];
     };
@@ -182,7 +217,7 @@ export async function processBatch(
     if (fatal) {
       failureCount++;
       return {
-        filePath: f.filePath,
+        path: f.path,
         code: "",
         status: "failure" as const,
         error: fatal.message,
@@ -192,7 +227,7 @@ export async function processBatch(
     }
     successCount++;
     return {
-      filePath: f.filePath,
+      path: f.path,
       code: pr.code,
       sourceMap: pr.sourceMap ?? undefined,
       protectionMap: pr.protectionMap ?? undefined,

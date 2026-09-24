@@ -138,16 +138,16 @@ describe("afterpack parcel optimizer", () => {
     expect(warnings.join("\n")).toContain("backup:true is not available");
   });
 
-  it("feeds the LIVE map as inputSourceMap instead of probing disk", async () => {
+  it("feeds the LIVE map as sourceMap instead of probing disk", async () => {
     const map = { version: 3, sources: ["src/a.js"], mappings: "AAAA", sourcesContent: ["x"] };
     await run({ map: fakeMap(map) });
 
-    expect(JSON.parse(engineCalls[0].inputSourceMap as string)).toEqual(map);
+    expect(JSON.parse(engineCalls[0].sourceMap as string)).toEqual(map);
   });
 
   it("passes no input map when the bundle carries none", async () => {
     await run();
-    expect(engineCalls[0].inputSourceMap).toBeUndefined();
+    expect(engineCalls[0].sourceMap).toBeUndefined();
   });
 
   it("leaves a non-JS bundle untouched", async () => {

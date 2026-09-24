@@ -1,5 +1,6 @@
 import { CONFIG_FILE_NAME, loadConfigFile } from "./config-file.js";
 import { type CliParseResult, parseCliOptions, parseEnvOptions } from "./config-parse.js";
+import type { ObfuscationPassOptions } from "./pass.js";
 import type { AfterpackArtifactOptions } from "./policy.js";
 import {
   type AfterpackConfig,
@@ -92,6 +93,36 @@ export interface ResolvedPluginConfig {
   positionals: string[];
   help: boolean;
   version: boolean;
+}
+
+export type PassSettings = Pick<
+  ObfuscationPassOptions,
+  | "artifactOptions"
+  | "seed"
+  | "preset"
+  | "complexity"
+  | "regions"
+  | "engineConfig"
+  | "diagnostics"
+  | "directives"
+  | "directivesExplicit"
+>;
+
+export function passSettings(
+  resolved: Pick<ResolvedPluginConfig, "options" | "engineConfig">,
+): PassSettings {
+  const settings = resolved.options;
+  return {
+    artifactOptions: settings.artifactOptions,
+    seed: settings.seed,
+    preset: settings.preset,
+    complexity: settings.complexity,
+    regions: settings.regions,
+    engineConfig: resolved.engineConfig,
+    diagnostics: settings.diagnostics?.level,
+    directives: settings.directives,
+    directivesExplicit: settings.directivesExplicit,
+  };
 }
 
 function unsupportedIssues(

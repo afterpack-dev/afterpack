@@ -368,21 +368,21 @@ describe("identifiers.globals.rename — the file-wide escape hatch", () => {
 
   it("REFUSES the flag in a multi-file batch and names the files that asked", () => {
     const many = captureDirectiveRegions([
-      { source: "var a = 1;\n", filePath: "/dist/a.js" },
+      { source: "var a = 1;\n", path: "/dist/a.js" },
       {
         source: "/* @afterpack identifiers.globals.rename */ var b = 2;\n",
-        filePath: "/dist/b.js",
+        path: "/dist/b.js",
       },
       {
         source: "/* @afterpack identifiers.globals.rename */ var c = 3;\n",
-        filePath: "/dist/c.js",
+        path: "/dist/c.js",
       },
     ]);
     expect(many.renameGlobals).toBe(false);
     expect(many.renameGlobalsRefused).toEqual(["/dist/b.js", "/dist/c.js"]);
   });
 
-  it("falls back to a positional label when the caller supplied no filePath", () => {
+  it("falls back to a positional label when the caller supplied no path", () => {
     const many = captureDirectiveRegions([
       { source: "var a = 1;\n" },
       { source: "/* @afterpack identifiers.globals.rename */ var b = 2;\n" },
@@ -394,8 +394,8 @@ describe("identifiers.globals.rename — the file-wide escape hatch", () => {
   it("never refuses when directive capture is disabled (nothing was scanned)", () => {
     const off = captureDirectiveRegions(
       [
-        { source: "/* @afterpack identifiers.globals.rename */ var a = 1;\n", filePath: "/a.js" },
-        { source: "var b = 2;\n", filePath: "/b.js" },
+        { source: "/* @afterpack identifiers.globals.rename */ var a = 1;\n", path: "/a.js" },
+        { source: "var b = 2;\n", path: "/b.js" },
       ],
       undefined,
       false,

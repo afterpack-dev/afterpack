@@ -8,6 +8,7 @@ import {
   collectBundleJs,
   createTelemetryReporter,
   type OutputBundleLike,
+  passSettings,
   resolveClientIdentity,
   resolvePluginConfig,
   runObfuscationPass,
@@ -147,16 +148,8 @@ export function afterpackVite(options: AfterpackViteOptions = {}): Plugin {
               ? join(projectRoot, ".afterpack", leg)
               : join(projectRoot, ".afterpack"),
           },
-          artifactOptions,
+          ...passSettings(resolved),
           hasBundlerSourcemap: buildSourcemap,
-          seed: settings.seed,
-          preset: settings.preset,
-          complexity: settings.complexity,
-          regions: settings.regions,
-          engineConfig: resolved.engineConfig,
-          diagnostics: settings.diagnostics?.level,
-          directives: directivesEnabled,
-          directivesExplicit: settings.directivesExplicit,
           messages: {
             autoEnableBundlerSourcemap:
               "protectionMap:true but no bundler sourcemap was found; enabled build.sourcemap " +
@@ -165,7 +158,7 @@ export function afterpackVite(options: AfterpackViteOptions = {}): Plugin {
         });
 
         for (const out of result.outputs ?? []) {
-          const entry = entries.get(out.filePath);
+          const entry = entries.get(out.path);
           if (entry) {
             applyBundleOutput(bundle as unknown as OutputBundleLike, entry, out, result.policy);
           }

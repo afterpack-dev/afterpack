@@ -202,7 +202,7 @@ describe("afterpackRollup source maps", () => {
       { dir: outDir, sourcemap: true },
       mapped(),
     );
-    expect(engineCalls[0].inputSourceMap).toBe(MAP);
+    expect(engineCalls[0].sourceMap).toBe(MAP);
     expect(bundle["index.js.map"].source).toContain('"mappings":"AAAA"');
     expect(bundle["index.js"].code).toMatch(/\/\/# sourceMappingURL=index\.js\.map\n$/);
   });

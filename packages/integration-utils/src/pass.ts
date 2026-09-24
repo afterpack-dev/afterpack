@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
+import type { ProtectionMap } from "@afterpack/protection-map";
 import {
   DEFAULT_LOGGER,
   ensureGitignore,
@@ -65,17 +66,17 @@ import {
 } from "./telemetry.js";
 
 export interface EngineFileInput {
-  filePath: string;
+  path: string;
   source: string;
-  inputSourceMap?: string;
+  sourceMap?: string;
   regions?: RegionConfig[];
 }
 
 export interface EngineFileResult {
-  filePath: string;
+  path: string;
   code: string;
   sourceMap?: string;
-  protectionMap?: unknown;
+  protectionMap?: ProtectionMap;
   status: "success" | "failure";
   error?: string;
   unobfuscated: boolean;
@@ -109,11 +110,11 @@ export interface CombinedProtectionMapTarget {
 
 export interface InMemoryInput {
   source: string;
-  inputSourceMap?: string | null;
+  sourceMap?: string | null;
 }
 
 export interface InMemoryOutput {
-  filePath: string;
+  path: string;
   code: string;
   sourceMap: string | null;
 }
@@ -321,7 +322,7 @@ export async function runObfuscationPass(
       : (onDiskBytes.get(filePath) ?? readFileSync(filePath)).toString("utf8");
     sourceByPath.set(filePath, source);
     const inputSourceMap = provided
-      ? (provided.inputSourceMap ?? null)
+      ? (provided.sourceMap ?? null)
       : discoverInputSourceMap(filePath, source);
     let regions: RegionConfig[] | undefined;
     const modules = options.capturedByFile?.get(filePath);
@@ -363,12 +364,12 @@ export async function runObfuscationPass(
         }
       }
     }
-    return { filePath, source, inputSourceMap: inputSourceMap ?? undefined, regions };
+    return { path: filePath, source, sourceMap: inputSourceMap ?? undefined, regions };
   });
   onDiskBytes.clear();
 
   const hasBundlerSourcemap =
-    (options.hasBundlerSourcemap ?? false) || inputs.some((i) => i.inputSourceMap != null);
+    (options.hasBundlerSourcemap ?? false) || inputs.some((i) => i.sourceMap != null);
   const policy = resolveReportPolicy(env, artifactOptions, {
     hasBundlerSourcemap,
     inPlaceOutput: true,
@@ -441,7 +442,7 @@ export async function runObfuscationPass(
   ) {
     logger.warn(prefix(options.messages.directivesNeedClientMaps));
   }
-  const mappedInputs = inputs.filter((i) => i.inputSourceMap != null).length;
+  const mappedInputs = inputs.filter((i) => i.sourceMap != null).length;
   if (policy.protectionMap && files.length > 0 && mappedInputs > 0 && mappedInputs < files.length) {
     logger.warn(
       prefix(
@@ -530,7 +531,7 @@ export async function runObfuscationPass(
     await telemetry(facts);
   }
 
-  const protectionMapDocs: unknown[] = [];
+  const protectionMapDocs: ProtectionMap[] = [];
   const sensitiveArtifactPaths: string[] = [];
   const outputs: InMemoryOutput[] = [];
   let inputBytes = 0;
@@ -540,20 +541,20 @@ export async function runObfuscationPass(
   const transformedFiles: string[] = [];
   const verified: { result: EngineFileResult; source: string }[] = [];
   for (const f of batch.files) {
-    const source = sourceByPath.get(f.filePath);
+    const source = sourceByPath.get(f.path);
     if (source === undefined) {
-      throw new Error(prefix(`no captured source for engine-returned path ${f.filePath}`));
+      throw new Error(prefix(`no captured source for engine-returned path ${f.path}`));
     }
     const failure = fileFailure(f, source);
     if (failure !== null) {
-      throw new Error(prefix(`failed to obfuscate ${f.filePath}: ${failure}`));
+      throw new Error(prefix(`failed to obfuscate ${f.path}: ${failure}`));
     }
 
     inputBytes += Buffer.byteLength(source);
     outputBytes += Buffer.byteLength(f.code);
-    if (f.unobfuscated === true) unobfuscatedFiles.push(basename(f.filePath));
+    if (f.unobfuscated === true) unobfuscatedFiles.push(basename(f.path));
     else if (f.code === source) noOp += 1;
-    else transformedFiles.push(f.filePath);
+    else transformedFiles.push(f.path);
 
     if (policy.protectionMap && f.protectionMap != null) {
       protectionMapDocs.push(f.protectionMap);
@@ -586,12 +587,12 @@ export async function runObfuscationPass(
   const emittedFiles: string[] = [];
   for (const { result: f, source } of verified) {
     if (options.emitToCaller) {
-      outputs.push({ filePath: f.filePath, code: f.code, sourceMap: f.sourceMap ?? null });
-      emittedFiles.push(f.filePath);
+      outputs.push({ path: f.path, code: f.code, sourceMap: f.sourceMap ?? null });
+      emittedFiles.push(f.path);
       continue;
     }
     const written = writeArtifacts({
-      outPath: f.filePath,
+      outPath: f.path,
       code: f.code,
       sourceMapJson: f.sourceMap ?? null,
       protectionMapJson: null,

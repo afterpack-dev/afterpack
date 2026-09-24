@@ -4,6 +4,7 @@ import {
   type AfterpackPluginOptions,
   collectJsFiles,
   createTelemetryReporter,
+  passSettings,
   resolveClientIdentity,
   resolvePluginConfig,
   runObfuscationPass,
@@ -59,13 +60,7 @@ export async function afterpackAngular(options: AfterpackAngularOptions = {}): P
     gitignoreDir: cwd,
     startedAt: startedBeforeDirDiscovery,
     combinedProtectionMap: { buildDir: browserDir, afterpackDir: gitignoredNonServedAfterpackDir },
-    artifactOptions: settings.artifactOptions,
-    seed: settings.seed,
-    preset: settings.preset,
-    complexity: settings.complexity,
-    regions: settings.regions,
-    engineConfig: resolved.engineConfig,
-    diagnostics: settings.diagnostics?.level,
+    ...passSettings(resolved),
     directives: DIRECTIVES_ALWAYS_DISABLED,
   });
 }

@@ -8,6 +8,7 @@ import {
   collectBundleJs,
   createTelemetryReporter,
   type OutputBundleLike,
+  passSettings,
   resolveClientIdentity,
   resolvePluginConfig,
   runObfuscationPass,
@@ -37,7 +38,6 @@ export function afterpackRollup(options: AfterpackRollupOptions = {}): Plugin {
     unsupported: { "paths.include": PATHS_INCLUDE_UNSUPPORTED },
   });
   const settings = resolved.options;
-  const artifactOptions = settings.artifactOptions;
   const autorun = settings.build?.autorun ?? true;
   const directivesEnabled = settings.directives;
   const preMinifyCapturedModulesById = new Map<
@@ -127,16 +127,8 @@ export function afterpackRollup(options: AfterpackRollupOptions = {}): Plugin {
             buildDir: outDir,
             afterpackDir: gitignoredNonServedAfterpackDir,
           },
-          artifactOptions,
+          ...passSettings(resolved),
           hasBundlerSourcemap: Boolean(outputOptions.sourcemap),
-          seed: settings.seed,
-          preset: settings.preset,
-          complexity: settings.complexity,
-          regions: settings.regions,
-          engineConfig: resolved.engineConfig,
-          diagnostics: settings.diagnostics?.level,
-          directives: directivesEnabled,
-          directivesExplicit: settings.directivesExplicit,
           messages: {
             autoEnableBundlerSourcemap:
               "protectionMap:true but no bundler sourcemap was found; set `output.sourcemap: true` " +
@@ -145,7 +137,7 @@ export function afterpackRollup(options: AfterpackRollupOptions = {}): Plugin {
         });
 
         for (const out of result.outputs ?? []) {
-          const entry = entries.get(out.filePath);
+          const entry = entries.get(out.path);
           if (entry) {
             applyBundleOutput(bundle as unknown as OutputBundleLike, entry, out, result.policy);
           }

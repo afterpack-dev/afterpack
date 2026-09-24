@@ -93,20 +93,41 @@ exit `64` and names the right spelling.
 
 | Key | Meaning | Default |
 | --- | --- | --- |
-| `preset` | `minify`, `light`, `medium`, `hard` or `extreme` | `light` |
-| `complexity` | numeric protection level, overriding the preset's | the preset's value |
-| `seed` | fix the seed; `git` uses the current commit | a new random seed per build |
-| `paths.exclude` | globs to leave untouched | `[]` |
-| `paths.include` | globs to add back to the walk | `[]` |
-| `identifiers.reserved` | names never to rename | `[]` |
-| `build.backup` | keep originals in `.afterpack/backup/` | `true` for the CLI, `false` in plugins |
-| `sourceMap.enabled` | write `.map` files | on when an input map exists, off in production |
-| `protectionMap.enabled` | write the Protection Map | on when an input map exists |
-| `diagnostics.format` | `text` or `json` | `text` |
-| `diagnostics.level` | `summary`, `all` or `none` (errors still print) | `summary` |
-| `allowUnobfuscated` | ship a file that could not be processed, instead of failing (exit `2`) | `false` |
-| `build.autorun` | `false` turns AfterPack off for the project, CLI and plugins alike | `true` |
-| `telemetry.enabled` | anonymous diagnostics, sent only when a build is refused or partial | `true` |
+| [`preset`][preset] | `minify`, `light`, `medium`, `hard` or `extreme` | `light` |
+| [`complexity`][complexity] | numeric protection level, overriding the preset's | the preset's value |
+| [`seed`][seed] | fix the seed; `git` uses the current commit | a new random seed per build |
+| [`paths.exclude`][paths.exclude] | globs to leave untouched | `[]` |
+| [`paths.include`][paths.include] | globs to add back to the walk | `[]` |
+| [`identifiers.reserved`][identifiers.reserved] | names never to rename | `[]` |
+| [`build.backup`][build.backup] | keep originals in `.afterpack/backup/` | `true` for the CLI, `false` in plugins |
+| [`sourceMap.enabled`][sourceMap.enabled] | write `.map` files | on when an input map exists, off in production |
+| [`protectionMap.enabled`][protectionMap.enabled] | write the Protection Map | on when an input map exists |
+| [`diagnostics.format`][diagnostics.format] | `text` or `json` | `text` |
+| [`diagnostics.level`][diagnostics.level] | `summary`, `all` or `none` (errors still print) | `summary` |
+| [`allowUnobfuscated`][allowUnobfuscated] | ship a file that could not be processed, instead of failing (exit `2`) | `false` |
+| [`build.autorun`][build.autorun] | `false` turns AfterPack off for the project, CLI and plugins alike | `true` |
+| [`telemetry.enabled`][telemetry.enabled] | anonymous diagnostics, sent only when a build is refused or partial | `true` |
+
+Every other option is in the configuration reference, where each key has its own section. The
+anchor is the key with dots as hyphens, for example `#sourceMap-enabled`:
+https://www.afterpack.dev/docs/config
+
+[preset]: https://www.afterpack.dev/docs/config#preset
+[complexity]: https://www.afterpack.dev/docs/config#complexity
+[seed]: https://www.afterpack.dev/docs/config#seed
+[paths.exclude]: https://www.afterpack.dev/docs/config#paths-exclude
+[paths.include]: https://www.afterpack.dev/docs/config#paths-include
+[identifiers.reserved]: https://www.afterpack.dev/docs/config#identifiers-reserved
+[build.backup]: https://www.afterpack.dev/docs/config#build-backup
+[sourceMap.enabled]: https://www.afterpack.dev/docs/config#sourceMap-enabled
+[protectionMap.enabled]: https://www.afterpack.dev/docs/config#protectionMap-enabled
+[diagnostics.format]: https://www.afterpack.dev/docs/config#diagnostics-format
+[diagnostics.level]: https://www.afterpack.dev/docs/config#diagnostics-level
+[allowUnobfuscated]: https://www.afterpack.dev/docs/config#allowUnobfuscated
+[build.autorun]: https://www.afterpack.dev/docs/config#build-autorun
+[telemetry.enabled]: https://www.afterpack.dev/docs/config#telemetry-enabled
+[inflation.max]: https://www.afterpack.dev/docs/config#inflation-max
+[key]: https://www.afterpack.dev/docs/config#key
 
 `afterpack.json` is shared by the CLI and every plugin, and takes the whole schema, nested:
 
@@ -118,8 +139,6 @@ exit `64` and names the right spelling.
   "identifiers": { "reserved": ["Hls", { "glob": "src/legacy/**", "names": ["jQuery"] }] }
 }
 ```
-
-Full reference: https://www.afterpack.dev/docs/config
 
 ## Machine-readable output
 
@@ -162,7 +181,7 @@ Lists are sorted and there are no timestamps, so two runs of one build give iden
 Without a key, builds run locally with basic protection. With a Pro key, the same command sends the
 build to AfterPack's cloud, which applies much stronger protection.
 
-- Set it as `AFTERPACK_KEY` in the environment (a CI secret), or `key` in an uncommitted
+- Set it as `AFTERPACK_KEY` in the environment (a CI secret), or [`key`][key] in an uncommitted
   `afterpack.json`.
 - Never put it in a plugin's options object. Plugins reject it there, because a bundler config is
   committed source.
@@ -208,8 +227,8 @@ exits `1`. Anonymous use is rate-limited per 24 hours. Docs: https://www.afterpa
 | --- | --- |
 | `0` | Success. Also `--help` and `--version`. |
 | `1` | Failure: bad path, no JavaScript found, an engine error, an already-obfuscated tree, a failed `verify`, `restore` or scan, or an unreachable cloud on a Pro build. |
-| `2` | Partial: some files shipped unobfuscated. Only with `allowUnobfuscated`. |
-| `3` | Size cap: `inflation.max` stopped the run before it reached the protection level. |
+| `2` | Partial: some files shipped unobfuscated. Only with [`allowUnobfuscated`][allowUnobfuscated]. |
+| `3` | Size cap: [`inflation.max`][inflation.max] stopped the run before it reached the protection level. |
 | `6` | Update required. Run the install command it prints, for example `npm install afterpack@latest @afterpack/core@<version>`. Nothing was written. |
 | `64` | Misuse: unknown flag or command, malformed value, or two path arguments. |
 

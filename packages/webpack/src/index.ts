@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import { basename, join, relative } from "node:path";
 import { processBatch, version } from "@afterpack/core";
 import {
-  type AfterpackArtifactOptions,
   type AfterpackPluginOptions,
   type CapturedModule,
   type CoreConfigSubset,
@@ -11,6 +10,7 @@ import {
   extractSourceMappingURL,
   type InMemoryInput,
   type PluginOptionsView,
+  passSettings,
   resolveClientIdentity,
   resolvePluginConfig,
   runObfuscationPass,
@@ -95,7 +95,6 @@ function collectResourcesThroughConcatenatedModules(module: unknown, out: string
 
 export class AfterpackWebpackPlugin {
   private readonly settings: PluginOptionsView;
-  private readonly artifactOptions: AfterpackArtifactOptions;
   private readonly engineConfig: CoreConfigSubset;
   private readonly captured = new Map<string, CapturedSource>();
   private readonly seenByBuildHooksThisCompilation = new Set<string>();
@@ -112,7 +111,6 @@ export class AfterpackWebpackPlugin {
       unsupported: { "paths.include": PATHS_INCLUDE_UNSUPPORTED },
     });
     this.settings = resolved.options;
-    this.artifactOptions = resolved.options.artifactOptions;
     this.engineConfig = resolved.engineConfig;
   }
 
@@ -176,7 +174,7 @@ export class AfterpackWebpackPlugin {
       if (source == null) continue;
       const filePath = join(outputPath, asset.name);
       byPath.set(filePath, asset);
-      inputs.set(filePath, { source, inputSourceMap: inputSourceMap(compilation, asset) });
+      inputs.set(filePath, { source, sourceMap: inputSourceMap(compilation, asset) });
     }
     const files = [...byPath.keys()];
     if (files.length === 0) return;
@@ -206,16 +204,8 @@ export class AfterpackWebpackPlugin {
         buildDir: outputPath,
         afterpackDir: join(context, ".afterpack"),
       },
-      artifactOptions: this.artifactOptions,
+      ...passSettings({ options: this.settings, engineConfig: this.engineConfig }),
       hasBundlerSourcemap: typeof devtool === "string" && devtool.includes("source-map"),
-      seed: this.settings.seed,
-      preset: this.settings.preset,
-      complexity: this.settings.complexity,
-      regions: this.settings.regions,
-      engineConfig: this.engineConfig,
-      diagnostics: this.settings.diagnostics?.level,
-      directives: directivesEnabled,
-      directivesExplicit: this.settings.directivesExplicit,
       messages: {
         autoEnableBundlerSourcemap:
           "protectionMap:true but no bundler sourcemap was found; set `devtool: 'source-map'` " +
@@ -225,7 +215,7 @@ export class AfterpackWebpackPlugin {
 
     const { RawSource } = compiler.webpack.sources;
     for (const out of result.outputs ?? []) {
-      const asset = byPath.get(out.filePath);
+      const asset = byPath.get(out.path);
       if (!asset) continue;
       const emitMap = result.policy.sourceMap && out.sourceMap != null;
       const mapName = asset.mapName ?? `${asset.name}.map`;

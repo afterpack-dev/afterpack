@@ -63,6 +63,8 @@ const SURFACE = [
   "ObfuscationPassResult",
   "PROTECTION_RECEIPT_FILE",
   "PassMessages",
+  "PassSettings",
+  "passSettings",
   "PassReceiptIdentity",
   "PassTiming",
   "PluginConfigInput",

@@ -1,6 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { renderProtectionMapHtml } from "@afterpack/protection-map";
+import {
+  type ProtectionMap,
+  type ProtectionMapFile,
+  renderProtectionMapHtml,
+} from "@afterpack/protection-map";
 import {
   type ArtifactMode,
   combinedProtectionMapPath,
@@ -50,7 +54,7 @@ export interface WriteArtifactsInput {
   outPath: string;
   code: string;
   sourceMapJson: string | null;
-  protectionMapJson: unknown | null;
+  protectionMapJson: ProtectionMap | null;
   originalSource: string | null;
   policy: ReportPolicy;
   mode?: ArtifactMode;
@@ -129,7 +133,7 @@ export function writeArtifacts(input: WriteArtifactsInput): WriteArtifactsResult
 
 interface WriteCombinedProtectionMapInput {
   buildDir: string;
-  docs: unknown[];
+  docs: ProtectionMap[];
   policy: ReportPolicy;
   afterpackDir?: string;
   fileName?: string;
@@ -498,16 +502,15 @@ export function writeCombinedProtectionMap(input: WriteCombinedProtectionMapInpu
     const f = (doc as { files?: unknown }).files;
     return Array.isArray(f) ? f : [doc];
   });
-  const files = buildProjectFileTree(flat);
-  const envelope = (docs.find((d) => {
-    const o = d as { schemaVersion?: unknown; engine?: unknown } | null;
-    return !!o && (o.schemaVersion !== undefined || o.engine !== undefined);
-  }) ?? {}) as { schemaVersion?: unknown; spanUnits?: unknown; engine?: unknown };
+  const files = buildProjectFileTree(flat) as ProtectionMapFile[];
+  const envelope = docs.find(
+    (d) => !!d && (d.schemaVersion !== undefined || d.engine !== undefined),
+  );
   const { html } = renderProtectionMapHtml(
     {
-      schemaVersion: envelope.schemaVersion,
-      spanUnits: envelope.spanUnits,
-      engine: envelope.engine,
+      schemaVersion: envelope?.schemaVersion,
+      spanUnits: envelope?.spanUnits,
+      engine: envelope?.engine,
       files,
     },
     { includeLineage: true },

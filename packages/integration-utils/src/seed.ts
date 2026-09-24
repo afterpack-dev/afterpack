@@ -60,8 +60,20 @@ interface BuildSession {
   gitFallbackWarned: boolean;
 }
 
-const sessions = new Map<string, BuildSession>();
-const ownEnvExports: { env: Record<string, string | undefined>; value: string }[] = [];
+interface SeedState {
+  sessions: Map<string, BuildSession>;
+  ownEnvExports: { env: Record<string, string | undefined>; value: string }[];
+}
+
+const SEED_STATE = Symbol.for("afterpack.integration-utils.seed-sessions");
+
+function sharedSeedState(): SeedState {
+  const holder = globalThis as { [SEED_STATE]?: SeedState };
+  holder[SEED_STATE] ??= { sessions: new Map(), ownEnvExports: [] };
+  return holder[SEED_STATE];
+}
+
+const { sessions, ownEnvExports } = sharedSeedState();
 
 export function resetBuildSessions(): void {
   sessions.clear();

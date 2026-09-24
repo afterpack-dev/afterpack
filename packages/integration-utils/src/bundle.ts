@@ -39,7 +39,7 @@ export function collectBundleJs(bundle: OutputBundleLike, outDir: string): Bundl
     const filePath = resolve(outDir, fileName);
     files.push(filePath);
     entries.set(filePath, entry);
-    inputs.set(filePath, { source, inputSourceMap: entry.map ? entry.map.toString() : null });
+    inputs.set(filePath, { source, sourceMap: entry.map ? entry.map.toString() : null });
   }
   return { files, inputs, entries };
 }

@@ -9,8 +9,8 @@ import {
   __setProcessResult,
   asCloudBatch,
   batchCalls,
-  cloudErrorMessage,
-  napiError,
+  cloudRefusal,
+  ObfuscationError,
   processBatch,
   version,
 } from "../../../test/core-fake.js";
@@ -317,22 +317,19 @@ describe("the result status rule", () => {
 describe("cloud refusals thrown by processBatch", () => {
   it("turns AFTERPACK_CLOUD_UPGRADE_REQUIRED into a CloudApiError and prints its notices", async () => {
     __setBatchError(
-      napiError(
-        "AFTERPACK_CLOUD_UPGRADE_REQUIRED",
-        cloudErrorMessage({
-          code: "DIAG_CLIENT_UPGRADE_REQUIRED",
-          message: "this core is too old",
-          details: { minVersion: "0.2.0" },
-          notices: [
-            {
-              severity: "warning",
-              code: "UPGRADE",
-              message: "see the guide",
-              url: "https://afterpack.dev/docs/upgrade",
-            },
-          ],
-        }),
-      ),
+      cloudRefusal("AFTERPACK_CLOUD_UPGRADE_REQUIRED", {
+        apiCode: "DIAG_CLIENT_UPGRADE_REQUIRED",
+        message: "this core is too old",
+        details: { minVersion: "0.2.0" },
+        notices: [
+          {
+            severity: "warning",
+            code: "UPGRADE",
+            message: "see the guide",
+            url: "https://afterpack.dev/docs/upgrade",
+          },
+        ],
+      }),
     );
     const cap = capture();
     const error = await runObfuscationPass(options({ client: IDENTITY, logger: cap.logger })).catch(
@@ -360,14 +357,11 @@ describe("cloud refusals thrown by processBatch", () => {
 
   it("names the calling plugin package in the command, with no npx alternative", async () => {
     __setBatchError(
-      napiError(
-        "AFTERPACK_CLOUD_UPGRADE_REQUIRED",
-        cloudErrorMessage({
-          code: "DIAG_CLIENT_UPGRADE_REQUIRED",
-          message: "clients below 0.2.0 are no longer served",
-          details: { minVersion: "0.2.0" },
-        }),
-      ),
+      cloudRefusal("AFTERPACK_CLOUD_UPGRADE_REQUIRED", {
+        apiCode: "DIAG_CLIENT_UPGRADE_REQUIRED",
+        message: "clients below 0.2.0 are no longer served",
+        details: { minVersion: "0.2.0" },
+      }),
     );
     const identity: ClientIdentity = {
       packageName: "@afterpack/next",
@@ -385,10 +379,10 @@ describe("cloud refusals thrown by processBatch", () => {
 
   it("turns AFTERPACK_CLOUD_SUNSET into a sunset CloudApiError", async () => {
     __setBatchError(
-      napiError(
-        "AFTERPACK_CLOUD_SUNSET",
-        cloudErrorMessage({ code: "DIAG_API_SUNSET", message: "v1 is retired" }),
-      ),
+      cloudRefusal("AFTERPACK_CLOUD_SUNSET", {
+        apiCode: "DIAG_API_SUNSET",
+        message: "v1 is retired",
+      }),
     );
     const error = await runObfuscationPass(options({ logger: capture().logger })).catch(
       (e: unknown) => e,
@@ -402,18 +396,18 @@ describe("cloud refusals thrown by processBatch", () => {
 
   it("keeps CODE: message for AFTERPACK_CLOUD_API", async () => {
     __setBatchError(
-      napiError(
-        "AFTERPACK_CLOUD_API",
-        cloudErrorMessage({ code: "QUOTA_EXCEEDED", message: "monthly allowance used" }),
-      ),
+      cloudRefusal("AFTERPACK_CLOUD_API", {
+        apiCode: "QUOTA_EXCEEDED",
+        message: "monthly allowance used",
+      }),
     );
     await expect(runObfuscationPass(options({ logger: capture().logger }))).rejects.toThrow(
       "[afterpack-test] cloud obfuscation failed: QUOTA_EXCEEDED: monthly allowance used",
     );
   });
 
-  it("shows the raw text when the message is not the JSON lane", async () => {
-    __setBatchError(napiError("AFTERPACK_CLOUD_API", `bad ${ESC}[31mgateway`));
+  it("shows the sanitized message alone when the refusal carries no code", async () => {
+    __setBatchError(cloudRefusal("AFTERPACK_CLOUD_API", { message: `bad ${ESC}[31mgateway` }));
     const error = (await runObfuscationPass(options({ logger: capture().logger })).catch(
       (e: unknown) => e,
     )) as CloudApiError;
@@ -423,7 +417,7 @@ describe("cloud refusals thrown by processBatch", () => {
   });
 
   it("rethrows every other failure untouched", async () => {
-    const original = napiError("GenericFailure", "cloud unreachable: connect ETIMEDOUT");
+    const original = new ObfuscationError("cloud unreachable: connect ETIMEDOUT", []);
     __setBatchError(original);
     const error = await runObfuscationPass(options({ logger: capture().logger })).catch(
       (e: unknown) => e,

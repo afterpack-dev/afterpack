@@ -17,9 +17,11 @@ Point it at your output directory (`dist/`, `build/`, `out/`) or a single `.js`,
 file. `npx afterpack@latest verify .` checks a build before you deploy it, and `--help` lists the
 options.
 
-Presets go from `minify` through `light`, `medium` and `hard` to `extreme`. Every option has one
-name everywhere: `--preset=hard` on the command line, `AFTERPACK_preset=hard` in the environment,
-`"preset": "hard"` in `afterpack.json`, and `preset` in a plugin's options.
+[Presets](https://www.afterpack.dev/docs/config#preset) go from `minify` through `light`, `medium`
+and `hard` to `extreme`. Every option has one name everywhere: `--preset=hard` on the command line,
+`AFTERPACK_preset=hard` in the environment, `"preset": "hard"` in `afterpack.json`, and `preset` in
+a plugin's options. The [configuration reference](https://www.afterpack.dev/docs/config) lists
+every option.
 
 Without a key, AfterPack runs locally and applies basic protection. With a
 [Pro](https://www.afterpack.dev/docs/pro) key, the same packages send the build to AfterPack's
@@ -72,5 +74,5 @@ conventions.
 
 ## Feedback
 
-Questions and ideas: [GitHub Discussions](https://github.com/afterpack-dev/afterpack/discussions).
-Bugs: [GitHub Issues](https://github.com/afterpack-dev/afterpack/issues).
+Questions, suggestions and bug reports: [afterpack.dev/contact](https://www.afterpack.dev/contact).
+You can also file a bug on [GitHub Issues](https://github.com/afterpack-dev/afterpack/issues).

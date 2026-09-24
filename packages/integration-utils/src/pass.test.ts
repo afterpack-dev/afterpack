@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import type { ProtectionMap } from "@afterpack/protection-map";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { EngineDiagnostic } from "./diagnostics.js";
 import { DIAG_ALREADY_OBFUSCATED } from "./diagnostics.js";
@@ -42,7 +43,7 @@ afterEach(() => {
 interface FakeResult {
   code?: string;
   sourceMap?: string | null;
-  protectionMap?: unknown;
+  protectionMap?: ProtectionMap;
   fail?: string;
   unobfuscated?: boolean;
   diagnostics?: EngineDiagnostic[];
@@ -67,7 +68,7 @@ function makeEngine(
         const r = impl(f.source);
         if (r.fail) {
           return {
-            filePath: f.filePath,
+            path: f.path,
             code: "",
             status: "failure",
             error: r.fail,
@@ -76,7 +77,7 @@ function makeEngine(
           };
         }
         return {
-          filePath: f.filePath,
+          path: f.path,
           code: r.code ?? `OBF:${f.source}`,
           sourceMap: r.sourceMap ?? undefined,
           protectionMap: r.protectionMap ?? undefined,
@@ -97,15 +98,25 @@ function makeEngine(
   return { engine, calls };
 }
 
-function pmDoc(source: string, path: string) {
+function pmDoc(source: string, path: string): ProtectionMap {
   return {
     schemaVersion: 3,
-    engine: { name: "t" },
-    file: { path },
-    source,
-    regions: [],
-    spotlights: [],
-    aggregate: {},
+    generatedAt: null,
+    engine: { version: "0.0.0-test", backend: "t", seed: 0, preset: null, complexity: 0 },
+    files: [
+      {
+        file: {
+          path,
+          originalSource: source,
+          inputSize: source.length,
+          outputSize: source.length,
+          sourceOrigin: "original",
+        },
+        regions: [],
+        spotlights: [],
+        aggregate: {},
+      },
+    ],
   };
 }
 
@@ -184,7 +195,7 @@ describe("runObfuscationPass (dev policy)", () => {
 
     await runObfuscationPass({ ...baseOptions([a], engine), logger: silentLogger().logger });
 
-    expect(calls[0].inputs[0].inputSourceMap).toBe(upstream);
+    expect(calls[0].inputs[0].sourceMap).toBe(upstream);
     expect((calls[0].config.sourceMap as { enabled?: boolean }).enabled).toBeUndefined();
   });
 
@@ -239,7 +250,7 @@ describe("runObfuscationPass fail-closed", () => {
     const engine: ObfuscationEngine = {
       async processBatch() {
         return {
-          files: [{ filePath: "/ghost.js", code: "x", status: "success", unobfuscated: false }],
+          files: [{ path: "/ghost.js", code: "x", status: "success", unobfuscated: false }],
           totalFiles: 1,
           successCount: 1,
           failureCount: 0,
@@ -779,7 +790,7 @@ describe("runObfuscationPass engine diagnostics", () => {
       async processBatch(inputs) {
         return {
           files: inputs.map((i) => ({
-            filePath: i.filePath,
+            path: i.path,
             code: `OBF:${i.source}`,
             status: "success",
             unobfuscated: false,
@@ -806,7 +817,7 @@ describe("runObfuscationPass engine diagnostics", () => {
       async processBatch(inputs) {
         return {
           files: inputs.map((i) => ({
-            filePath: i.filePath,
+            path: i.path,
             code: `OBF:${i.source}`,
             status: "success",
             unobfuscated: false,
@@ -1195,9 +1206,7 @@ describe("runObfuscationPass in-memory seam (inputs + emitToCaller)", () => {
     });
 
     expect(calls[0].inputs[0].source).toBe("export const a = 1;");
-    expect(result.outputs).toEqual([
-      { filePath: path, code: "OBF:export const a = 1;", sourceMap: null },
-    ]);
+    expect(result.outputs).toEqual([{ path, code: "OBF:export const a = 1;", sourceMap: null }]);
     expect(readdirSync(outDir)).toEqual([]);
   });
 
@@ -1210,21 +1219,18 @@ describe("runObfuscationPass in-memory seam (inputs + emitToCaller)", () => {
     await runObfuscationPass({
       ...baseOptions([path], engine),
       inputs: new Map([
-        [
-          path,
-          { source: "in-memory source", inputSourceMap: '{"version":3,"sources":["live.ts"]}' },
-        ],
+        [path, { source: "in-memory source", sourceMap: '{"version":3,"sources":["live.ts"]}' }],
       ]),
       emitToCaller: true,
       logger: silentLogger().logger,
     });
 
     expect(calls[0].inputs[0].source).toBe("in-memory source");
-    expect(calls[0].inputs[0].inputSourceMap).toContain("live.ts");
+    expect(calls[0].inputs[0].sourceMap).toContain("live.ts");
     expect(readFileSync(path, "utf8")).toBe("on-disk source");
   });
 
-  it("treats a supplied `inputSourceMap: null` as 'no map', not as 'go look'", async () => {
+  it("treats a supplied `sourceMap: null` as 'no map', not as 'go look'", async () => {
     const path = join(outDir, "a.js");
     writeFileSync(path, "x");
     writeFileSync(`${path}.map`, '{"version":3,"sources":["stale.ts"],"mappings":""}');
@@ -1232,12 +1238,12 @@ describe("runObfuscationPass in-memory seam (inputs + emitToCaller)", () => {
 
     await runObfuscationPass({
       ...baseOptions([path], engine),
-      inputs: new Map([[path, { source: "x", inputSourceMap: null }]]),
+      inputs: new Map([[path, { source: "x", sourceMap: null }]]),
       emitToCaller: true,
       logger: silentLogger().logger,
     });
 
-    expect(calls[0].inputs[0].inputSourceMap).toBeUndefined();
+    expect(calls[0].inputs[0].sourceMap).toBeUndefined();
   });
 
   it("still reads a path the caller did NOT supply (the two modes mix)", async () => {
@@ -1439,9 +1445,7 @@ describe("runObfuscationPass — already-obfuscated pre-flight guard", () => {
       emitToCaller: true,
       logger: silentLogger().logger,
     });
-    expect(result.outputs).toEqual([
-      { filePath: path, code: "OBF:export const a = 1;", sourceMap: null },
-    ]);
+    expect(result.outputs).toEqual([{ path, code: "OBF:export const a = 1;", sourceMap: null }]);
   });
 });
 

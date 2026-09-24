@@ -45,21 +45,34 @@ different build, or a file changed after obfuscation.
 
 Pass them as the second argument: `withAfterpack(nextConfig, { preset: "hard", seed: "git" })`.
 
-| Option | Type | Default |
+| Option | What it does | Default |
 | --- | --- | --- |
-| `preset` | `"minify"`, `"light"`, `"medium"`, `"hard"`, `"extreme"` | `"light"` |
-| `complexity` | `number` | the preset's value |
-| `seed` | `number` or `string` (`"git"` uses the current commit) | a new random seed per build |
-| `protectionMap` | `boolean` | on when Next emits browser source maps |
-| `sourceMap` | `boolean` | on in development when an input map exists, off in production |
-| `sourceMap.emitUrl` | `boolean` | on in development, off in production |
-| `build.backup` | `boolean` | `false`; `true` keeps a `.backup.<hash>.js` copy of each original |
-| `directives` | `boolean` | `true` |
-| `build.autorun` | `boolean` | `true`; `false` turns AfterPack off |
-| `production` | `boolean` | detected; `next build` sets `NODE_ENV=production` |
+| [`preset`][preset] | `"minify"`, `"light"`, `"medium"`, `"hard"` or `"extreme"` | `"light"` |
+| [`complexity`][complexity] | a numeric protection level, overriding the preset's | the preset's value |
+| [`seed`][seed] | a number or string; `"git"` uses the current commit | a new random seed per build |
+| [`identifiers.reserved`][identifiers.reserved] | names never to rename | none |
+| [`paths.exclude`][paths.exclude] | globs for files to leave untouched | none |
+| [`sourceMap.enabled`][sourceMap.enabled] | write source maps for the obfuscated output | on in development when an input map exists, off in production |
+| [`protectionMap.enabled`][protectionMap.enabled] | write the Protection Map | on when Next emits browser source maps |
+| [`build.backup`][build.backup] | keep a `.backup.<hash>.js` copy of each original | `false` |
+| [`directives`][directives] | read `/* @afterpack */` comments in your source | `true` |
+| [`build.autorun`][build.autorun] | `false` turns AfterPack off | `true` |
+| [`production`][production] | force production or development defaults | detected; `next build` sets `NODE_ENV=production` |
 
-Dotted names are nested objects: `build.backup` is `{ build: { backup: true } }`. Every other key
-in the [configuration reference](https://www.afterpack.dev/docs/config) works too.
+Dotted names are nested objects: `build.backup` is `{ build: { backup: true } }`. Every
+other option is in the [configuration reference](https://www.afterpack.dev/docs/config).
+
+[preset]: https://www.afterpack.dev/docs/config#preset
+[complexity]: https://www.afterpack.dev/docs/config#complexity
+[seed]: https://www.afterpack.dev/docs/config#seed
+[identifiers.reserved]: https://www.afterpack.dev/docs/config#identifiers-reserved
+[paths.exclude]: https://www.afterpack.dev/docs/config#paths-exclude
+[sourceMap.enabled]: https://www.afterpack.dev/docs/config#sourceMap-enabled
+[protectionMap.enabled]: https://www.afterpack.dev/docs/config#protectionMap-enabled
+[build.backup]: https://www.afterpack.dev/docs/config#build-backup
+[directives]: https://www.afterpack.dev/docs/config#directives
+[build.autorun]: https://www.afterpack.dev/docs/config#build-autorun
+[production]: https://www.afterpack.dev/docs/config#production
 
 `/* @afterpack */` [directives](https://www.afterpack.dev/docs/directives) and a readable
 [Protection Map](https://www.afterpack.dev/docs/protection-map) both need
@@ -84,10 +97,11 @@ browser would block the obfuscated chunks. The build stops with an error that sa
 
 ## Pro
 
-Without a key, AfterPack runs on your machine and applies basic protection. Set `AFTERPACK_KEY` in
-your environment and the same plugin sends the build to AfterPack's cloud, which applies much
-stronger protection. Keep the key out of `next.config.ts`: the plugin rejects it there. See
-[AfterPack Pro](https://www.afterpack.dev/docs/pro).
+Without a key, AfterPack runs on your machine and applies basic protection. Set
+[`AFTERPACK_KEY`](https://www.afterpack.dev/docs/config#key) in your environment and the same plugin
+sends the build to AfterPack's cloud, which applies much stronger protection. Keep the key out of
+`next.config.ts`: the plugin rejects it there. See [AfterPack
+Pro](https://www.afterpack.dev/docs/pro).
 
 ## Links
 
@@ -103,5 +117,5 @@ Apache-2.0. The engine it runs, `@afterpack/core`, has its own
 
 ## Feedback
 
-Questions and ideas: [GitHub Discussions](https://github.com/afterpack-dev/afterpack/discussions).
-Bugs: [GitHub Issues](https://github.com/afterpack-dev/afterpack/issues).
+Questions, suggestions and bug reports: [afterpack.dev/contact](https://www.afterpack.dev/contact).
+You can also file a bug on [GitHub Issues](https://github.com/afterpack-dev/afterpack/issues).

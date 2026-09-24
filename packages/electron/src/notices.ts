@@ -18,20 +18,37 @@ const PACKAGER_CONFIGS = [
   "forge.config.ts",
 ];
 
-const seenLegs = new Set<string>();
-let leakWarned = false;
-let advisoryArmed = false;
-let envSeedPinned: boolean | undefined;
+interface NoticeState {
+  seenLegs: Set<string>;
+  leakWarned: boolean;
+  advisoryArmed: boolean;
+  envSeedPinned: boolean | undefined;
+}
+
+const NOTICE_STATE = Symbol.for("afterpack.electron.notices");
+
+function sharedNoticeState(): NoticeState {
+  const holder = globalThis as { [NOTICE_STATE]?: NoticeState };
+  holder[NOTICE_STATE] ??= {
+    seenLegs: new Set(),
+    leakWarned: false,
+    advisoryArmed: false,
+    envSeedPinned: undefined,
+  };
+  return holder[NOTICE_STATE];
+}
+
+const state = sharedNoticeState();
 
 export function resetNotices(): void {
-  seenLegs.clear();
-  leakWarned = false;
-  advisoryArmed = false;
-  envSeedPinned = undefined;
+  state.seenLegs.clear();
+  state.leakWarned = false;
+  state.advisoryArmed = false;
+  state.envSeedPinned = undefined;
 }
 
 export function recordEnvSeedPinned(): void {
-  envSeedPinned ??= process.env[SEED_ENV_VAR] != null;
+  state.envSeedPinned ??= process.env[SEED_ENV_VAR] != null;
 }
 
 function hasPackagerConfig(root: string): boolean {
@@ -48,8 +65,8 @@ function hasPackagerConfig(root: string): boolean {
 }
 
 export function warnPackagedTreeLeak(root: string, warn: (m: string) => void): void {
-  if (leakWarned || !hasPackagerConfig(root)) return;
-  leakWarned = true;
+  if (state.leakWarned || !hasPackagerConfig(root)) return;
+  state.leakWarned = true;
   warn(
     "[afterpack-electron] this project has an Electron packager config. AfterPack's " +
       "artifacts embed ORIGINAL SOURCE and are NOT excluded by default — add\n" +
@@ -60,13 +77,13 @@ export function warnPackagedTreeLeak(root: string, warn: (m: string) => void): v
 }
 
 export function recordLegBuilt(leg: string, seedPinned: boolean): void {
-  seenLegs.add(leg);
-  if (advisoryArmed || seedPinned || envSeedPinned) return;
-  advisoryArmed = true;
+  state.seenLegs.add(leg);
+  if (state.advisoryArmed || seedPinned || state.envSeedPinned) return;
+  state.advisoryArmed = true;
   process.on("exit", () => {
-    if (seenLegs.size > 1) return;
+    if (state.seenLegs.size > 1) return;
     console.warn(
-      `[afterpack-electron] only the "${[...seenLegs][0]}" leg was obfuscated in this ` +
+      `[afterpack-electron] only the "${[...state.seenLegs][0]}" leg was obfuscated in this ` +
         `process, so the other legs drew their own seeds. Set ${SEED_ENV_VAR}=git (or a ` +
         "pinned value) once in the shared build script so every leg shares one.",
     );

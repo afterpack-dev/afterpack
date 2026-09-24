@@ -3,12 +3,12 @@
   "version": "0.1.0",
   "description": "AfterPack Protection Map viewer: render protection data into a self-contained HTML report",
   "type": "module",
-  "main": "./render-core.mjs",
-  "types": "./render-core.d.ts",
+  "main": "./index.mjs",
+  "types": "./index.d.ts",
   "exports": {
     ".": {
-      "types": "./render-core.d.ts",
-      "default": "./render-core.mjs"
+      "types": "./index.d.ts",
+      "default": "./index.mjs"
     },
     "./template.html": "./template.html"
   },
@@ -20,7 +20,8 @@
     "NOTICE",
     "README.md",
     "codec.mjs",
-    "render-core.d.ts",
+    "index.d.ts",
+    "index.mjs",
     "render-core.mjs",
     "render.mjs",
     "template.html"

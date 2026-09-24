@@ -38,23 +38,34 @@ obfuscated.
 afterpackVite({ preset: "hard", seed: "git" });
 ```
 
-| Option | Type | Default |
+| Option | What it does | Default |
 | --- | --- | --- |
-| `preset` | `"minify"`, `"light"`, `"medium"`, `"hard"`, `"extreme"` | `"light"` |
-| `complexity` | `number` | the preset's value |
-| `seed` | `number` or `string` (`"git"` uses the current commit) | a new random seed per build |
-| `protectionMap` | `boolean` | on when Vite emits source maps |
-| `sourceMap` | `boolean` | on in development when Vite emits a map, off in production |
-| `sourceMap.emitUrl` | `boolean` | on in development, off in production |
-| `directives` | `boolean` | `true` |
-| `build.autorun` | `boolean` | `true`; `false` turns AfterPack off |
-| `production` | `boolean` | detected from `NODE_ENV=production` or `CI=true` |
-| `leg` | `string` | none; names one build when an app runs Vite several times |
-| `projectRoot` | `string` | Vite's `root` |
+| [`preset`][preset] | `"minify"`, `"light"`, `"medium"`, `"hard"` or `"extreme"` | `"light"` |
+| [`complexity`][complexity] | a numeric protection level, overriding the preset's | the preset's value |
+| [`seed`][seed] | a number or string; `"git"` uses the current commit | a new random seed per build |
+| [`identifiers.reserved`][identifiers.reserved] | names never to rename | none |
+| [`paths.exclude`][paths.exclude] | globs for files to leave untouched | none |
+| [`sourceMap.enabled`][sourceMap.enabled] | write source maps for the obfuscated output | on in development when Vite emits a map, off in production |
+| [`protectionMap.enabled`][protectionMap.enabled] | write the Protection Map | on when Vite emits source maps |
+| [`directives`][directives] | read `/* @afterpack */` comments in your source | `true` |
+| [`build.autorun`][build.autorun] | `false` turns AfterPack off | `true` |
+| [`production`][production] | force production or development defaults | detected from `NODE_ENV=production` or `CI=true` |
+| `leg` | plugin option: names one build when an app runs Vite several times | none |
+| `projectRoot` | plugin option: the app root when Vite's `root` is a subfolder | Vite's `root` |
 
-Dotted names are nested objects: `sourceMap.emitUrl` is `{ sourceMap: { emitUrl: true } }`. Every
-other key in the [configuration reference](https://www.afterpack.dev/docs/config) works too, such as
-`identifiers.reserved` or `paths.exclude`.
+Dotted names are nested objects: `sourceMap.enabled` is `{ sourceMap: { enabled: true } }`. Every
+other option is in the [configuration reference](https://www.afterpack.dev/docs/config).
+
+[preset]: https://www.afterpack.dev/docs/config#preset
+[complexity]: https://www.afterpack.dev/docs/config#complexity
+[seed]: https://www.afterpack.dev/docs/config#seed
+[identifiers.reserved]: https://www.afterpack.dev/docs/config#identifiers-reserved
+[paths.exclude]: https://www.afterpack.dev/docs/config#paths-exclude
+[sourceMap.enabled]: https://www.afterpack.dev/docs/config#sourceMap-enabled
+[protectionMap.enabled]: https://www.afterpack.dev/docs/config#protectionMap-enabled
+[directives]: https://www.afterpack.dev/docs/config#directives
+[build.autorun]: https://www.afterpack.dev/docs/config#build-autorun
+[production]: https://www.afterpack.dev/docs/config#production
 
 The [Protection Map](https://www.afterpack.dev/docs/protection-map) is written to `.afterpack/`,
 and the plugin adds `.afterpack/` and its other local artifacts to your `.gitignore`. It contains
@@ -75,16 +86,19 @@ you.
 
 ## Pro
 
-Without a key, AfterPack runs on your machine and applies basic protection. Set `AFTERPACK_KEY` in
-your environment and the same plugin sends the build to AfterPack's cloud, which applies much
-stronger protection. Keep the key out of `vite.config.ts`: the plugin rejects it there, because the
-config is committed source. See [AfterPack Pro](https://www.afterpack.dev/docs/pro).
+Without a key, AfterPack runs on your machine and applies basic protection. Set
+[`AFTERPACK_KEY`](https://www.afterpack.dev/docs/config#key) in your environment and the same plugin
+sends the build to AfterPack's cloud, which applies much stronger protection. Keep the key out of
+`vite.config.ts`: the plugin rejects it there, because the config is committed source. See
+[AfterPack Pro](https://www.afterpack.dev/docs/pro).
 
 ## Not supported here
 
-- `build.backup`: the output is handed back to Vite in memory, so there is no file to back up.
-- `paths.include`: the plugin works on Vite's bundle and does not walk the output directory. Use
-  the [`afterpack` CLI](https://www.npmjs.com/package/afterpack) if you need that.
+- [`build.backup`](https://www.afterpack.dev/docs/config#build-backup): the output is handed back to
+  Vite in memory, so there is no file to back up.
+- [`paths.include`](https://www.afterpack.dev/docs/config#paths-include): the plugin works on Vite's
+  bundle and does not walk the output directory. Use the [`afterpack`
+  CLI](https://www.npmjs.com/package/afterpack) if you need that.
 
 ## Links
 
@@ -100,5 +114,5 @@ Apache-2.0. The engine it runs, `@afterpack/core`, has its own
 
 ## Feedback
 
-Questions and ideas: [GitHub Discussions](https://github.com/afterpack-dev/afterpack/discussions).
-Bugs: [GitHub Issues](https://github.com/afterpack-dev/afterpack/issues).
+Questions, suggestions and bug reports: [afterpack.dev/contact](https://www.afterpack.dev/contact).
+You can also file a bug on [GitHub Issues](https://github.com/afterpack-dev/afterpack/issues).

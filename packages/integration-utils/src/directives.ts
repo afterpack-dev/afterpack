@@ -498,11 +498,11 @@ export function renameGlobalsRefusalMessage(refused: readonly string[], fileCoun
 
 interface DirectiveCaptureInput {
   source: string;
-  filePath?: string;
+  path?: string;
 }
 
 function inputLabel(input: DirectiveCaptureInput, index: number): string {
-  return input.filePath ?? `file #${index + 1}`;
+  return input.path ?? `file #${index + 1}`;
 }
 
 export function captureDirectiveRegions(

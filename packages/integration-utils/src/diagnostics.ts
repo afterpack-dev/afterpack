@@ -31,7 +31,7 @@ export interface DiagnosticsSummary {
 }
 
 interface DiagnosticCarrier {
-  filePath?: string;
+  path?: string;
   diagnostics?: unknown;
 }
 
@@ -119,7 +119,7 @@ export function collectDiagnostics(files: readonly DiagnosticCarrier[]): Collect
     }
     malformedEntries += parsed.malformed;
     for (const d of parsed.diagnostics) {
-      diagnostics.push(d.file || !file.filePath ? d : { ...d, file: file.filePath });
+      diagnostics.push(d.file || !file.path ? d : { ...d, file: file.path });
     }
   }
   return { diagnostics, unknownFiles, malformedEntries };

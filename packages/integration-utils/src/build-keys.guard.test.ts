@@ -30,8 +30,8 @@ function frontDoors(): { rel: string; text: string }[] {
 const FORWARDS: Record<string, RegExp> = {
   "paths.include": /paths\?\.include|pathsInclude/,
   "build.autorun": /build\?\.autorun/,
-  directives: /directives:\s*[A-Za-z]/,
-  "diagnostics.level": /diagnostics\?\.level/,
+  directives: /directives:\s*[A-Za-z]|passSettings\(/,
+  "diagnostics.level": /diagnostics\?\.level|passSettings\(/,
   key: /resolvePluginConfig\(|applyResolvedKey\(/,
 };
 

@@ -8,9 +8,8 @@ import {
   __setBatchError,
   __setProcessResult,
   batchCalls,
-  cloudErrorMessage,
+  cloudRefusal,
   engineCalls,
-  napiError,
   processBatch,
 } from "../../../test/core-fake.js";
 import { HELP_ALL } from "../src/args.js";
@@ -133,22 +132,19 @@ describe("the exit-code contract", () => {
 
   it("6 — the cloud API requires a newer core: a fixed update line, the server's words, nothing written", async () => {
     __setBatchError(
-      napiError(
-        "AFTERPACK_CLOUD_UPGRADE_REQUIRED",
-        cloudErrorMessage({
-          code: "DIAG_CLIENT_UPGRADE_REQUIRED",
-          message: "clients below 0.2.0 are no longer served",
-          details: { minVersion: "0.2.0" },
-          notices: [
-            {
-              severity: "warning",
-              code: "UPGRADE",
-              message: "upgrade guide",
-              url: "https://www.afterpack.dev/docs/upgrade",
-            },
-          ],
-        }),
-      ),
+      cloudRefusal("AFTERPACK_CLOUD_UPGRADE_REQUIRED", {
+        apiCode: "DIAG_CLIENT_UPGRADE_REQUIRED",
+        message: "clients below 0.2.0 are no longer served",
+        details: { minVersion: "0.2.0" },
+        notices: [
+          {
+            severity: "warning",
+            code: "UPGRADE",
+            message: "upgrade guide",
+            url: "https://www.afterpack.dev/docs/upgrade",
+          },
+        ],
+      }),
     );
     const code = await run({
       argv: ["dist", ...QUIET, "--key=ap_live_x"],
@@ -180,10 +176,10 @@ describe("the exit-code contract", () => {
 
   it("6 — a retired cloud API, reported in JSON with the server's code", async () => {
     __setBatchError(
-      napiError(
-        "AFTERPACK_CLOUD_SUNSET",
-        cloudErrorMessage({ code: "DIAG_API_SUNSET", message: "this API version is retired" }),
-      ),
+      cloudRefusal("AFTERPACK_CLOUD_SUNSET", {
+        apiCode: "DIAG_API_SUNSET",
+        message: "this API version is retired",
+      }),
     );
     expect(await invoke(["dist", ...QUIET, "--diagnostics.format=json"])).toBe(6);
     expect(document()).toMatchObject({
@@ -231,10 +227,10 @@ describe("the exit-code contract", () => {
 
   it("1 — any other cloud API error keeps its CODE: message and is not an update", async () => {
     __setBatchError(
-      napiError(
-        "AFTERPACK_CLOUD_API",
-        cloudErrorMessage({ code: "QUOTA_EXCEEDED", message: "monthly allowance used" }),
-      ),
+      cloudRefusal("AFTERPACK_CLOUD_API", {
+        apiCode: "QUOTA_EXCEEDED",
+        message: "monthly allowance used",
+      }),
     );
     expect(await invoke(["dist", ...QUIET])).toBe(1);
     expect(err.join("\n")).toContain("QUOTA_EXCEEDED: monthly allowance used");

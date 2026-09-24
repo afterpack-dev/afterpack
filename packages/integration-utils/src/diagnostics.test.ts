@@ -134,8 +134,8 @@ describe("sanitizeEngineDiagnostics", () => {
 describe("collectDiagnostics", () => {
   it("attributes a file-less diagnostic to the carrier, and leaves an owned file alone", () => {
     const collected = collectDiagnostics([
-      { filePath: "/d/a.js", diagnostics: [diag({})] },
-      { filePath: "/d/b.js", diagnostics: [diag({ file: "/src/real.ts" })] },
+      { path: "/d/a.js", diagnostics: [diag({})] },
+      { path: "/d/b.js", diagnostics: [diag({ file: "/src/real.ts" })] },
     ]);
     expect(collected.diagnostics.map((d) => d.file)).toEqual(["/d/a.js", "/src/real.ts"]);
     expect(collected).toMatchObject({ unknownFiles: 0, malformedEntries: 0 });
@@ -143,9 +143,9 @@ describe("collectDiagnostics", () => {
 
   it("counts an absent lane and a dropped entry apart — they are different facts", () => {
     const collected = collectDiagnostics([
-      { filePath: "/d/a.js" },
-      { filePath: "/d/b.js", diagnostics: [{ severity: "info" }] },
-      { filePath: "/d/c.js", diagnostics: [] },
+      { path: "/d/a.js" },
+      { path: "/d/b.js", diagnostics: [{ severity: "info" }] },
+      { path: "/d/c.js", diagnostics: [] },
     ]);
     expect(collected).toEqual({ diagnostics: [], unknownFiles: 1, malformedEntries: 1 });
   });

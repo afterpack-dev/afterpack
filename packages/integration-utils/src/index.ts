@@ -77,7 +77,9 @@ export {
   applyResolvedKey,
   type NormalizedPluginOptions,
   normalizePluginOptions,
+  type PassSettings,
   type PluginConfigInput,
+  passSettings,
   type ResolvedPluginConfig,
   resolvePluginConfig,
 } from "./plugin-config.js";

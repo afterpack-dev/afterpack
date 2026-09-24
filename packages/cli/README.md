@@ -25,14 +25,14 @@ reaches disk. Run `afterpack` with no path and it tells you which plugin to inst
 Files are obfuscated in place. Build first, then run AfterPack once. A second run over the same
 output is refused, because AfterPack recognises its own output.
 
-Nested `node_modules/` folders are skipped. Pass `--paths.include='**/node_modules/**'` (quoted)
-to include them.
+Nested `node_modules/` folders are skipped. Pass [`--paths.include`][paths.include]`='**/node_modules/**'`
+(quoted) to include them.
 
 Each run writes:
 
 - `.afterpack-protection.json` in the output directory, the receipt that `afterpack verify` checks.
 - `.afterpack/backup/`, a copy of the original files, so `afterpack restore` can undo the run.
-  Turn it off with `--build.backup=false`.
+  Turn it off with [`--build.backup`][build.backup]`=false`.
 - `.afterpack/protectionMap.html`, the [Protection Map](https://www.afterpack.dev/docs/protection-map),
   when your build has source maps.
 - `.map` files next to the output, when your build has source maps and the run is not a production
@@ -82,25 +82,42 @@ Every option has one name, written the same way everywhere:
 A flag wins over the environment, which wins over the file. A boolean flag on its own means `true`.
 An unknown or misspelled option fails the run and names the right spelling.
 
-| Option | Meaning | Default |
+| Flag | What it does | Default |
 | --- | --- | --- |
-| `preset` | `minify`, `light`, `medium`, `hard` or `extreme` | `light` |
-| `complexity` | a numeric protection level, overriding the preset's | the preset's value |
-| `seed` | fix the seed; `git` uses the current commit | a new random seed per build |
-| `paths.exclude` | globs to leave untouched | none |
-| `paths.include` | globs to add back to the walk | none |
-| `identifiers.reserved` | names never to rename | none |
-| `build.backup` | back up originals to `.afterpack/backup/` | `true` |
-| `sourceMap.enabled` | write `.map` files | on when an input map exists, off in production |
-| `protectionMap.enabled` | write the Protection Map | on when an input map exists |
-| `diagnostics.format` | `text` or `json` | `text` |
-| `diagnostics.level` | `summary`, `all` or `none` | `summary` |
-| `allowUnobfuscated` | ship a file AfterPack could not process, instead of failing | `false` |
-| `build.autorun` | `false` turns AfterPack off for the project | `true` |
-| `telemetry.enabled` | report anonymous diagnostics when a build fails | `true` |
+| [`--preset`][preset] | `minify`, `light`, `medium`, `hard` or `extreme` | `light` |
+| [`--complexity`][complexity] | a numeric protection level, overriding the preset's | the preset's value |
+| [`--seed`][seed] | fix the seed; `git` uses the current commit | a new random seed per build |
+| [`--paths.exclude`][paths.exclude] | globs to leave untouched | none |
+| [`--paths.include`][paths.include] | globs to add back to the walk | none |
+| [`--identifiers.reserved`][identifiers.reserved] | names never to rename | none |
+| [`--build.backup`][build.backup] | back up originals to `.afterpack/backup/` | `true` |
+| [`--sourceMap.enabled`][sourceMap.enabled] | write `.map` files | on when an input map exists, off in production |
+| [`--protectionMap.enabled`][protectionMap.enabled] | write the Protection Map | on when an input map exists |
+| [`--diagnostics.format`][diagnostics.format] | `text` or `json` | `text` |
+| [`--allowUnobfuscated`][allowUnobfuscated] | ship a file AfterPack could not process, instead of failing | `false` |
+| [`--telemetry.enabled`][telemetry.enabled] | report anonymous diagnostics when a build fails | `true` |
 
-The full list is in the [CLI reference](https://www.afterpack.dev/docs/cli) and the
-[configuration reference](https://www.afterpack.dev/docs/config).
+Each flag is also a key in `afterpack.json` and an `AFTERPACK_*` variable. Every other option, such
+as [`diagnostics.level`][diagnostics.level] or [`build.autorun`][build.autorun], is in the
+[configuration reference](https://www.afterpack.dev/docs/config). The
+[CLI reference](https://www.afterpack.dev/docs/cli) covers the commands.
+
+[preset]: https://www.afterpack.dev/docs/config#preset
+[complexity]: https://www.afterpack.dev/docs/config#complexity
+[seed]: https://www.afterpack.dev/docs/config#seed
+[paths.exclude]: https://www.afterpack.dev/docs/config#paths-exclude
+[paths.include]: https://www.afterpack.dev/docs/config#paths-include
+[identifiers.reserved]: https://www.afterpack.dev/docs/config#identifiers-reserved
+[build.backup]: https://www.afterpack.dev/docs/config#build-backup
+[sourceMap.enabled]: https://www.afterpack.dev/docs/config#sourceMap-enabled
+[protectionMap.enabled]: https://www.afterpack.dev/docs/config#protectionMap-enabled
+[diagnostics.format]: https://www.afterpack.dev/docs/config#diagnostics-format
+[allowUnobfuscated]: https://www.afterpack.dev/docs/config#allowUnobfuscated
+[telemetry.enabled]: https://www.afterpack.dev/docs/config#telemetry-enabled
+[diagnostics.level]: https://www.afterpack.dev/docs/config#diagnostics-level
+[build.autorun]: https://www.afterpack.dev/docs/config#build-autorun
+[inflation.max]: https://www.afterpack.dev/docs/config#inflation-max
+[key]: https://www.afterpack.dev/docs/config#key
 
 ```json
 {
@@ -111,15 +128,15 @@ The full list is in the [CLI reference](https://www.afterpack.dev/docs/cli) and 
 }
 ```
 
-`--diagnostics.format=json` prints exactly one JSON document on stdout and sends everything else
-to stderr. Use it in CI and scripts. `verify` and `audit` support it too.
+[`--diagnostics.format`][diagnostics.format]`=json` prints exactly one JSON document on stdout
+and sends everything else to stderr. Use it in CI and scripts. `verify` and `audit` support it too.
 
 ## Pro
 
-Without a key, AfterPack runs on your machine and applies basic protection. Set `AFTERPACK_KEY` in
-your environment (or `key` in `afterpack.json`) and the same command sends the build to AfterPack's
-cloud, which applies much stronger protection. If the cloud cannot be reached, the run fails; it
-never quietly ships weaker output. Never commit the key. See
+Without a key, AfterPack runs on your machine and applies basic protection. Set
+[`AFTERPACK_KEY`][key] in your environment (or [`key`][key] in `afterpack.json`) and the same
+command sends the build to AfterPack's cloud, which applies much stronger protection. If the cloud
+cannot be reached, the run fails; it never quietly ships weaker output. Never commit the key. See
 [AfterPack Pro](https://www.afterpack.dev/docs/pro).
 
 ## Exit codes
@@ -128,8 +145,8 @@ never quietly ships weaker output. Never commit the key. See
 | --- | --- |
 | `0` | Success. |
 | `1` | Failure. Nothing was changed, or `verify`, `restore` or `audit` failed. |
-| `2` | Some files shipped unobfuscated. Only possible with `allowUnobfuscated`. |
-| `3` | The size limit (`inflation.max`) stopped AfterPack before it reached the protection level. |
+| `2` | Some files shipped unobfuscated. Only possible with [`allowUnobfuscated`][allowUnobfuscated]. |
+| `3` | The size limit ([`inflation.max`][inflation.max]) stopped AfterPack before it reached the protection level. |
 | `6` | An update is required. The CLI prints the install command to run. |
 | `64` | Misuse: an unknown option or command, or a malformed value. |
 
@@ -149,5 +166,5 @@ Apache-2.0. The engine it runs, `@afterpack/core`, has its own
 
 ## Feedback
 
-Questions and ideas: [GitHub Discussions](https://github.com/afterpack-dev/afterpack/discussions).
-Bugs: [GitHub Issues](https://github.com/afterpack-dev/afterpack/issues).
+Questions, suggestions and bug reports: [afterpack.dev/contact](https://www.afterpack.dev/contact).
+You can also file a bug on [GitHub Issues](https://github.com/afterpack-dev/afterpack/issues).

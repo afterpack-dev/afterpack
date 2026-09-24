@@ -5,6 +5,7 @@ import {
   type AfterpackPluginOptions,
   collectJsFiles,
   createTelemetryReporter,
+  passSettings,
   resolveClientIdentity,
   resolvePluginConfig,
   runObfuscationPass,
@@ -34,7 +35,6 @@ const POST_MINIFY_DIRECTIVE_RECOVERY = true;
 export function afterpackEsbuild(options: AfterpackEsbuildOptions = {}): Plugin {
   const resolved = resolvePluginConfig({ label: "afterpack-esbuild", options });
   const settings = resolved.options;
-  const artifactOptions = settings.artifactOptions;
   return {
     name: "afterpack-esbuild",
     setup(build: PluginBuild) {
@@ -60,16 +60,8 @@ export function afterpackEsbuild(options: AfterpackEsbuildOptions = {}): Plugin 
           gitignoreDir: cwd,
           startedAt: startedBeforeOutputWalk,
           combinedProtectionMap: { buildDir, afterpackDir: gitignoredNonServedAfterpackDir },
-          artifactOptions,
+          ...passSettings(resolved),
           hasBundlerSourcemap: Boolean(io.sourcemap),
-          seed: settings.seed,
-          preset: settings.preset,
-          complexity: settings.complexity,
-          regions: settings.regions,
-          engineConfig: resolved.engineConfig,
-          diagnostics: settings.diagnostics?.level,
-          directives: settings.directives,
-          directivesExplicit: settings.directivesExplicit,
           postMinify: POST_MINIFY_DIRECTIVE_RECOVERY,
           messages: {
             autoEnableBundlerSourcemap:

@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { gunzipSync } from "node:zlib";
-import { decodeCompact } from "@afterpack/protection-map";
+import type { ProtectionMap } from "@afterpack/protection-map";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildProjectFileTree,
@@ -16,6 +16,10 @@ import {
   writeCombinedProtectionMap,
 } from "./artifacts.js";
 import { resolveReportPolicy } from "./policy.js";
+
+const { decodeCompact } = (await import(
+  new URL("../../protection-map/codec.mjs", import.meta.url).href
+)) as { decodeCompact: (compact: unknown) => unknown };
 
 let dir: string;
 beforeEach(() => {
@@ -31,14 +35,15 @@ function captureLogger(): { logger: Logger; warns: string[]; logs: string[] } {
   return { logger: { warn: (m) => warns.push(m), log: (m) => logs.push(m) }, warns, logs };
 }
 
-function pmDoc(path: string) {
-  return {
+function pmDoc(path: string): ProtectionMap {
+  const legacyFileShapedDoc = {
     file: { path, bytes: 10, sourceOrigin: "original" },
     source: "const x = 1;",
     regions: [],
     spotlights: [],
     aggregate: { classSummary: {} },
   };
+  return legacyFileShapedDoc as unknown as ProtectionMap;
 }
 
 function assertSelfContained(html: string) {
@@ -210,13 +215,19 @@ describe("writeCombinedProtectionMap — directory / framework build", () => {
     expect(cap.warns.join("\n")).toMatch(/PRODUCTION build/i);
   });
 
-  function v3Doc(backend: string, paths: string[]) {
+  function v3Doc(backend: string, paths: string[]): ProtectionMap {
     return {
       schemaVersion: 3,
       generatedAt: null,
-      engine: { backend, preset: "Medium", seed: 7, version: "9.9.9" },
+      engine: { backend, preset: "medium", seed: 7, version: "9.9.9", complexity: 8 },
       files: paths.map((path) => ({
-        file: { path, sourceOrigin: "original", originalSource: "const x = 1;", inputSize: 12 },
+        file: {
+          path,
+          sourceOrigin: "original",
+          originalSource: "const x = 1;",
+          inputSize: 12,
+          outputSize: 12,
+        },
         regions: [],
         spotlights: [],
         aggregate: { classSummary: {} },
@@ -248,7 +259,7 @@ describe("writeCombinedProtectionMap — directory / framework build", () => {
       "vendor/e.ts",
     ]);
     expect(data.schemaVersion).toBe(5);
-    expect(data.engine).toMatchObject({ backend: "core-v1", preset: "Medium", seed: 7 });
+    expect(data.engine).toMatchObject({ backend: "core-v1", preset: "medium", seed: 7 });
   });
 
   it("derives the v3 envelope from the FIRST doc that HAS one (mixed-shape batch)", () => {

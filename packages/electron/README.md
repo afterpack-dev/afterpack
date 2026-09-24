@@ -84,33 +84,45 @@ packagerConfig: { ignore: [/^\/\.afterpack/, /\.backup\./, /\.map$/] }
 withAfterpack(config, { preset: "hard", seed: "git" });
 ```
 
-| Option | Type | Default |
+| Option | What it does | Default |
 | --- | --- | --- |
-| `preset` | `"minify"`, `"light"`, `"medium"`, `"hard"`, `"extreme"` | `"light"` |
-| `complexity` | `number` | the preset's value |
-| `seed` | `number` or `string` (`"git"` uses the current commit) | a new random seed per build, shared by every part |
-| `protectionMap` | `boolean` | on when Vite emits source maps; one map per part in `.afterpack/<leg>/` |
-| `projectRoot` | `string` | `process.cwd()`; the app root that ties the parts into one build |
-| `build.autorun` | `boolean` | `true`; `false` turns AfterPack off |
+| [`preset`][preset] | `"minify"`, `"light"`, `"medium"`, `"hard"` or `"extreme"` | `"light"` |
+| [`complexity`][complexity] | a numeric protection level, overriding the preset's | the preset's value |
+| [`seed`][seed] | a number or string; `"git"` uses the current commit | a new random seed per build, shared by every part |
+| [`identifiers.reserved`][identifiers.reserved] | names never to rename | none |
+| [`protectionMap.enabled`][protectionMap.enabled] | write the Protection Map, one per part in `.afterpack/<leg>/` | on when Vite emits source maps |
+| [`build.autorun`][build.autorun] | `false` turns AfterPack off | `true` |
+| `leg` | plugin option: `"main"`, `"preload"` or `"renderer"`; required for `afterpackElectron` | set by `withAfterpack` |
+| `projectRoot` | plugin option: the app root that ties the parts into one build | `process.cwd()` |
 
-Every other [`@afterpack/vite`](https://www.npmjs.com/package/@afterpack/vite) option and every key
-in the [configuration reference](https://www.afterpack.dev/docs/config) works too. Options can also
-live in `afterpack.json` or in `AFTERPACK_*` environment variables.
+Every other [`@afterpack/vite`](https://www.npmjs.com/package/@afterpack/vite) option works too, and
+every other option is in the [configuration reference](https://www.afterpack.dev/docs/config).
+Options can also live in `afterpack.json` or in `AFTERPACK_*` environment variables.
+
+[preset]: https://www.afterpack.dev/docs/config#preset
+[complexity]: https://www.afterpack.dev/docs/config#complexity
+[seed]: https://www.afterpack.dev/docs/config#seed
+[identifiers.reserved]: https://www.afterpack.dev/docs/config#identifiers-reserved
+[protectionMap.enabled]: https://www.afterpack.dev/docs/config#protectionMap-enabled
+[build.autorun]: https://www.afterpack.dev/docs/config#build-autorun
+[build.backup]: https://www.afterpack.dev/docs/config#build-backup
+[sourceMap.enabled]: https://www.afterpack.dev/docs/config#sourceMap-enabled
 
 ## What the plugin refuses
 
 - electron-vite's `bytecodePlugin` on the same part, or `.jsc` files in the output: the build fails.
   Bytecode replaces the bundle AfterPack would protect, so the two cannot be combined.
-- `build.backup: true`: the build fails, because the backup would hold your original source inside
-  `app.asar`.
-- Source maps turned on: a warning, since a map inside `app.asar` gives your source away.
+- [`build.backup`][build.backup] set to `true`: the build fails, because the backup would hold your
+  original source inside `app.asar`.
+- [Source maps][sourceMap.enabled] turned on: a warning, since a map inside `app.asar` gives your
+  source away.
 
 ## Pro
 
-Without a key, AfterPack runs on your machine and applies basic protection. Set `AFTERPACK_KEY` in
-your environment and the same plugin sends the build to AfterPack's cloud, which applies much
-stronger protection. Keep the key out of your Vite config. See
-[AfterPack Pro](https://www.afterpack.dev/docs/pro).
+Without a key, AfterPack runs on your machine and applies basic protection. Set
+[`AFTERPACK_KEY`](https://www.afterpack.dev/docs/config#key) in your environment and the same plugin
+sends the build to AfterPack's cloud, which applies much stronger protection. Keep the key out of
+your Vite config. See [AfterPack Pro](https://www.afterpack.dev/docs/pro).
 
 ## Links
 
@@ -126,5 +138,5 @@ Apache-2.0. The engine it runs, `@afterpack/core`, has its own
 
 ## Feedback
 
-Questions and ideas: [GitHub Discussions](https://github.com/afterpack-dev/afterpack/discussions).
-Bugs: [GitHub Issues](https://github.com/afterpack-dev/afterpack/issues).
+Questions, suggestions and bug reports: [afterpack.dev/contact](https://www.afterpack.dev/contact).
+You can also file a bug on [GitHub Issues](https://github.com/afterpack-dev/afterpack/issues).

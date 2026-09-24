@@ -229,7 +229,7 @@ const KIND_BY_CODE: Readonly<Record<string, CloudErrorKind>> = {
 
 const API_CODE_LIMIT = 64;
 
-export interface CloudErrorBody {
+interface CloudErrorBody {
   code: string | null;
   message: string;
   details: Record<string, unknown> | null;
@@ -274,20 +274,30 @@ export class CloudApiError extends Error {
   }
 }
 
-export function parseCloudErrorMessage(raw: string): CloudErrorBody {
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (isPlainObject(parsed)) {
-      const code = sanitizeServerText(parsed.code, API_CODE_LIMIT);
-      return {
-        code: code === "" ? null : code,
-        message: sanitizeServerText(parsed.message),
-        details: isPlainObject(parsed.details) ? parsed.details : null,
-        notices: Array.isArray(parsed.notices) ? (parsed.notices as CloudNotice[]) : null,
-      };
-    }
-  } catch {}
-  return { code: null, message: sanitizeServerText(raw), details: null, notices: null };
+function refusalApiCode(diagnostics: unknown): string | null {
+  if (!Array.isArray(diagnostics)) return null;
+  for (const d of diagnostics) {
+    if (!isPlainObject(d)) continue;
+    const code = sanitizeServerText(d.code, API_CODE_LIMIT);
+    if (code !== "") return code;
+  }
+  return null;
+}
+
+interface CloudRejection {
+  message?: unknown;
+  details?: unknown;
+  notices?: unknown;
+  diagnostics?: unknown;
+}
+
+function readCloudErrorBody(error: CloudRejection): CloudErrorBody {
+  return {
+    code: refusalApiCode(error.diagnostics),
+    message: sanitizeServerText(error.message),
+    details: isPlainObject(error.details) ? error.details : null,
+    notices: Array.isArray(error.notices) ? (error.notices as CloudNotice[]) : null,
+  };
 }
 
 function describeCloudFailure(
@@ -324,8 +334,7 @@ export function toCloudApiError(
   if (typeof code !== "string") return null;
   const kind = KIND_BY_CODE[code];
   if (!kind) return null;
-  const rawMessage = (error as { message?: unknown }).message;
-  const body = parseCloudErrorMessage(typeof rawMessage === "string" ? rawMessage : "");
+  const body = readCloudErrorBody(error as CloudRejection);
   const minVersion = safeVersionString(body.details?.minVersion);
   const prefix = options.prefix ?? ((m: string) => m);
   const fix = updateCommand(options.identity, minVersion);

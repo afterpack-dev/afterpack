@@ -124,7 +124,7 @@ function unknownCommand(
 }
 
 interface CapturedFile {
-  filePath: string;
+  path: string;
   bytesIn: number;
   bytesOut: number;
   status: string;
@@ -135,9 +135,9 @@ interface CapturedFile {
 function observeEngine(engine: ObfuscationEngine, into: CapturedFile[]): ObfuscationEngine {
   return {
     processBatch: async (inputs, config, buildContext) => {
-      const bytesIn = new Map(inputs.map((i) => [i.filePath, Buffer.byteLength(i.source)]));
+      const bytesIn = new Map(inputs.map((i) => [i.path, Buffer.byteLength(i.source)]));
       const batch: EngineBatchResult = await engine.processBatch(inputs, config, buildContext);
-      for (const file of batch.files) into.push(captureFile(file, bytesIn.get(file.filePath) ?? 0));
+      for (const file of batch.files) into.push(captureFile(file, bytesIn.get(file.path) ?? 0));
       return batch;
     },
     ...(engine.version ? { version: () => (engine.version as () => Promise<string>)() } : {}),
@@ -146,14 +146,14 @@ function observeEngine(engine: ObfuscationEngine, into: CapturedFile[]): Obfusca
 
 function captureFile(file: EngineFileResult, bytesIn: number): CapturedFile {
   return {
-    filePath: file.filePath,
+    path: file.path,
     bytesIn,
     bytesOut: Buffer.byteLength(file.code),
     status: file.status,
     unobfuscated: file.unobfuscated === true,
     diagnostics: sanitizeEngineDiagnostics(file.diagnostics).map((d) => ({
       ...d,
-      file: d.file ?? file.filePath,
+      file: d.file ?? file.path,
     })),
   };
 }
@@ -193,8 +193,8 @@ function buildDocument(input: {
     ok: input.exitCode === EXIT.ok,
     files: [...files]
       .map((f) => ({
-        path: documentPath(cwd, f.filePath),
-        status: input.transformed.has(f.filePath) ? "obfuscated" : fileStatus(f),
+        path: documentPath(cwd, f.path),
+        status: input.transformed.has(f.path) ? "obfuscated" : fileStatus(f),
         bytesIn: f.bytesIn,
         bytesOut: f.bytesOut,
         diagnostics: sortDiagnostics(f.diagnostics.map(asJson)),

@@ -140,7 +140,7 @@ describe("afterpackVite generateBundle (dev policy)", () => {
       ),
     );
 
-    expect(callForInput(src).inputSourceMap).toBe(upstream);
+    expect(callForInput(src).sourceMap).toBe(upstream);
     expect(bundle["app.js.map"].source).toContain('"sources":["a.ts"]');
     expect(bundle["app.js"].code).toMatch(/\/\/# sourceMappingURL=app\.js\.map\n$/);
     expect(

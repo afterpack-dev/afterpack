@@ -268,7 +268,7 @@ describe("AfterpackWebpackPlugin source maps", () => {
       new AfterpackWebpackPlugin({ sourceMap: { enabled: true, emitUrl: true } }),
     );
     const assets = await invoke(withMap());
-    expect(engineCalls[0].inputSourceMap).toContain('"sources":["a.js"]');
+    expect(engineCalls[0].sourceMap).toContain('"sources":["a.js"]');
     expect(assets.get("main.js.map")?.content).toContain('"mappings":"AAAA"');
     expect(assets.get("main.js")?.content).toMatch(/\/\/# sourceMappingURL=main\.js\.map\n$/);
   });

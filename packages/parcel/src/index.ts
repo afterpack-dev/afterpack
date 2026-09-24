@@ -127,7 +127,7 @@ export default new Optimizer<ParcelConfig, void>({
     const result = await runObfuscationPass({
       files: [projectedFilePath],
       inputs: new Map([
-        [projectedFilePath, { source: code, inputSourceMap: inputSourceMapWithInlinedSources }],
+        [projectedFilePath, { source: code, sourceMap: inputSourceMapWithInlinedSources }],
       ]),
       emitToCaller: true,
       engine: { processBatch, version },

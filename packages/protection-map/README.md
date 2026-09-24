@@ -6,7 +6,10 @@ build left readable.
 
 You usually do not need to install this package. The AfterPack CLI and every AfterPack plugin
 already use it to write `.afterpack/protectionMap.html` when your build has source maps. Open that
-file in a browser. It works offline, straight from disk.
+file in a browser. It works offline, straight from disk. Two options control it:
+[`protectionMap.enabled`](https://www.afterpack.dev/docs/config#protectionMap-enabled) turns it on
+or off, and [`protectionMap.detailed`](https://www.afterpack.dev/docs/config#protectionMap-detailed)
+set to `false` leaves out the per-region list of transformations for a smaller file.
 
 The Protection Map contains your original source. Keep it local: never deploy, publish or commit
 it. The AfterPack tools add `.afterpack/` to your `.gitignore` for you.
@@ -48,5 +51,5 @@ Apache-2.0.
 
 ## Feedback
 
-Questions and ideas: [GitHub Discussions](https://github.com/afterpack-dev/afterpack/discussions).
-Bugs: [GitHub Issues](https://github.com/afterpack-dev/afterpack/issues).
+Questions, suggestions and bug reports: [afterpack.dev/contact](https://www.afterpack.dev/contact).
+You can also file a bug on [GitHub Issues](https://github.com/afterpack-dev/afterpack/issues).

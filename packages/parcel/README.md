@@ -40,19 +40,34 @@ build fails.
 }
 ```
 
-| Key | Type | Default |
+| Key | What it does | Default |
 | --- | --- | --- |
-| `preset` | `"minify"`, `"light"`, `"medium"`, `"hard"`, `"extreme"` | `"light"` |
-| `complexity` | `number` | the preset's value |
-| `seed` | `number` or `string` (`"git"` uses the current commit) | a new random seed per build |
-| `protectionMap.enabled` | `boolean` | on when the bundle has a source map |
-| `sourceMap.enabled` | `boolean` | on in development when an input map exists, off in production |
-| `directives` | `boolean` | `true` |
-| `build.autorun` | `boolean` | `true`; `false` turns AfterPack off |
-| `production` | `boolean` | detected from `parcel build`, `NODE_ENV=production` or `CI=true` |
+| [`preset`][preset] | `"minify"`, `"light"`, `"medium"`, `"hard"` or `"extreme"` | `"light"` |
+| [`complexity`][complexity] | a numeric protection level, overriding the preset's | the preset's value |
+| [`seed`][seed] | a number or string; `"git"` uses the current commit | a new random seed per build |
+| [`identifiers.reserved`][identifiers.reserved] | names never to rename | none |
+| [`paths.exclude`][paths.exclude] | globs for files to leave untouched | none |
+| [`sourceMap.enabled`][sourceMap.enabled] | write source maps for the obfuscated output | on in development when an input map exists, off in production |
+| [`protectionMap.enabled`][protectionMap.enabled] | write the Protection Map | on when the bundle has a source map |
+| [`directives`][directives] | read `/* @afterpack */` comments in your source | `true` |
+| [`build.autorun`][build.autorun] | `false` turns AfterPack off | `true` |
+| [`production`][production] | force production or development defaults | detected from `parcel build`, `NODE_ENV=production` or `CI=true` |
 
-See the [configuration reference](https://www.afterpack.dev/docs/config) for every key. An unknown
-or misspelled key fails the build and names the right spelling.
+Every other key is in the [configuration reference](https://www.afterpack.dev/docs/config). An
+unknown or misspelled key fails the build and names the right spelling.
+
+[preset]: https://www.afterpack.dev/docs/config#preset
+[complexity]: https://www.afterpack.dev/docs/config#complexity
+[seed]: https://www.afterpack.dev/docs/config#seed
+[identifiers.reserved]: https://www.afterpack.dev/docs/config#identifiers-reserved
+[paths.exclude]: https://www.afterpack.dev/docs/config#paths-exclude
+[sourceMap.enabled]: https://www.afterpack.dev/docs/config#sourceMap-enabled
+[protectionMap.enabled]: https://www.afterpack.dev/docs/config#protectionMap-enabled
+[directives]: https://www.afterpack.dev/docs/config#directives
+[build.autorun]: https://www.afterpack.dev/docs/config#build-autorun
+[production]: https://www.afterpack.dev/docs/config#production
+[build.backup]: https://www.afterpack.dev/docs/config#build-backup
+[paths.include]: https://www.afterpack.dev/docs/config#paths-include
 
 The plugin writes one [Protection Map](https://www.afterpack.dev/docs/protection-map) per bundle to
 `.afterpack/` and adds it to your `.gitignore`. It contains your original source, so never deploy
@@ -60,7 +75,7 @@ or commit it.
 
 ## Things to know
 
-- **Seeds.** Parcel builds bundles in several worker processes. Set `seed` (or `AFTERPACK_SEED`) to
+- **Seeds.** Parcel builds bundles in several worker processes. Set [`seed`][seed] (or `AFTERPACK_SEED`) to
   use one seed across the whole build.
 - **Directives.** `/* @afterpack */` comments are read back from the bundle's source map, so enable
   source maps on the target. Directives in your entry module usually cannot be recovered; move that
@@ -71,16 +86,17 @@ or commit it.
   `"preset": "minify"`. Parcel's default ES module output is not affected.
 - **Cache.** Parcel caches optimizer output. Clear `.parcel-cache` for a fresh seed on an unchanged
   build.
-- **Not available here:** `build.backup` and `paths.include`, and there is no protection receipt, so
+- **Not available here:** [`build.backup`][build.backup] and [`paths.include`][paths.include], and there is no protection receipt, so
   `afterpack verify` has nothing to check on a Parcel build.
 - Parcel may print that ES module dependencies are experimental and that the plugin has
   non-statically analyzable dependencies. Both are harmless.
 
 ## Pro
 
-Without a key, AfterPack runs on your machine and applies basic protection. Set `AFTERPACK_KEY` in
-your environment and the same optimizer sends the build to AfterPack's cloud, which applies much
-stronger protection. See [AfterPack Pro](https://www.afterpack.dev/docs/pro).
+Without a key, AfterPack runs on your machine and applies basic protection. Set
+[`AFTERPACK_KEY`](https://www.afterpack.dev/docs/config#key) in your environment and the same
+optimizer sends the build to AfterPack's cloud, which applies much stronger protection. See
+[AfterPack Pro](https://www.afterpack.dev/docs/pro).
 
 ## Links
 
@@ -96,5 +112,5 @@ Apache-2.0. The engine it runs, `@afterpack/core`, has its own
 
 ## Feedback
 
-Questions and ideas: [GitHub Discussions](https://github.com/afterpack-dev/afterpack/discussions).
-Bugs: [GitHub Issues](https://github.com/afterpack-dev/afterpack/issues).
+Questions, suggestions and bug reports: [afterpack.dev/contact](https://www.afterpack.dev/contact).
+You can also file a bug on [GitHub Issues](https://github.com/afterpack-dev/afterpack/issues).

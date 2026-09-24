@@ -3,12 +3,19 @@
   "version": "0.1.0",
   "description": "Astro integration for AfterPack: obfuscate the client and server JavaScript of an Astro build",
   "type": "module",
-  "main": "./dist/index.js",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      },
       "default": "./dist/index.js"
     }
   },
@@ -18,8 +25,8 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsdown src/index.ts --format esm --dts",
-    "dev": "tsdown src/index.ts --format esm --watch",
+    "build": "tsdown src/index.ts --format esm --format cjs --dts --shims",
+    "dev": "tsdown src/index.ts --format esm --format cjs --shims --watch",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "typecheck": "tsc --noEmit",
