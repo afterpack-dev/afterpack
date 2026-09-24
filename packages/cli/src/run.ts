@@ -2,8 +2,10 @@ import { existsSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import {
   AlreadyObfuscatedError,
+  CLOUD_REFUSAL_SUMMARY,
   type ClientIdentity,
   CloudApiError,
+  CORE_FLOOR_SUMMARY,
   CoreVersionError,
   collectJsFiles,
   createTelemetryReporter,
@@ -12,11 +14,14 @@ import {
   type EngineDiagnostic,
   type EngineFileResult,
   getPath,
+  installedRequiredLine,
+  npxAlternative,
   type ObfuscationEngine,
   type ObfuscationPassResult,
   type ResolvedPluginConfig,
   resolvePluginConfig,
   runObfuscationPass,
+  serverAddsInfo,
   UnreadableReceiptError,
 } from "@afterpack/integration-utils";
 import {
@@ -567,19 +572,14 @@ function refusalFor(
           message: error.message,
           fix: "Nothing was written; your build output was left exactly as your bundler wrote it.",
         }
-      : {
-          exitCode: EXIT.updateRequired,
-          code,
-          message: error.message,
-          fix: `Update, then build again: ${error.fix}`,
-        };
+      : { exitCode: EXIT.updateRequired, code, message: error.message, fix: error.fix };
   }
   if (error instanceof CoreVersionError) {
     return {
       exitCode: EXIT.updateRequired,
       code: error.code,
       message: error.message,
-      fix: `Update, then build again: ${error.fix}`,
+      fix: error.fix,
     };
   }
   if (error instanceof UnreadableReceiptError) {
@@ -591,6 +591,64 @@ function refusalFor(
     };
   }
   return null;
+}
+
+interface UpdateRefusalInput {
+  summary: string;
+  installed: string | null;
+  minVersion: string | null;
+  fix: string;
+  npxAlt: string | null;
+  serverMessage: string | null;
+}
+
+function updateRefusalInput(
+  error: unknown,
+  identity: ClientIdentity | null | undefined,
+): UpdateRefusalInput | null {
+  const npxAlt = npxAlternative(identity);
+  if (error instanceof CoreVersionError) {
+    return {
+      summary: CORE_FLOOR_SUMMARY,
+      installed: error.installed,
+      minVersion: error.minimum,
+      fix: error.fix,
+      npxAlt,
+      serverMessage: null,
+    };
+  }
+  if (error instanceof CloudApiError && error.kind !== "api") {
+    return {
+      summary: CLOUD_REFUSAL_SUMMARY,
+      installed: error.installed,
+      minVersion: error.minVersion,
+      fix: error.fix,
+      npxAlt,
+      serverMessage: error.apiMessage || null,
+    };
+  }
+  return null;
+}
+
+function renderUpdateRefusal(logger: CliLogger, input: UpdateRefusalInput): void {
+  const installedLine = installedRequiredLine(input.installed, input.minVersion);
+  logger.error(`${red("✗")} ${input.summary}`);
+  logger.error(`  ${installedLine}`);
+  logger.error("");
+  logger.error("Update, then build again:");
+  logger.error(commandLine(input.fix));
+  if (input.npxAlt) {
+    logger.error(`     or, without a local install: ${input.npxAlt}`);
+  }
+  if (
+    input.serverMessage &&
+    serverAddsInfo(input.serverMessage, `${input.summary} ${installedLine}`)
+  ) {
+    logger.error("");
+    logger.error(`Server: ${input.serverMessage}`);
+  }
+  logger.error("");
+  logger.error(dim(CONTACT_FOOTER));
 }
 
 export function defaultCliStdout(): CliStdout {
@@ -860,6 +918,12 @@ export async function run(deps: CliDeps): Promise<number> {
   }
   const refusal = refusalFor(failureError);
   if (refusal !== null) {
+    const renderInput =
+      mode.format === "json" ? null : updateRefusalInput(failureError, deps.client);
+    if (renderInput) {
+      renderUpdateRefusal(logger, renderInput);
+      return refusal.exitCode;
+    }
     return refuse({ logger, mode, version, command: "obfuscate", ...refusal });
   }
 

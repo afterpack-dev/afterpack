@@ -334,15 +334,44 @@ describe("cloud refusals thrown by processBatch", () => {
     expect(cloud.kind).toBe("upgradeRequired");
     expect(cloud.code).toBe("AFTERPACK_CLOUD_UPGRADE_REQUIRED");
     expect(cloud.minVersion).toBe("0.2.0");
+    expect(cloud.installed).toBe("0.1.2-rc.9");
     expect(cloud.message).toContain("[afterpack-test]");
-    expect(cloud.message).toContain("@afterpack/core 0.2.0 or newer (installed 0.1.2-rc.9)");
+    expect(cloud.message).toContain(
+      "Installed @afterpack/core 0.1.2-rc.9 · required 0.2.0 or newer",
+    );
     expect(cloud.fix).toBe("npm install @afterpack/vite@latest @afterpack/core@0.2.0");
-    expect(cloud.message).toContain(`update: ${cloud.fix}.`);
+    expect(cloud.message.split("\n")).toContain(cloud.fix);
+    expect(cloud.message).not.toContain("npx");
     expect(cloud.message).toContain("this core is too old");
     expect(cap.warnings).toContain(
       "[afterpack-test] AfterPack warning: see the guide https://afterpack.dev/docs/upgrade",
     );
     expect(readFileSync(file, "utf8")).toBe("export const a = 1;");
+  });
+
+  it("names the calling plugin package in the command, with no npx alternative", async () => {
+    __setBatchError(
+      napiError(
+        "AFTERPACK_CLOUD_UPGRADE_REQUIRED",
+        cloudErrorMessage({
+          code: "DIAG_CLIENT_UPGRADE_REQUIRED",
+          message: "clients below 0.2.0 are no longer served",
+          details: { minVersion: "0.2.0" },
+        }),
+      ),
+    );
+    const identity: ClientIdentity = {
+      packageName: "@afterpack/next",
+      packageVersion: "0.1.4",
+      coreVersion: "0.1.0",
+    };
+    const error = (await runObfuscationPass(
+      options({ client: identity, logger: capture().logger }),
+    ).catch((e: unknown) => e)) as CloudApiError;
+    expect(error.fix).toBe("npm install @afterpack/next@latest @afterpack/core@0.2.0");
+    expect(error.message.split("\n")).toContain(error.fix);
+    expect(error.message.split(error.fix)).toHaveLength(2);
+    expect(error.message).not.toContain("npx");
   });
 
   it("turns AFTERPACK_CLOUD_SUNSET into a sunset CloudApiError", async () => {
@@ -356,7 +385,10 @@ describe("cloud refusals thrown by processBatch", () => {
       (e: unknown) => e,
     );
     expect((error as CloudApiError).kind).toBe("sunset");
-    expect((error as CloudApiError).message).toContain("has been retired");
+    expect((error as CloudApiError).message).toContain(
+      "This version of AfterPack is no longer supported by the AfterPack cloud.",
+    );
+    expect((error as CloudApiError).message).toContain("v1 is retired");
   });
 
   it("keeps CODE: message for AFTERPACK_CLOUD_API", async () => {

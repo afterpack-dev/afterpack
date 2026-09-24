@@ -13,11 +13,16 @@ export {
 } from "./bundle.js";
 export { type CollectJsOptions, collectJsFiles, collectSourceMaps } from "./collect.js";
 export {
+  CLOUD_REFUSAL_SUMMARY,
   type ClientIdentity,
   CloudApiError,
   type CloudErrorKind,
+  CORE_FLOOR_SUMMARY,
   CoreVersionError,
+  installedRequiredLine,
+  npxAlternative,
   resolveClientIdentity,
+  serverAddsInfo,
 } from "./compat.js";
 export { CONFIG_FILE_NAME, type LoadedConfigFile, loadConfigFile } from "./config-file.js";
 export {

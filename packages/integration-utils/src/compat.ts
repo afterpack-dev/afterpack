@@ -105,11 +105,81 @@ export function updateCommand(
 ): string {
   const core = `${CORE_PACKAGE}@${safeVersionString(minVersion) ?? "latest"}`;
   const name = identity?.packageName;
-  const install =
-    name && name !== CORE_PACKAGE ? `npm install ${name}@latest ${core}` : `npm install ${core}`;
-  return name === CLI_PACKAGE
-    ? `${install} (or, without a local install: npx ${CLI_PACKAGE}@latest)`
-    : install;
+  return name && name !== CORE_PACKAGE
+    ? `npm install ${name}@latest ${core}`
+    : `npm install ${core}`;
+}
+
+export function npxAlternative(identity: ClientIdentity | null | undefined): string | null {
+  return identity?.packageName === CLI_PACKAGE ? `npx ${CLI_PACKAGE}@latest` : null;
+}
+
+export const CLOUD_REFUSAL_SUMMARY =
+  "This version of AfterPack is no longer supported by the AfterPack cloud.";
+
+export const CORE_FLOOR_SUMMARY =
+  "@afterpack/core is too old to protect this build — update @afterpack/core.";
+
+function requiredText(minVersion: string | null): string {
+  return minVersion ? `${minVersion} or newer` : "a newer release";
+}
+
+export function installedRequiredLine(installed: string | null, minVersion: string | null): string {
+  const required = requiredText(minVersion);
+  return installed
+    ? `Installed ${CORE_PACKAGE} ${installed} · required ${required}`
+    : `Required ${CORE_PACKAGE} ${required}`;
+}
+
+const TOKEN_STOPWORDS: ReadonlySet<string> = new Set([
+  "this",
+  "is",
+  "are",
+  "a",
+  "an",
+  "the",
+  "by",
+  "to",
+  "of",
+  "or",
+  "no",
+  "longer",
+  "required",
+  "version",
+  "newer",
+  "for",
+  "that",
+]);
+
+function meaningfulTokens(text: string): Set<string> {
+  const tokens = text.toLowerCase().split(/[^a-z0-9.]+/);
+  return new Set(tokens.filter((token) => token.length > 0 && !TOKEN_STOPWORDS.has(token)));
+}
+
+export function serverAddsInfo(serverMessage: string, shownText: string): boolean {
+  const serverTokens = meaningfulTokens(serverMessage);
+  if (serverTokens.size === 0) return false;
+  const shownTokens = meaningfulTokens(shownText);
+  let novel = 0;
+  for (const token of serverTokens) if (!shownTokens.has(token)) novel++;
+  return novel / serverTokens.size > 0.25;
+}
+
+function refusalLines(input: {
+  summary: string;
+  installed: string | null;
+  minVersion: string | null;
+  fix: string;
+  npxAlt: string | null;
+  serverMessage: string;
+}): string[] {
+  const installedLine = installedRequiredLine(input.installed, input.minVersion);
+  const lines = [input.summary, installedLine, input.fix];
+  if (input.npxAlt) lines.push(`or, without a local install: ${input.npxAlt}`);
+  if (serverAddsInfo(input.serverMessage, `${input.summary} ${installedLine}`)) {
+    lines.push(`Server: ${input.serverMessage}`);
+  }
+  return lines;
 }
 
 export class CoreVersionError extends Error {
@@ -134,15 +204,15 @@ export function assertSupportedCore(
   const installed = identity?.coreVersion ?? null;
   if (installed === null || !isBelowVersion(installed, MIN_CORE_VERSION)) return;
   const fix = updateCommand(identity);
-  throw new CoreVersionError(
-    prefix(
-      `${CORE_PACKAGE} ${installed} is older than ${MIN_CORE_VERSION}, the oldest engine this ` +
-        `integration supports — update @afterpack/core: ${fix}`,
-    ),
+  const lines = refusalLines({
+    summary: CORE_FLOOR_SUMMARY,
     installed,
-    MIN_CORE_VERSION,
+    minVersion: MIN_CORE_VERSION,
     fix,
-  );
+    npxAlt: npxAlternative(identity),
+    serverMessage: "",
+  });
+  throw new CoreVersionError(prefix(lines.join("\n")), installed, MIN_CORE_VERSION, fix);
 }
 
 export const CLOUD_UPGRADE_REQUIRED = "AFTERPACK_CLOUD_UPGRADE_REQUIRED";
@@ -174,6 +244,7 @@ export class CloudApiError extends Error {
   readonly details: Record<string, unknown> | null;
   readonly notices: SafeNotice[];
   readonly minVersion: string | null;
+  readonly installed: string | null;
   readonly fix: string;
 
   constructor(input: {
@@ -185,6 +256,7 @@ export class CloudApiError extends Error {
     details: Record<string, unknown> | null;
     notices: SafeNotice[];
     minVersion: string | null;
+    installed: string | null;
     fix: string;
     cause: unknown;
   }) {
@@ -197,6 +269,7 @@ export class CloudApiError extends Error {
     this.details = input.details;
     this.notices = input.notices;
     this.minVersion = input.minVersion;
+    this.installed = input.installed;
     this.fix = input.fix;
   }
 }
@@ -224,24 +297,19 @@ function describeCloudFailure(
   identity: ClientIdentity | null | undefined,
   fix: string,
 ): string {
-  const server = body.message ? ` Server: ${body.message}` : "";
   if (kind === "api") {
     if (!body.code && body.message.startsWith("cloud obfuscation failed")) return body.message;
     const code = body.code ? `${body.code}: ` : "";
     return `cloud obfuscation failed: ${code}${body.message || "the API refused the request"}`;
   }
-  const installed = identity?.coreVersion ? ` (installed ${identity.coreVersion})` : "";
-  if (kind === "sunset") {
-    return (
-      `the AfterPack cloud API this ${CORE_PACKAGE}${installed} talks to has been retired — ` +
-      `update: ${fix}.${server}`
-    );
-  }
-  const floor = minVersion ? ` ${minVersion} or newer` : " a newer release";
-  return (
-    `the AfterPack cloud API requires ${CORE_PACKAGE}${floor}${installed} — update: ${fix}.` +
-    server
-  );
+  return refusalLines({
+    summary: CLOUD_REFUSAL_SUMMARY,
+    installed: identity?.coreVersion ?? null,
+    minVersion,
+    fix,
+    npxAlt: npxAlternative(identity),
+    serverMessage: body.message,
+  }).join("\n");
 }
 
 export function toCloudApiError(
@@ -270,6 +338,7 @@ export function toCloudApiError(
     details: body.details,
     notices: sanitizeNotices(body.notices),
     minVersion,
+    installed: options.identity?.coreVersion ?? null,
     fix,
     cause: error,
   });

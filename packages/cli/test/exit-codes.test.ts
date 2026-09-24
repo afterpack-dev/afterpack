@@ -162,13 +162,19 @@ describe("the exit-code contract", () => {
     });
     expect(code).toBe(6);
     const text = [...err, ...warn, ...out].join("\n");
-    expect(text).toContain("@afterpack/core 0.2.0 or newer (installed 0.1.0)");
-    expect(text).toContain("clients below 0.2.0 are no longer served");
     expect(text).toContain(
-      "Update, then build again: npm install afterpack@latest @afterpack/core@0.2.0 (or, without a local install: npx afterpack@latest)",
+      "This version of AfterPack is no longer supported by the AfterPack cloud.",
     );
+    expect(text).toContain("Installed @afterpack/core 0.1.0 · required 0.2.0 or newer");
+    expect(text).toContain("clients below 0.2.0 are no longer served");
+    expect(text).toContain("Update, then build again:");
+    expect(text).toContain("$ npm install afterpack@latest @afterpack/core@0.2.0");
+    expect(text).toContain("or, without a local install: npx afterpack@latest");
     expect(text).toContain("https://www.afterpack.dev/docs/upgrade");
     expect(text).not.toContain("--paths.exclude");
+    const fixOccurrences =
+      text.split("npm install afterpack@latest @afterpack/core@0.2.0").length - 1;
+    expect(fixOccurrences).toBe(1);
     expect(readFileSync(join(buildDir, "app.js"), "utf8")).toBe("export const a = 1;");
   });
 
@@ -199,10 +205,14 @@ describe("the exit-code contract", () => {
       client: { packageName: "afterpack", packageVersion: "0.1.0", coreVersion: "0.0.9" },
     });
     expect(code).toBe(6);
-    expect(err.join("\n")).toContain("update @afterpack/core");
-    expect(err.join("\n")).toContain(
-      "Update, then build again: npm install afterpack@latest @afterpack/core@latest (or, without a local install: npx afterpack@latest)",
-    );
+    const text = err.join("\n");
+    expect(text).toContain("update @afterpack/core");
+    expect(text).toContain("Update, then build again:");
+    expect(text).toContain("$ npm install afterpack@latest @afterpack/core@latest");
+    expect(text).toContain("or, without a local install: npx afterpack@latest");
+    const fixOccurrences =
+      text.split("npm install afterpack@latest @afterpack/core@latest").length - 1;
+    expect(fixOccurrences).toBe(1);
     expect(batchCalls).toHaveLength(0);
   });
 

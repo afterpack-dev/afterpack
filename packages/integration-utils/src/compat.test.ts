@@ -13,6 +13,7 @@ import {
   clientString,
   isBelowVersion,
   MIN_CORE_VERSION,
+  npxAlternative,
   parseCloudErrorMessage,
   releaseTriple,
   resolveClientIdentity,
@@ -214,15 +215,15 @@ describe("toCloudApiError", () => {
     );
     expect(error).toBeInstanceOf(CloudApiError);
     expect(error?.minVersion).toBe("0.3.0");
+    expect(error?.installed).toBe("0.1.0");
     expect(error?.apiCode).toBe("DIAG_CLIENT_UPGRADE_REQUIRED");
-    expect(error?.fix).toBe(
-      "npm install afterpack@latest @afterpack/core@0.3.0 (or, without a local install: npx afterpack@latest)",
-    );
-    expect(error?.message).toContain("[afterpack] the AfterPack cloud API requires");
-    expect(error?.message).toContain("@afterpack/core 0.3.0 or newer (installed 0.1.0)");
+    expect(error?.fix).toBe("npm install afterpack@latest @afterpack/core@0.3.0");
     expect(error?.message).toContain(
-      "update: npm install afterpack@latest @afterpack/core@0.3.0 (or, without a local install: npx afterpack@latest).",
+      "[afterpack] This version of AfterPack is no longer supported by the AfterPack cloud.",
     );
+    expect(error?.message).toContain("Installed @afterpack/core 0.1.0 · required 0.3.0 or newer");
+    expect(error?.message.split("\n")).toContain(error?.fix);
+    expect(error?.message.split(error?.fix as string)).toHaveLength(2);
     expect(error?.notices).toEqual([
       { severity: "warning", code: "N", message: "notice text", url: null },
     ]);
@@ -240,12 +241,15 @@ describe("toCloudApiError", () => {
     expect(error?.message).toContain("a newer release");
   });
 
-  it("names the retirement on sunset", () => {
+  it("names the retirement on sunset, same shape as an upgrade refusal", () => {
     const error = toCloudApiError(
       napiError(CLOUD_SUNSET, JSON.stringify({ code: "DIAG_API_SUNSET", message: "gone" })),
       { identity },
     );
-    expect(error?.message).toContain("has been retired");
+    expect(error?.message).toContain(
+      "This version of AfterPack is no longer supported by the AfterPack cloud.",
+    );
+    expect(error?.message).toContain("Installed @afterpack/core 0.1.0 · required a newer release");
     expect(error?.message).toContain("Server: gone");
   });
 
@@ -285,9 +289,12 @@ describe("updateCommand", () => {
     expect(updateCommand(as("@afterpack/core"), "0.2.1")).toBe("npm install @afterpack/core@0.2.1");
   });
 
-  it("offers npx afterpack@latest to a CLI run without a local install", () => {
+  it("names afterpack itself with no parenthetical, npxAlternative offers the alternative separately", () => {
     expect(updateCommand(as("afterpack"), "0.2.1")).toBe(
-      "npm install afterpack@latest @afterpack/core@0.2.1 (or, without a local install: npx afterpack@latest)",
+      "npm install afterpack@latest @afterpack/core@0.2.1",
     );
+    expect(npxAlternative(as("afterpack"))).toBe("npx afterpack@latest");
+    expect(npxAlternative(as("@afterpack/vite"))).toBeNull();
+    expect(npxAlternative(null)).toBeNull();
   });
 });
