@@ -3,13 +3,47 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { processBatch as ProcessBatch, version as Version } from "@afterpack/core";
+import type { CoreConfig, ObfuscationEngine } from "@afterpack/integration-utils";
 import { afterEach, describe, expect, it } from "vitest";
 import { run } from "../src/run.js";
 
-const { processBatch, version } = createRequire(import.meta.url)("@afterpack/core") as {
+const { processBatch: legacyProcessBatch, version } = createRequire(import.meta.url)(
+  "@afterpack/core",
+) as {
   processBatch: typeof ProcessBatch;
   version: typeof Version;
 };
+
+function bridgeToLegacyEngine(onConfig: (config: CoreConfig) => void): ObfuscationEngine {
+  return {
+    version,
+    processBatch: async (files, config, buildContext) => {
+      onConfig(config);
+      const legacyFiles = files.map((f) => ({
+        filePath: f.filePath,
+        source: f.source,
+        inputSourceMap: f.inputSourceMap,
+        regions: f.regions ? JSON.stringify(f.regions) : undefined,
+      }));
+      const result = await legacyProcessBatch(
+        legacyFiles,
+        JSON.stringify(config),
+        buildContext ? JSON.stringify(buildContext) : undefined,
+      );
+      return {
+        ...result,
+        source: result.source as "local" | "cloud",
+        files: result.files.map((f) => ({
+          ...f,
+          status: f.status as "success" | "failure",
+          unobfuscated: f.unobfuscated === true,
+          protectionMap: f.protectionMap != null ? JSON.parse(f.protectionMap) : undefined,
+          diagnostics: f.diagnostics != null ? JSON.parse(f.diagnostics) : undefined,
+        })),
+      };
+    },
+  };
+}
 
 const APP = `export function computeOrderTotal(items) {
   let total = 0;
@@ -40,17 +74,11 @@ async function build(configFile: object | null, env: Record<string, string>, fla
   if (configFile) writeFileSync(join(root, "afterpack.json"), JSON.stringify(configFile));
 
   const errors: string[] = [];
-  const configs: string[] = [];
+  const configs: CoreConfig[] = [];
   const code = await run({
     argv: ["dist", "--telemetry.enabled=false", "--protectionMap.enabled=false", ...flags],
     cwd: root,
-    engine: {
-      processBatch: (files, configJson) => {
-        configs.push(configJson);
-        return processBatch(files, configJson);
-      },
-      version,
-    },
+    engine: bridgeToLegacyEngine((config) => configs.push(config)),
     logger: { log: () => {}, error: (m) => errors.push(m), warn: () => {} },
     version: "9.9.9",
     env,
@@ -60,7 +88,7 @@ async function build(configFile: object | null, env: Record<string, string>, fla
     app: readFileSync(join(dist, "app.js"), "utf8"),
     vendor: readFileSync(join(dist, "vendor.js"), "utf8"),
     errors,
-    engineConfig: configs.length > 0 ? (JSON.parse(configs[0]) as Record<string, unknown>) : null,
+    engineConfig: configs.length > 0 ? configs[0] : null,
   };
 }
 

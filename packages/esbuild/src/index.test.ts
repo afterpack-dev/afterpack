@@ -98,7 +98,7 @@ describe("afterpackEsbuild onEnd", () => {
     writeFileSync(join(outDir, "app.js"), "export const a = 1;");
     const regions = [{ start: 0, end: 12, floor: false }];
     await applyPlugin({ regions }, { outdir: outDir, absWorkingDir: root })();
-    expect(JSON.parse(engineCalls[0].configJson).regions).toEqual(regions);
+    expect(engineCalls[0].config.regions).toEqual(regions);
   });
 
   it("does nothing when build.autorun is disabled via the option", async () => {
@@ -165,7 +165,7 @@ describe("afterpackEsbuild per-region directives", () => {
   it("recovers directives from the emitted map's sourcesContent BY DEFAULT", async () => {
     writeChunk(true);
     await applyPlugin({}, { outdir: outDir, absWorkingDir: root })();
-    const regions = JSON.parse(engineCalls[0].regions as string) as Array<Record<string, unknown>>;
+    const regions = engineCalls[0].regions as Array<Record<string, unknown>>;
     expect(regions).toHaveLength(1);
     expect(regions[0]).toMatchObject({ start: 0, end: KEEP_LEN, target: 0, floor: false });
   });
@@ -204,7 +204,7 @@ describe("afterpackEsbuild afterpack.json (resolved from process.cwd, not esbuil
 
     await applyPlugin({}, { outdir: outDir, absWorkingDir: root, write: true })();
 
-    expect(JSON.parse(engineCalls[0].configJson).preset).toBe("hard");
+    expect(engineCalls[0].config.preset).toBe("hard");
   });
 
   it("is outranked by the plugin options object", async () => {
@@ -213,7 +213,7 @@ describe("afterpackEsbuild afterpack.json (resolved from process.cwd, not esbuil
 
     await applyPlugin({ preset: "medium" }, { outdir: outDir, absWorkingDir: root, write: true })();
 
-    expect(JSON.parse(engineCalls[0].configJson).preset).toBe("medium");
+    expect(engineCalls[0].config.preset).toBe("medium");
   });
 
   it("fails the build on an unknown key instead of silently dropping it", () => {

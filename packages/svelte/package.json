@@ -1,7 +1,7 @@
 {
   "name": "@afterpack/svelte",
   "version": "0.1.0",
-  "description": "AfterPack for Svelte (Vite/Rollup) - obfuscate your build output automatically",
+  "description": "Svelte plugin for AfterPack: obfuscate a Svelte app's production JavaScript during the Vite build",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -54,14 +54,20 @@
   },
   "keywords": [
     "obfuscator",
+    "javascript-obfuscator",
+    "obfuscation",
+    "code-protection",
+    "source-code-protection",
+    "javascript-security",
+    "anti-reverse-engineering",
     "svelte",
     "vite",
-    "code-protection",
+    "vite-plugin",
     "afterpack"
   ],
   "author": "AfterPack (https://www.afterpack.dev)",
   "license": "Apache-2.0",
-  "homepage": "https://www.afterpack.dev",
+  "homepage": "https://www.afterpack.dev/docs/frameworks/svelte",
   "bugs": {
     "url": "https://github.com/afterpack-dev/afterpack/issues"
   }

@@ -1,8 +1,15 @@
 # @afterpack/rollup
 
-AfterPack Rollup plugin — obfuscates your build output **inside Rollup's own pipeline**, before a
-byte of it reaches disk, and writes the Protection Map beside your project rather than inside the
-build.
+A Rollup plugin (Rollup 3 and 4) that obfuscates your output as part of the build, using the
+[AfterPack](https://www.afterpack.dev) JavaScript obfuscator.
+
+## Install
+
+```sh
+npm install --save-dev @afterpack/rollup
+```
+
+## Usage
 
 ```js
 // rollup.config.js
@@ -15,82 +22,71 @@ export default {
 };
 ```
 
-The plugin runs in `generateBundle` (`order: "post"`), with the finished bundle in memory and BEFORE
-Rollup writes any of it. For each JS entry in the bundle it takes Rollup's own live source map,
-obfuscates via `@afterpack/core`, and hands the chunk back — so **Rollup never writes the cleartext
-bundle**, and a refusal leaves the output directory untouched. It is **fail-closed**: if the engine
-reports an `error`/`critical` diagnostic (or empty output), the hook throws and the build fails
-rather than shipping unobfuscated code.
+The plugin runs last, after every other plugin, and obfuscates each JavaScript chunk before Rollup
+writes it. The readable bundle never reaches disk. If obfuscation fails, the build fails and the
+output directory is left untouched.
 
-`order: "post"` puts AfterPack last among `generateBundle` hooks — it is the final seal, and anything
-rewriting a chunk after it would be rewriting obfuscated code.
-
-## What it writes
-
-- `foo.js.map` — the composed source map replaces Rollup's own map entry, when `sourceMap` is on.
-  When policy ships no map (the production default) that entry is **dropped**: it describes the
-  pre-obfuscation bytes and carries `sourcesContent`, so shipping it beside obfuscated code is a
-  complete deobfuscation.
-- `.afterpack/protectionMap.html` — ONE combined, self-contained Protection Map for the whole build,
-  written to a gitignored directory rather than into the output dir itself.
-
-There is no `foo.backup.<hash>.js` here: the obfuscated bytes go back into the bundle rather than
-beside an emitted file, so there is nothing for a backup to sit next to. `build.backup: true` says so
-instead of silently doing nothing. `paths.include` is refused — it re-admits what an on-disk walk
-skips, and this plugin does no walk.
-
-It also appends the artifact guard globs (`.afterpack/`, `*.protectionMap.html`, `protectionMap.html`,
-`*.backup.*`, `*.map`) to your project `.gitignore`, and warns if an artifact lands under a served path.
+Each build writes a protection receipt, `.afterpack-protection.json`, into the output directory.
+Run `npx afterpack verify dist` in your deploy step to check that what you ship is what was
+obfuscated.
 
 ## Options
 
-Every option below defaults independently; a production auto-flip (detected from `NODE_ENV=production`,
-`CI=true`, or an explicit `production: true`) adjusts some of them. Explicit options always win.
-
-| Option | Type | Default | Prod flip |
-| --- | --- | --- | --- |
-| `seed` | `number \| string` | fresh random per build | — |
-| `build.autorun` | `boolean` | `true` (or `AFTERPACK_build_autorun=false`) | — |
-| `protectionMap` | `boolean` | ON iff a bundler sourcemap is discovered | governed by that, not prod; warns loudly if left on (always lands in gitignored `.afterpack/`) |
-| `sourceMap` | `boolean` | auto (on iff an input map exists) | OFF |
-| `sourceMap.emitUrl` | `boolean` | ON | **OFF in prod** (a public obfuscator map = full deobfuscation) |
-| `build.backup` | `boolean` | OFF | OFF (explicit `true` always wins) |
-| `production` | `boolean` | inferred from env | forces the prod posture |
-| `directives` | `boolean` | ON | — |
-
-For a single un-bundled output file, `/* @afterpack ... */` comments are read straight from the
-emitted source. When Rollup bundles multiple modules together, a `transform` hook captures each
-module's original text before any minifier strips its comments, and `generateBundle` backward-colors
-those spans through the emitted chunk's own source map, so directives survive bundling. That needs
-`output.sourcemap: true`; without one the pass skips them and says so rather than over-applying.
-
 ```js
-// Turn everything sensitive off:
-afterpackRollup({ protectionMap: false, sourceMap: false, directives: false });
+afterpackRollup({ preset: "hard", seed: "git" });
 ```
 
-## Configuration
+| Option | Type | Default |
+| --- | --- | --- |
+| `preset` | `"minify"`, `"light"`, `"medium"`, `"hard"`, `"extreme"` | `"light"` |
+| `complexity` | `number` | the preset's value |
+| `seed` | `number` or `string` (`"git"` uses the current commit) | a new random seed per build |
+| `protectionMap` | `boolean` | on when `output.sourcemap` is set |
+| `sourceMap` | `boolean` | on in development when Rollup emits a map, off in production |
+| `sourceMap.emitUrl` | `boolean` | on in development, off in production |
+| `directives` | `boolean` | `true` |
+| `build.autorun` | `boolean` | `true`; `false` turns AfterPack off |
+| `production` | `boolean` | detected from `NODE_ENV=production` or `CI=true` |
 
-Every option above can also be set in `afterpack.json` — the one config file every AfterPack
-integration reads, at the nearest ancestor of your working directory — or in an `AFTERPACK_<key>`
-environment variable. Most specific wins: the options object here, then the environment, then the
-file.
+Dotted names are nested objects: `sourceMap.emitUrl` is `{ sourceMap: { emitUrl: true } }`. Every
+other key in the [configuration reference](https://www.afterpack.dev/docs/config) works too.
 
-```json
-{
-  "preset": "hard",
-  "seed": "git"
-}
-```
+`/* @afterpack */` directives in a multi-module bundle need `output.sourcemap: true`. Without it,
+the plugin skips them and tells you.
 
-In the file and the environment each option carries its canonical name: `protectionMap` is
-`protectionMap.enabled`, `sourceMap` is `sourceMap.enabled`, `complexity` is already the registry key, and every
-other option keeps the name it has above.
+The [Protection Map](https://www.afterpack.dev/docs/protection-map) is written to `.afterpack/`,
+outside your output directory, and the plugin adds its local artifacts to your `.gitignore`. It
+contains your original source, so never publish or commit it.
 
-The whole configuration is validated when the plugin is constructed: an unknown key, a kebab-cased
-key or a malformed value fails the build naming the canonical spelling, instead of being silently
-discarded.
+Options can also live in `afterpack.json` or in `AFTERPACK_*` environment variables. The options
+object wins over the environment, which wins over the file. An unknown or misspelled key fails the
+build and names the right spelling.
+
+## Pro
+
+Without a key, AfterPack runs on your machine and applies basic protection. Set `AFTERPACK_KEY` in
+your environment and the same plugin sends the build to AfterPack's cloud, which applies much
+stronger protection. Keep the key out of your Rollup config: the plugin rejects it there. See
+[AfterPack Pro](https://www.afterpack.dev/docs/pro).
+
+## Not supported here
+
+- `build.backup`: the output goes back to Rollup in memory, so there is no file to back up.
+- `paths.include`: the plugin works on Rollup's bundle and does not walk the output directory.
+
+## Links
+
+- [Rollup setup guide](https://www.afterpack.dev/docs/frameworks/rollup)
+- [Presets and protection levels](https://www.afterpack.dev/docs/presets)
+- [How AfterPack compares to other obfuscators](https://www.afterpack.dev/docs/comparison)
+- [Keeping API keys shipped in a bundle out of plain sight](https://www.afterpack.dev/docs/use-cases/shipped-api-keys)
+
+## License
+
+Apache-2.0. The engine it runs, `@afterpack/core`, has its own
+[license](https://www.afterpack.dev/license).
 
 ## Feedback
 
-Questions and proposals: https://github.com/afterpack-dev/afterpack/discussions · Bugs: https://github.com/afterpack-dev/afterpack/issues
+Questions and ideas: [GitHub Discussions](https://github.com/afterpack-dev/afterpack/discussions).
+Bugs: [GitHub Issues](https://github.com/afterpack-dev/afterpack/issues).

@@ -57,7 +57,7 @@ describe("afterpack-next post-minify directive capture (the original survives on
 
     const call = engineCalls.find((c) => c.input.startsWith(PM_CHUNK));
     expect(call?.regions, "the directive rode the per-file regions channel").toBeDefined();
-    expect(JSON.parse(call?.regions ?? "[]")).toEqual([
+    expect(call?.regions ?? []).toEqual([
       { ...SKIP_COLORS_CHUNK_BYTES, target: 0, floor: false, label: "skip" },
     ]);
   });

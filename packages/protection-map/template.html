@@ -1,6 +1,4 @@
 <!doctype html>
-<!-- no `data-theme` here on purpose: with no explicit choice the page follows the
-     OS via `prefers-color-scheme`. The toggle stamps light/dark when the user picks. -->
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -8,23 +6,13 @@
 <meta name="robots" content="noindex, nofollow" />
 <title>AfterPack · Protection Map</title>
 <style>
-/* ==========================================================================
-   AfterPack Protection Map — self-contained viewer.
-   Dev-only artifact. No external requests: no CDN, no webfonts, no images.
-   ========================================================================== */
 
-/* ---- design tokens (light default) -------------------------------------- */
 :root {
   color-scheme: light dark;
 
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --font-ui: Inter, -apple-system, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 
-  /* Neutrals are VS Code "Light Modern", verbatim: editor.background #ffffff,
-     sideBar/titleBar #f8f8f8, list.hoverBackground #e8e8e8, panel border
-     #e5e5e5, input.border #cecece, foreground #3b3b3b, descriptionForeground
-     #616161. Only the PROTECTION vocabulary below (heat ramp, reversal-class
-     hues, status colors, brand gold) is ours -- the chrome is the editor's. */
   --ground: #ffffff;
   --surface-1: #ffffff;
   --surface-2: #f8f8f8;
@@ -33,30 +21,17 @@
   --scrollbar: #c9c9c9;
   --border: #e5e5e5;
   --border-strong: #cecece;
-  /* VS Code Light Modern's foreground is #3b3b3b; we sit one step darker,
-     between it and Light+'s #000000. #3b3b3b would drop body-over-hottest-
-     wash from the previous pass's 6.57:1 to 4.82:1 -- a real regression for
-     an imperceptible gain in theme fidelity. */
   --text-primary: #262626;
   --text-secondary: #616161;
   --text-muted: #767676;
 
-  /* accent: metallic gold. On light surfaces we anchor to a deeper gold so the
-     accent stays legible as text/borders; the active-control fill uses it too. */
   --brand: #a06a12;
   --brand-hover: #b57317;
   --brand-ink: #ffffff;
   --focus-ring: #a06a12;
 
-  /* the whole-file "machinery bucket" wash -- deliberately near-neutral */
   --wash: #f3f3f3;
 
-  /* protection heatmap: sequential PER-FILE RELATIVE ramp, none(low score in
-     this file) -> yellow -> RED (high score in this file). Every stop is
-     composited at <= 0.5 alpha over the page ground (see tokenAlpha), and the
-     alpha floor is now low on purpose: the file's coolest positive-score
-     region should read as barely-there, so only its hottest region(s) read
-     unmistakably red. */
   --heat-0: #fff3c2;
   --heat-1: #ffde85;
   --heat-2: #ffc247;
@@ -65,7 +40,6 @@
   --heat-5: #d1381a;
   --heat-6: #b62020;
 
-  /* cost lens: sequential single-hue amber, pale(cheap) -> deep(costly) */
   --cost-0: #f8e3d5;
   --cost-1: #eec9ae;
   --cost-2: #dda780;
@@ -74,14 +48,10 @@
   --cost-5: #7f4406;
   --cost-6: #5a2d00;
 
-  /* exclusion bands (orthogonal to heat/cost -- the engine currently only ever
-     emits "inflatable", the rest are reserved by the spec) */
   --band-safety: #d4d4d4;
   --band-reflection: #bdbdbd;
   --band-skip: #969696;
 
-  /* status colors -- semantic, kept separate from the gold accent and from
-     both ramps; never the only signal (icon + text label always ship too) */
   --status-leak: #dc2626;
   --status-leak-soft: #fee2e2;
   --status-property: #b45309;
@@ -89,18 +59,8 @@
   --status-weak: #a16207;
   --status-weak-soft: #fef9c3;
 
-  /* reversal-class chips -- categorical, distinct from the sequential gold heat
-     ramp above. preserved=neutral, renamed-encoded=teal (achieved today),
-     flattened-fused=blue (Free ceiling), destroyed-fused=premium violet with a
-     gold edge (Pro ceiling). */
   --class-preserved: #525252;
   --class-preserved-soft: #e5e5e5;
-  /* the wash a PRESERVED token gets in the code pane: the bottom rung of the
-     same background language the heat ramp uses, one small step further from the
-     ground than the flat machinery band so the two are told apart where they
-     abut, both far below any chromatic wash. Alpha rather than a hex, so it
-     composites over the line wash instead of punching an opaque hole through
-     it. See `.tok.tok-preserved`. */
   --class-preserved-wash: rgba(82, 82, 82, 0.09);
   --class-renamed: #0d7d88;
   --class-renamed-soft: #d6eef0;
@@ -110,17 +70,10 @@
   --class-destroyed-soft: #efe3fb;
   --class-destroyed-edge: #b57317;
 
-  /* code-pane affordances: the hover tint/ring painted over an ATTRIBUTED token
-     (a token you can click to inspect), and the drag handle between panes. */
   --tok-hover-bg: rgba(181, 115, 23, 0.36);
   --tok-hover-ring: rgba(160, 106, 18, 0.85);
   --resizer-hover: rgba(160, 106, 18, 0.55);
 
-  /* syntax-highlighting ink -- a FOREGROUND-ONLY layer (see the `.lc i` rules).
-     Deliberately clear of every hue the protection overlay already owns (gold =
-     heat, teal = renamed, blue/violet = reversal classes, red = leak), and dark
-     enough to stay legible where a heat wash is composited under it. */
-  /* plate behind the wordmark -- see .brand-logo */
   --logo-plate: #141414;
   --syn-comment: #008000;
   --syn-key: #0000ff;
@@ -134,10 +87,6 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    /* VS Code "Dark Modern", verbatim: editor.background #1f1f1f,
-       editorWidget.background #202020, sideBar/titleBar #181818,
-       list.hoverBackground #2a2d2e, panel border #2b2b2b, input.border #3c3c3c,
-       editor.foreground #cccccc, descriptionForeground #9d9d9d. */
     --ground: #1f1f1f;
     --surface-1: #202020;
     --surface-2: #181818;
@@ -157,12 +106,6 @@
 
     --wash: #252526;
 
-    /* dark ramp: dim bronze -> SATURATED red. It deliberately does NOT climb to
-       a pale top stop. The ground is VS Code's #1f1f1f, and at the wash's 0.5
-       alpha cap a pale top stop composites into the mid-tones, where NOTHING
-       contrasts. Capping the ramp's luminance (not its chroma) keeps "hot"
-       unmistakable while staying legible. The low->high separation is carried
-       by alpha (0.10 -> 0.5) + hue (amber -> red) + saturation. */
     --heat-0: #543912; --heat-1: #714514; --heat-2: #8e4e15; --heat-3: #b15416;
     --heat-4: #d14b1a; --heat-5: #df3c2a; --heat-6: #df4949;
 
@@ -185,11 +128,6 @@
     --tok-hover-ring: rgba(234, 174, 61, 0.95);
     --resizer-hover: rgba(234, 174, 61, 0.65);
 
-    /* syntax ink, dark twin: VS Code Dark+ HUES, luminance-lifted. VS Code's own
-       #569cd6 / #ce9178 / #b5cea8 are tuned for a FLAT #1f1f1f and measure
-       1.3-2.9:1 once a heat wash is composited under them; lifting L (hue and
-       chroma unchanged) buys back >=4:1. Comments keep VS Code's #6a9955 exactly
-       -- over a wash they yield to the body colour instead (see `.tok-ink-yield`). */
     --logo-plate: rgba(255, 255, 255, 0.04);
     --syn-comment: #6a9955;
     --syn-key: #8fc8ff;
@@ -200,8 +138,6 @@
   }
 }
 
-/* explicit toggle always wins over both the default and the media query,
-   because an attribute selector out-specifies a bare :root in both places */
 :root[data-theme="light"] {
   --ground: #ffffff; --surface-1: #ffffff; --surface-2: #f8f8f8; --surface-3: #ececec;
   --surface-hover: #e8e8e8; --scrollbar: #c9c9c9; --border: #e5e5e5; --border-strong: #cecece;
@@ -248,7 +184,6 @@
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.45), 0 8px 24px rgba(0, 0, 0, 0.55);
 }
 
-/* ---- reset / base --------------------------------------------------------- */
 * { box-sizing: border-box; }
 html, body { height: 100%; }
 html { overflow-x: hidden; }
@@ -295,10 +230,7 @@ a:hover { color: var(--brand-hover); }
 }
 .mono { font-family: var(--font-mono); }
 
-/* ---- app shell -------------------------------------------------------------- */
 .app-shell {
-  /* both rail widths are live custom properties -- the drag handles below write
-     them back onto this element, so nothing else in the layout needs to know. */
   --rail-left-w: 262px;
   --rail-right-w: 340px;
   display: grid;
@@ -310,8 +242,6 @@ a:hover { color: var(--brand-hover); }
   height: 100vh;
   width: 100%;
 }
-/* collapsed rail: drop the tree column, hand its width to the code pane. Set
-   automatically for single-file builds, toggled manually from the topbar. */
 .app-shell.rail-collapsed {
   grid-template-columns: minmax(0, 1fr) var(--rail-right-w);
   grid-template-areas:
@@ -319,7 +249,6 @@ a:hover { color: var(--brand-hover); }
     "center right";
 }
 .app-shell.rail-collapsed .rail-left { display: none; }
-/* same idea for the inspector rail (panel-right toggle in the topbar) */
 .app-shell.inspector-collapsed {
   grid-template-columns: var(--rail-left-w) minmax(0, 1fr);
   grid-template-areas:
@@ -334,10 +263,6 @@ a:hover { color: var(--brand-hover); }
     "center";
 }
 
-/* ---- pane drag handles ------------------------------------------------------- */
-/* Each handle is a grid item sharing its rail's area, pinned to the rail's inner
-   edge and nudged half its width over the border so it straddles it. Hit area is
-   wider than the visible hairline (a 2px line is a miserable drag target). */
 .pane-resizer {
   position: relative;
   z-index: 6;
@@ -364,32 +289,20 @@ a:hover { color: var(--brand-hover); }
 }
 .pane-resizer:hover::before,
 .pane-resizer.is-dragging::before { background: var(--resizer-hover); }
-/* The handle IS keyboard-operable (ArrowLeft/ArrowRight resize it, Shift for a
-   bigger step), so it stays a tab stop. It used to suppress the outline and tint
-   its 3px hairline instead, which made it a PHANTOM: Tab lit up a sliver on a
-   transparent 9px strip with nothing to say what had focus. It now takes the
-   document's focus ring, drawn inside its own hit area so it reads as "the pane
-   divider", not as a stray mark on the code pane. */
 .pane-resizer:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: -1px;
   border-radius: 4px;
 }
 .pane-resizer:focus-visible::before { background: var(--brand); }
-/* a rail that is hidden has no grid area -- hide its handle too, or it would be
-   auto-placed into a phantom track */
 .app-shell.rail-collapsed .pane-resizer#resize-left,
 .app-shell.inspector-collapsed .pane-resizer#resize-right { display: none; }
-/* during a drag: no text selection, no transition fighting the pointer */
 body.is-resizing { cursor: col-resize; user-select: none; -webkit-user-select: none; }
 body.is-resizing .pane-resizer::before { transition: none; }
 @media (prefers-reduced-motion: reduce) { .pane-resizer::before { transition: none; } }
 
 @media (max-width: 980px) {
-  /* stacked single-column layout: the rails are full-width bands, nothing to drag */
   .pane-resizer { display: none; }
-  /* the collapsed-variant rules above are more specific than a bare `.app-shell`,
-     so they have to be named here or they'd keep forcing a 2-column track set */
   .app-shell,
   .app-shell.rail-collapsed,
   .app-shell.inspector-collapsed,
@@ -405,11 +318,6 @@ body.is-resizing .pane-resizer::before { transition: none; }
     min-height: 100vh;
   }
   .rail-left, .rail-right { max-height: 46vh; }
-  /* BOUNDED, like the rails either side of it. Without the cap the code pane
-     grows to the file's full height -- a long file pushed the inspector two
-     thousand pixels down the page, so tapping a token on a phone appeared to do
-     nothing at all. `.code-body` already scrolls; capping the pane is what lets
-     it. */
   .pane-center { min-height: 60vh; max-height: 60vh; }
 }
 @media (max-width: 480px) {
@@ -418,7 +326,6 @@ body.is-resizing .pane-resizer::before { transition: none; }
   .code-toolbar { padding: 6px 10px; }
 }
 
-/* ---- top bar ---------------------------------------------------------------- */
 .topbar {
   grid-area: top;
   display: flex;
@@ -441,10 +348,6 @@ body.is-resizing .pane-resizer::before { transition: none; }
   text-overflow: ellipsis;
 }
 .topbar h1 .dot { color: var(--brand); }
-/* The artifact's OWN size, where the "DEV ONLY" badge used to shout. The badge
-   said nothing a reader could act on and never changed; the size does both --
-   and the dev-only warning it replaced now rides in this chip's tooltip, which
-   is where every other caveat in this viewer lives. */
 .tag-size {
   font-family: var(--font-mono);
   font-size: 10px;
@@ -464,8 +367,6 @@ body.is-resizing .pane-resizer::before { transition: none; }
 .tag-size:hover, .tag-size:focus-visible { color: var(--brand); border-color: var(--brand); }
 .topbar .spacer { flex: 1 1 auto; min-width: 8px; }
 
-/* inline AfterPack wordmark, right-aligned -- gold+silver gradients read on the
-   void-black bar (native), and the SVG carries no external refs. */
 .brand-logo {
   display: inline-flex;
   align-items: center;
@@ -473,13 +374,8 @@ body.is-resizing .pane-resizer::before { transition: none; }
   margin-left: 6px;
   padding: 4px 10px;
   border-radius: 999px;
-  /* The wordmark's "Pack" half is a silver gradient drawn for the void-black
-     bar -- on a light ground it vanishes. The chip carries its own dark plate so
-     the logo reads identically in both themes. */
   background: var(--logo-plate);
   box-shadow: inset 0 0 0 1px var(--border);
-  /* it is a link (to the product site, new tab) -- give it link affordance without
-     letting the anchor's text color touch the SVG's own gradients */
   text-decoration: none;
   color: inherit;
   transition: box-shadow 0.3s ease, background-color 0.3s ease;
@@ -508,9 +404,6 @@ body.is-resizing .pane-resizer::before { transition: none; }
   transition: background-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
 }
 .segmented button + button { border-left: 1px solid var(--border-strong); }
-/* up to five facets in a 262px rail (and 180px at the resizer's floor): let the
-   group take the full width and the buttons share it, trimming padding rather
-   than clipping the last facet off the end of a fixed-width row. */
 .segmented-tight { display: flex; width: 100%; max-width: 100%; }
 .segmented-tight button {
   padding: 6px 4px;
@@ -539,8 +432,6 @@ body.is-resizing .pane-resizer::before { transition: none; }
 }
 .theme-toggle:hover { background: var(--surface-hover); }
 
-/* topbar icon buttons -- rail collapse + the legend/build popover trigger. Same
-   glass chrome as the theme toggle, sized for a single glyph or short label. */
 .top-btn {
   display: inline-flex;
   align-items: center;
@@ -564,19 +455,13 @@ body.is-resizing .pane-resizer::before { transition: none; }
 .top-btn-icon { padding: 6px 8px; }
 .top-btn-icon svg { display: block; }
 
-/* The two PANE toggles are one control, not two unrelated buttons: same
-   panel glyph mirrored left/right, joined into a single segment at the head of
-   the bar so "which rail does this hide" is answered by the icon itself. */
 .top-btn-pair { display: inline-flex; flex-shrink: 0; }
 .top-btn-pair .top-btn { border-radius: 0; }
 .top-btn-pair .top-btn:first-child { border-top-left-radius: var(--radius); border-bottom-left-radius: var(--radius); }
 .top-btn-pair .top-btn:last-child { border-top-right-radius: var(--radius); border-bottom-right-radius: var(--radius); }
 .top-btn-pair .top-btn + .top-btn { border-left-width: 0; }
-/* a pressed (= rail hidden) button owns the shared edge, or the neighbour's
-   border-left removal would eat half of its highlight */
 .top-btn-pair .top-btn[aria-pressed="true"] + .top-btn { border-left: 1px solid var(--border-strong); }
 
-/* left-rail file search -- terse glass input, filters the tree by path substring */
 .tree-search {
   width: 100%;
   font-family: var(--font-mono);
@@ -590,9 +475,6 @@ body.is-resizing .pane-resizer::before { transition: none; }
 }
 .tree-search::placeholder { color: var(--text-muted); }
 .tree-empty { font-size: 11.5px; color: var(--text-muted); font-style: italic; padding: 6px 2px; }
-/* Deep-link fallback note: shown only when a `#file=` / `#filter=` fragment named
-   something this map cannot show, so the link lands on the default view WITH the
-   reason rather than silently somewhere else. */
 .tree-note {
   font-size: 10.5px;
   line-height: 1.45;
@@ -603,7 +485,6 @@ body.is-resizing .pane-resizer::before { transition: none; }
   margin: 0 0 6px;
 }
 
-/* ---- rails ------------------------------------------------------------------ */
 .rail-left, .rail-right { overflow-y: auto; min-width: 0; }
 .rail-left {
   grid-area: left;
@@ -615,8 +496,6 @@ body.is-resizing .pane-resizer::before { transition: none; }
   grid-area: right;
   background: var(--surface-2);
   border-left: 1px solid var(--border);
-  /* flex column: a fixed-height inspector PIN on top, a scrolling list below.
-     Padding lives on the two inner wrappers so each scrolls independently. */
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -636,8 +515,6 @@ body.is-resizing .pane-resizer::before { transition: none; }
   padding: 12px 12px 24px;
 }
 .rail-right-pin .rail-section { margin-bottom: 0; }
-/* On narrow screens the rail is a short capped band: let it flow + scroll as a
-   whole instead of splitting a tiny height between pin and list. */
 @media (max-width: 980px) {
   .rail-right { display: block; overflow-y: auto; padding: 0; }
   .rail-right-pin { max-height: none; overflow-y: visible; padding: 12px 10px; }
@@ -648,8 +525,6 @@ body.is-resizing .pane-resizer::before { transition: none; }
 .rail-section > .eyebrow { display: block; margin-bottom: 8px; }
 .rail-right-pin .rail-section + .rail-section { margin-top: 14px; }
 
-/* single-line tree header: `Files (425)` + (only when there are any) the total
-   leak count, right-aligned. One line, one mention of the word "files". */
 .tree-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px; }
 .tree-head > .eyebrow { flex: 1 1 auto; min-width: 0; }
 .workspace-line {
@@ -660,27 +535,13 @@ body.is-resizing .pane-resizer::before { transition: none; }
 }
 .workspace-line:empty { display: none; }
 
-/* file tree -- rows bleed into the rail's own horizontal padding so a top-level
-   entry starts flush at the pane edge (nested depth still indents). */
-/* Row height is a TOKEN because the sticky-ancestry maths below is expressed in
-   it: a folder at depth d pins at `d - 1` rows down, so the visible files' whole
-   ancestry stacks above them while you scroll. Rows must therefore be a fixed,
-   known height -- hence `height` rather than symmetric padding. */
 .tree {
   display: flex;
   flex-direction: column;
   margin: 0 -8px;
   --tree-row-h: 28px;
-  /* cancels the rail's own top padding: sticky offsets are measured from the
-     scrollport's CONTENT edge, so without this a pinned folder would float 14px
-     down and rows would scroll visibly through the gap above it. */
   --tree-pin-off: -14px;
 }
-/* A folder row and its subtree share ONE wrapper, because `position: sticky` is
-   scoped to the containing block: without it a folder would keep hanging at its
-   pin offset long after its own subtree had scrolled past, colliding with the
-   next branch's folder at the same depth. With it, each folder unpins exactly
-   when its last descendant leaves. */
 .tree-node, .tree-branch { display: flex; flex-direction: column; }
 .tree-row {
   display: flex;
@@ -700,15 +561,9 @@ body.is-resizing .pane-resizer::before { transition: none; }
   color: var(--text-primary);
   transition: background-color 0.3s ease, box-shadow 0.3s ease;
 }
-/* `top` + `z-index` are written inline per row from the node's depth. The rail
-   is the scroll container; the row must be OPAQUE (it overlaps the rows beneath
-   it) and a shallower ancestor must out-stack a deeper one. */
 .tree-row-folder { position: sticky; background: var(--surface-2); }
 .tree-row:hover { background: var(--surface-hover); }
 .tree-row-file.is-active { background: var(--surface-1); box-shadow: 0 0 0 1px var(--brand) inset; font-weight: 700; }
-/* gitignored / third-party (node_modules, or anything the data flags as vendor):
-   de-emphasized but fully selectable -- it comes back to full strength on hover
-   and while it is the active file. */
 .tree-row.is-ignored { color: var(--text-muted); opacity: 0.62; }
 .tree-row.is-ignored:hover, .tree-row.is-ignored.is-active, .tree-row.is-ignored:focus-visible { opacity: 1; }
 .tree-file-meter.is-ignored { opacity: 0.45; }
@@ -724,9 +579,6 @@ body.is-resizing .pane-resizer::before { transition: none; }
 .tree-icon { flex: 0 0 auto; }
 .tree-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tree-count { flex: 0 0 auto; font-size: 10px; color: var(--text-muted); }
-/* A file with at least one RECORDED "@afterpack" marker. Derived from the same
-   `aggregate.directives` the code pane rings -- never guessed from the source
-   text, which the viewer does not scan for markers. */
 .tree-mark {
   flex: 0 0 auto;
   font-family: var(--font-mono);
@@ -740,12 +592,6 @@ body.is-resizing .pane-resizer::before { transition: none; }
 }
 .tree-row-folder .tree-mark { opacity: 0.75; }
 .tree-file-meter { padding-bottom: 6px; padding-right: 10px; }
-/* WEAK SPOTS on a tree row -- the count of `spotlights[]` entries, which is what
-   the engine's `aggregate.weakRegions` counts and what the dashboard's "Weak
-   spots" tile sums. `.has-leak` is the subset severity (`leakCount`): a readable
-   literal that survived, versus a residual property name. Folders carry the same
-   badge for their whole subtree, because the tree now opens COLLAPSED and a
-   folder that hides a weak spot has to say so. */
 .badge-weak {
   flex-shrink: 0;
   font-family: var(--font-mono);
@@ -757,9 +603,6 @@ body.is-resizing .pane-resizer::before { transition: none; }
   padding: 1px 6px;
   line-height: 1.4;
 }
-/* `--brand-ink` (not white) on BOTH severities: dark theme's leak red is a light
-   #f87171, and white on it measures 2.8:1 -- the ink has to flip with the theme
-   the same way the badge's ground does. */
 .badge-weak.has-leak { background: var(--status-leak); }
 .tree-row-folder .badge-weak { opacity: 0.78; }
 
@@ -767,7 +610,6 @@ body.is-resizing .pane-resizer::before { transition: none; }
 .meter > i { display: block; height: 100%; border-radius: 3px 0 0 3px; }
 .meter-lg { height: 7px; border-radius: 4px; }
 
-/* class distribution + legend */
 .class-dist-bar { display: flex; height: 10px; border-radius: 4px; overflow: hidden; background: var(--surface-3); margin-bottom: 8px; }
 .class-dist-bar i { display: block; height: 100%; }
 .class-dist-bar i[data-class="preserved"] { background: var(--class-preserved); }
@@ -828,11 +670,9 @@ body.is-resizing .pane-resizer::before { transition: none; }
 .tier-pill.tier-free { color: var(--text-secondary); border-color: var(--border-strong); background: var(--surface-2); }
 .tier-pill.tier-pro { color: var(--class-destroyed); border-color: var(--class-destroyed); background: var(--class-destroyed-soft); }
 
-/* legend (heat/cost scale) */
 .legend-bar { height: 10px; border-radius: 3px; border: 1px solid var(--border); }
 .legend-labels { display: flex; justify-content: space-between; margin-top: 5px; font-size: 10.5px; font-family: var(--font-mono); color: var(--text-muted); }
 
-/* engine info */
 .engine-info {
   font-family: var(--font-mono);
   font-size: 10.5px;
@@ -844,15 +684,8 @@ body.is-resizing .pane-resizer::before { transition: none; }
 .engine-info dt { text-align: left; }
 .engine-info dd { margin: 0; text-align: right; color: var(--text-secondary); overflow-wrap: anywhere; }
 
-/* ---- center code pane -------------------------------------------------------- */
 .pane-center { grid-area: center; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--ground); }
 
-/* sticky per-file summary header: the file's path + a few headline metrics, so
-   the "what am I looking at / how hard was it hit" answer rides above the code. */
-/* TWO rows now, not two stacked bars: the path (+ a copy button, + where the
-   source came from) on top, the pane's own switches underneath. The six headline
-   metrics that used to eat the right half of this bar moved into the inspector
-   rail -- they are per-FILE facts, and the rail is where per-file facts live. */
 .file-summary {
   flex: 0 0 auto;
   position: sticky;
@@ -870,10 +703,6 @@ body.is-resizing .pane-resizer::before { transition: none; }
 .file-head-row { display: flex; align-items: center; gap: 8px; padding: 9px 14px 5px; min-width: 0; }
 .file-head-spacer { flex: 1 1 auto; min-width: 10px; }
 .file-summary-path { display: flex; align-items: baseline; gap: 1px; min-width: 0; font-family: var(--font-mono); font-size: 12.5px; }
-/* Ellipsis on the LEFT: with a 9-segment Next.js route the tail (the folders you
-   are actually in, and the file) is the half worth keeping. `unicode-bidi:
-   plaintext` takes the paragraph direction from the first strong character, so
-   the path still reads left-to-right -- only the overflow side flips. */
 .file-summary-path .fs-dir {
   color: var(--text-muted);
   overflow: hidden;
@@ -885,7 +714,6 @@ body.is-resizing .pane-resizer::before { transition: none; }
 }
 .file-summary-path .fs-name { color: var(--text-primary); font-weight: 700; flex-shrink: 0; }
 #source-origin-note { flex: 0 0 auto; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); white-space: nowrap; cursor: help; }
-/* Square icon button -- reuses `.mini-btn`'s chrome, sized for one glyph. */
 .icon-btn {
   flex: 0 0 auto;
   display: inline-flex;
@@ -919,9 +747,6 @@ body.is-resizing .pane-resizer::before { transition: none; }
 .toggle-inline { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); cursor: pointer; white-space: nowrap; flex: 0 0 auto; }
 .toggle-inline input[type="checkbox"] { accent-color: var(--brand); width: 13px; height: 13px; margin: 0; }
 .toggle-inline:has(input:disabled) { opacity: 0.45; cursor: not-allowed; }
-/* The count used to appear from nowhere and shove its neighbours sideways. It
-   now occupies a permanently-reserved slot and only becomes VISIBLE -- the
-   sentence that used to be printed here is the toggle's tooltip. */
 #highlight-class-status {
   flex: 0 0 auto;
   display: inline-block;
@@ -940,8 +765,6 @@ body.is-resizing .pane-resizer::before { transition: none; }
   position: sticky;
   left: 0;
   flex: 0 0 auto;
-  /* Fixed content-box width (set inline in `ch` from the digit count) so the
-     gutter never grows at 9->10 / 99->100 and the code column stays put. */
   box-sizing: content-box;
   padding: 0 12px 0 14px;
   text-align: right;
@@ -953,15 +776,8 @@ body.is-resizing .pane-resizer::before { transition: none; }
   user-select: none;
 }
 .lc { flex: 1 1 auto; font-family: var(--font-mono); font-size: 12.5px; padding-left: 14px; padding-right: 40px; }
-/* Only an ATTRIBUTED span (a region and/or a weak spot behind it) is clickable --
-   `.tok-hot` is stamped by the painter. Everything else (engine scaffolding, gaps)
-   is inert: clicking it CLEARS the selection, so it must not advertise a click. */
 .tok { cursor: default; border-radius: 2px; transition: filter 0.1s ease, box-shadow 0.1s ease; }
 .tok.tok-hot, .tok.tok-unlit { cursor: pointer; }
-/* Obvious hover: a gold tint painted as a background-IMAGE (the heat wash lives in
-   the token's inline background-color, so an image layers over it instead of
-   fighting it) plus a full ring -- readable even over a preserved token's near-
-   invisible wash. */
 .tok.tok-hot:hover,
 .tok.tok-hot:focus-visible,
 .tok.tok-unlit:hover,
@@ -970,12 +786,6 @@ body.is-resizing .pane-resizer::before { transition: none; }
   box-shadow: 0 0 0 1px var(--tok-hover-ring);
   filter: brightness(1.06);
 }
-/* One region is often painted as SEVERAL spans -- the run builder cuts it wherever
-   a renamed token, a weak spot or a directive edge falls inside it -- so a ring on
-   the hovered span alone outlines a fragment of the region, not the region. On
-   hover we tint EVERY span carrying the same region index (a flat colour, so
-   adjacent spans read as one continuous band) and keep the ring on the exact span
-   under the pointer. */
 .tok.tok-peer {
   background-image: linear-gradient(var(--tok-hover-bg), var(--tok-hover-bg));
   filter: brightness(1.06);
@@ -984,42 +794,16 @@ body.is-resizing .pane-resizer::before { transition: none; }
 .tok.spot-leak { text-decoration: underline; text-decoration-color: var(--status-leak); text-decoration-thickness: 2px; text-underline-offset: 2px; }
 .tok.spot-propertyName { text-decoration: underline; text-decoration-color: var(--status-property); text-decoration-thickness: 2px; text-underline-offset: 2px; }
 .tok.spot-weak { text-decoration: underline dashed; text-decoration-color: var(--status-weak); text-decoration-thickness: 2px; text-underline-offset: 2px; }
-/* preserved token -- a span the engine left literal ON PURPOSE (module specifier,
-   directive, public key...), and, far more often, the JavaScript GRAMMAR inside
-   such a span: `return`, `this`, braces, punctuation, indentation. Nothing could
-   ever have protected those, so this is the RESTING STATE of the page, not a
-   finding, and it is painted as such -- the bottom rung of the same background
-   language the heat ramp uses, a neutral one small step off the flat machinery
-   band and nowhere near any chromatic wash.
-
-   It used to carry no fill and a hairline dotted underline instead. A preserved
-   region is routinely a whole class body, so that drew a dotted rule under every
-   brace and every run of indentation in it -- a different mechanism from the rest
-   of the overlay, and the loudest treatment on the page for the one thing with
-   the least to say. */
 .tok.tok-preserved {
-  /* background-COLOR only: the hover tint rides on background-image and has to
-     survive this. */
   background-color: var(--class-preserved-wash);
   color: var(--text-secondary);
 }
-/* The weak-spot marker in the code pane.
-   Was the literal character "\u26a0", which renders at whatever size and shape the
-   reader's emoji font decides -- tiny and off-baseline on most Linux stacks,
-   a full-colour emoji on macOS. A drawn triangle is the same 11px mark
-   everywhere, takes the severity colour from `currentColor`, and sits on the
-   text baseline instead of floating above it. */
 .pin {
   display: inline-block;
   width: 11px;
   height: 11px;
   margin-right: 2px;
   vertical-align: -1px;
-  /* No colour of its own: the mark inherits from the token it sits in, so a
-     `leak` spotlight and a `weak` one get the triangle in the same hue their
-     own underline uses. A first version set `color: var(--sev-weak, …)`, a
-     variable that exists nowhere in this file — the fallback always won, every
-     severity got the same orange, and it ignored the theme. */
   flex: 0 0 auto;
 }
 .lc .tok.spot-leak > .pin { color: var(--status-leak); }
@@ -1027,60 +811,14 @@ body.is-resizing .pane-resizer::before { transition: none; }
 .lc .tok.spot-weak > .pin { color: var(--status-weak); }
 .pin svg { display: block; width: 100%; height: 100%; }
 
-/* ---- syntax highlighting ------------------------------------------------------
-   A strictly FOREGROUND layer. The protection overlay owns every background in
-   this pane (heat wash, renamed wash, machinery wash, hover tint, directive
-   rings), so a grammar may only ever set `color` -- plus italic on comments. That
-   is what keeps the two readable at once: colour = what the code SAYS, fill =
-   what AfterPack DID to it.
-
-   Four classes is the entire vocabulary (comment / keyword / string / number).
-   Identifiers, operators and punctuation deliberately stay at the pane's own text
-   colour: a fifth and sixth hue would start competing with the wash for
-   attention, and every hue here is already chosen to avoid the ones the overlay
-   reserves (gold = heat, teal = renamed, blue/violet = reversal class, red =
-   leak). See `--syn-*` for the per-theme contrast notes.
-
-   Attributed runs carry the syntax class on an INNER <i> (so the outer `.tok`
-   stays one element per run and hover/selection/directive rings are unaffected);
-   un-attributed tokens are their own `.tok`, so the class sits directly on it. */
 .lc i { font-style: normal; }
 .lc i.sy-c, .lc .tok.sy-c { color: var(--syn-comment); font-style: italic; }
-/* A comment under a heat wash keeps the italic but drops the mute: grey on a
-   deep-gold fill is the one syntax colour with no contrast left to give. */
 .lc .tok-hot i.sy-c { color: inherit; }
-/* ...and past a MEASURED point up the heat ramp, so does every other grammar
-   colour. The painter stamps this class on runs whose composited wash would take
-   any syntax ink below the contrast floor (see `inkYieldScore`): above it the
-   protection layer is the signal and colour is the layer with nothing left to
-   give, so the grammar yields to the pane's own text colour rather than
-   whispering. Foreground-only, as the whole syntax layer must be. */
 .lc .tok-ink-yield i { color: inherit; }
 .lc i.sy-k, .lc .tok.sy-k { color: var(--syn-key); }
 .lc i.sy-s, .lc .tok.sy-s { color: var(--syn-str); }
 .lc i.sy-n, .lc .tok.sy-n { color: var(--syn-num); }
 
-/* ---- @afterpack directive: the MARKER, and only the marker ---------------
-   A directive is the one thing on this page the reader put there themselves, so
-   the marker text is styled in the brand's own language:
-
-     `@afterpack`   animated brand gradient on the GLYPHS
-     its parameters brand colour, static
-     everything else in that comment  ordinary comment colour
-
-   WHAT THIS REPLACED, AND WHY. The first version painted the whole
-   RECORDED REGION -- every token from the marker to `end`. Two
-   things were wrong with that. It highlighted hundreds of lines to announce one
-   annotation ("entire page is highlighted"), and worse, it collided with the
-   comment-wash mask below: `.dir-ink` set `color: transparent` and painted its
-   gradient through `background-clip: text`, while `.lc i.sy-c` paints an opaque
-   ground to keep washes off comments. The child's ground covered the parent's
-   clipped gradient and the comment text rendered INVISIBLE inside an outlined
-   box. Styling only the marker removes the overlap, so neither rule can fight
-   the other.
-
-   The gutter bar still spans the whole recorded region -- that part was worth
-   keeping, and a line number cannot collide with a text gradient. */
 .dir-kw {
   background-image: linear-gradient(100deg,
     var(--brand) 0%, var(--brand-hover) 30%, var(--brand-hover) 50%,
@@ -1092,13 +830,9 @@ body.is-resizing .pane-resizer::before { transition: none; }
   animation: dir-sweep 9s linear infinite;
   font-weight: 700;
 }
-/* Parameters name WHICH directive, so they carry the brand colour but hold
-   still -- two animated things in one comment is one too many. */
 .dir-arg { color: var(--brand); font-weight: 600; }
 @keyframes dir-sweep { from { background-position: 0% 0; } to { background-position: 300% 0; } }
 
-/* A directive is worth finding by scrolling, so the gutter admits to it for the
-   whole region recorded for the marker. */
 .code-line.has-directive .ln { color: var(--brand); }
 .code-line.has-directive .ln::after {
   content: "";
@@ -1116,62 +850,15 @@ body.is-resizing .pane-resizer::before { transition: none; }
   .dir-kw { animation: none; background-position: 50% 0; }
 }
 
-/* Un-attributed stretch: the flat `--wash` band, painted PER TOKEN rather than
-   across the whole stretch.
-
-   It used to sit on the `.unlit` wrapper, which made the band continuous over
-   everything between two attributed regions -- including the comments, the
-   indentation and the `;`. That is what "comments have a background" was: not
-   an attribution error (the engine attributes NO comment, NO whitespace and NO
-   bare punctuation -- 0 of 19,882 regions on a real build), but this wrapper
-   painting over them.
-
-   On the token instead: whitespace is emitted as bare text with no element at
-   all, so it now goes unpainted for free, and a comment token opts out below.
-   The wash stays visually continuous across runs of adjacent code tokens
-   because they abut. */
 .unlit { background: transparent; }
 .lc .tok.tok-unlit { background: var(--wash); }
-/* A comment is not code and never carries protection -- it gets the grammar's
-   colour and no band whatsoever.
-
-   Comments reach the DOM in TWO shapes and both have to be answered:
-     * `.tok.sy-c`  -- a comment sitting in an un-attributed stretch, which is
-       its own token and simply declines the wash;
-     * `i.sy-c`     -- a comment INSIDE an attributed run (the grammar only ever
-       contributes an inner `<i>`), whose wash belongs to the enclosing span and
-       cannot be switched off from the child. That one is masked instead: it
-       paints the pane's own ground, so the wash stops at the comment and
-       resumes after it. `--ground` is the same token `.ln` uses, so the mask
-       follows a theme flip for free. */
 .lc .tok.tok-unlit.sy-c { background: transparent; }
 .lc i.sy-c { background: var(--ground); }
 
-/* directive span -- an "@afterpack" marker RECORDED over this range
-   (Pro only). NOTHING IS PAINTED OVER THE REGION any more.
-
-   It used to be a continuous region tint. A `skip` block can be a thousand
-   lines, so tinting all of it to announce one annotation buried the protection
-   overlay underneath and read as "the entire file is highlighted". The marker
-   text carries the treatment instead (`.dir-kw` / `.dir-arg` above), and the
-   gutter bar carries the region's extent.
-
-   `data-directive` survives on the token as DATA -- the inspector and the
-   `marked` facet read it -- but no stylesheet rule paints from it.
-
-   The legend below shows the same marker treatment in its swatch rather than a
-   per-kind hue, so the legend and the code pane cannot drift apart. */
 .directive-legend-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 11px; }
-/* The swatch IS the marker treatment (`.dir-kw`), so the legend and the code
-   pane cannot drift apart. Sized by its text rather than by a fixed box. */
 .directive-legend-row .swatch { flex: 0 0 auto; font-family: var(--font-mono); font-size: 10px; }
 .directive-legend-row code { font-family: var(--font-mono); color: var(--text-secondary); }
 
-/* "highlight same class" mode -- a deliberate, labeled overlay (toggled via
-   #highlight-class-toggle), orthogonal to the heat wash. Dims every painted
-   token whose region is a DIFFERENT reversal class than the current
-   selection, and rings the ones that match. Tokens with no data-class
-   (engine scaffolding / gaps) are untouched either way. */
 .code-body[data-highlight-class] .tok[data-class]:not([data-class="preserved"]):not([data-class="renamed-encoded"]):not([data-class="flattened-fused"]):not([data-class="destroyed-fused"]) { opacity: 1; }
 .code-body[data-highlight-class="preserved"] .tok[data-class]:not([data-class="preserved"]),
 .code-body[data-highlight-class="renamed-encoded"] .tok[data-class]:not([data-class="renamed-encoded"]),
@@ -1184,10 +871,6 @@ body.is-resizing .pane-resizer::before { transition: none; }
 .code-body[data-highlight-class="flattened-fused"] .tok[data-class="flattened-fused"] { box-shadow: 0 0 0 1px var(--class-flattened) inset; }
 .code-body[data-highlight-class="destroyed-fused"] .tok[data-class="destroyed-fused"] { box-shadow: 0 0 0 1px var(--class-destroyed) inset; }
 
-/* ---- tooltips + info affordance ---------------------------------------------- */
-/* one shared, JS-positioned tooltip node (id="tooltip"). Any element with a
-   `data-tip` opens it on hover/focus -- the default UI stays terse and the long
-   prose (blurbs, caveats, class notes) lives here instead of on the page. */
 .tooltip {
   position: fixed;
   z-index: 60;
@@ -1196,9 +879,6 @@ body.is-resizing .pane-resizer::before { transition: none; }
   font-size: 11.5px;
   line-height: 1.45;
   color: var(--text-primary);
-  /* OPAQUE surface: the tooltip floats over busy code and other cards. The glass
-     `--surface-1` is ~transparent in dark (rgba .03) and, unlike the popover, the
-     tooltip has no backdrop-blur, so it would bleed the content behind it. */
   background: var(--surface-2);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
@@ -1228,8 +908,6 @@ body.is-resizing .pane-resizer::before { transition: none; }
 }
 .info-dot:hover, .info-dot:focus-visible { color: var(--brand); border-color: var(--brand); }
 
-/* legend / "about this build" popover: everything moved off the left rail --
-   class distribution, the reversal-class legend, the heat scale, engine info. */
 .popover {
   position: fixed;
   top: 54px;
@@ -1252,11 +930,7 @@ body.is-resizing .pane-resizer::before { transition: none; }
 .popover-section:last-child { margin-bottom: 0; }
 .popover-section > .eyebrow { display: block; margin-bottom: 8px; }
 
-/* ---- right panel -------------------------------------------------------------- */
 
-/* compact weak-spot rows -- a native <details> per leak: a one-line summary
-   (severity + sample + bytes/mechanism) that expands to full detail on demand,
-   so a file with 30+ leaks stays a scannable list instead of a wall of cards. */
 .weakspot { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-1); margin-bottom: 6px; overflow: hidden; transition: border-color 0.3s ease; }
 .weakspot:last-child { margin-bottom: 0; }
 .weakspot[open] { border-color: var(--border-strong); }
@@ -1270,15 +944,9 @@ body.is-resizing .pane-resizer::before { transition: none; }
 .weakspot-reason { font-size: 11px; color: var(--text-secondary); margin: 0 0 6px; }
 .weakspot-kv { font-size: 10.5px; color: var(--text-muted); font-family: var(--font-mono); margin: 0 0 8px; overflow-wrap: anywhere; }
 .empty-note { font-size: 11.5px; color: var(--text-muted); font-style: italic; }
-/* clean "all good" state: one quiet line, no reserved space, no alarm color */
 .empty-note-ok { font-size: 11.5px; color: var(--text-muted); font-style: normal; margin: 0; }
 .empty-note-ok .ok-check { color: var(--brand); font-weight: 700; margin-right: 4px; }
 
-/* COLLAPSIBLE rail sections. Both right-rail sections open as a single header
-   row that already states what they hold -- the Inspector's selection summary,
-   the weak-spot count -- so nothing in the rail reserves height for content the
-   reader has not asked for. The chevron is the same glyph the inspector's own
-   <details> blocks use, rotated the same way. */
 .rail-section-headrow { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
 .rail-collapsible.is-collapsed > .rail-section-headrow { margin-bottom: 0; }
 .rail-section-head {
@@ -1308,42 +976,25 @@ body.is-resizing .pane-resizer::before { transition: none; }
   text-overflow: ellipsis;
 }
 .rail-section-count:empty { display: none; }
-/* One rule collapses either body. */
 .rail-collapsible.is-collapsed > :not(.rail-section-headrow) { display: none; }
 
-/* EMPTY weak-spots section collapses to a single row -- title and the "none"
-   line share one line, and the whole band shrinks to its content so the pinned
-   inspector above reclaims the rest of the rail's height. Empty and COLLAPSED
-   are different states and compose: an empty section has nothing to expand, so
-   its one-line all-clear stays beside the header either way. */
 .weakspots-section.is-empty { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .weakspots-section.is-empty > .rail-section-headrow { margin-bottom: 0; }
 .weakspots-section.is-empty #weakspots-list { margin-top: 0 !important; flex: 1 1 auto; min-width: 0; }
 .weakspots-section.is-empty.is-collapsed > #weakspots-list { display: block; }
-/* `#weakspots=hidden`: the section is not rendered at all, and the scrolling
-   half of the rail goes with it so the pin owns the whole height. */
 .rail-right.weakspots-hidden #weakspots-section,
 .rail-right.weakspots-hidden .rail-right-scroll { display: none; }
-/* Height handoff: whenever the weak-spots half is quiet -- empty, collapsed or
-   hidden -- the pin stops being capped and takes the slack, so a collapsed
-   header never sits inside a 58%-tall reserved band. */
 .rail-right.weakspots-quiet .rail-right-pin { max-height: none; flex: 1 1 auto; min-height: 0; }
 .rail-right.weakspots-quiet .rail-right-scroll { flex: 0 0 auto; overflow-y: visible; padding-bottom: 12px; }
-/* ...unless the Inspector is collapsed too, in which case both sections are one
-   header row each and neither should stretch. */
 .rail-right.inspector-section-collapsed .rail-right-pin { flex: 0 0 auto; max-height: none; }
 @media (max-width: 980px) {
   .rail-right.weakspots-quiet .rail-right-pin { flex: 0 0 auto; }
 }
 
 
-/* neutral mini button (weak-spot "jump to code") -- distinct from the red copy CTA */
 .mini-btn { font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; border: 1px solid var(--border-strong); color: var(--text-secondary); background: var(--surface-2); border-radius: 5px; padding: 4px 8px; cursor: pointer; transition: background-color 0.3s ease, border-color 0.3s ease; }
 .mini-btn:hover { background: var(--surface-hover); }
 
-/* native <details> expanders inside the inspector (lineage "show more",
-   collapsible complexity block). Default disclosure triangle is hidden; a
-   rotating chevron is drawn via ::before so both themes match the dark UI. */
 details > summary { cursor: pointer; list-style: none; }
 details > summary::-webkit-details-marker { display: none; }
 .details-summary { font-family: var(--font-mono); font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
@@ -1383,22 +1034,6 @@ details[open] > .details-summary::before { transform: rotate(90deg); }
 .inspector-section h3 { font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
 .inspector-empty { font-size: 12px; color: var(--text-muted); }
 
-/* ---- inspector: the STABLE shell (#13) --------------------------------------
-   Every selection kind renders the same skeleton -- one identity line, one score
-   meter, one context line, a SIX-row fact grid, one action line -- so the panel's
-   height is a constant and clicking from a leak to a comment to a renamed
-   identifier does not move a pixel. Two rules make that hold:
-
-     1. the fact grid always has exactly six rows (a kind with less to say pads
-        with an invisible one), and
-     2. NOTHING in here wraps. Every cell is nowrap + ellipsis, so no value can
-        add a second line however long it is.
-
-   The prose those cards used to print -- the class blurb, the "span is wrong
-   even though the transform is real" caveat, the weakest-link leak warning, the
-   lineage-not-recorded note -- did not get deleted. It moved into the `data-tip`
-   of the row, chip or flag it belongs to, which is the same "(?)"-rule the rest
-   of the product follows. A row that carries one says so with a dotted key. */
 .insp { display: flex; flex-direction: column; gap: 8px; }
 .insp-card { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 9px 11px; }
 .insp-ident { display: flex; align-items: center; gap: 6px; height: 22px; min-width: 0; }
@@ -1438,8 +1073,6 @@ details[open] > .details-summary::before { transform: rotate(90deg); }
 .insp-fact > .v.is-warn { color: var(--status-leak); }
 .insp-fact .class-chip { font-size: 9.5px; padding: 1px 6px; vertical-align: middle; }
 .insp-fact.is-pad { visibility: hidden; }
-/* Reserved whether or not this selection has an action -- an appearing button is
-   exactly the kind of reflow this panel exists to not do. */
 .insp-actions { display: flex; align-items: center; gap: 6px; height: 27px; overflow: hidden; margin-top: 8px; }
 .insp-chain { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 7px 11px; }
 .insp-chain > summary { height: 18px; }
@@ -1448,13 +1081,9 @@ details[open] > .details-summary::before { transform: rotate(90deg); }
 .insp-note { font-size: 11px; color: var(--text-secondary); }
 .insp-title { font-family: var(--font-mono); font-size: 11.5px; font-weight: 700; color: var(--text-secondary); white-space: nowrap; }
 .insp-hint { font-size: 11px; color: var(--text-muted); font-style: italic; }
-/* the chain stepper is re-homed inside a <details>; drop the card chrome it
-   brought with it so it reads as this card's own body, not a nested panel */
 .insp-chain .inspector-section { background: transparent; border: 0; border-radius: 0; padding: 0; margin: 0; }
 .insp-chain .inspector-section > h3 { display: none; }
 
-/* per-file band, pinned above the inspector: the six headline metrics that used
-   to live in the code pane's header (#7). Fixed six rows; never selection-driven. */
 .file-band { display: flex; flex-direction: column; gap: 2px; }
 .fb-row { display: flex; align-items: center; gap: 10px; height: 19px; }
 .fb-row > .k { flex: 0 0 auto; font-size: 11.5px; color: var(--text-secondary); border-bottom: 1px dotted var(--border-strong); cursor: help; }
@@ -1464,9 +1093,6 @@ details[open] > .details-summary::before { transform: rotate(90deg); }
 .file-band-section { margin-bottom: 12px; }
 
 
-/* transform-chain stepper -- oldest->newest, one node per collapsed step. A
-   vertical connector runs through the node dots; the step body carries the
-   transform name + a category/phase caption + the entropy/size delta. */
 .chain { display: flex; flex-direction: column; }
 .chain-step { display: flex; gap: 10px; }
 .chain-rail { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; width: 12px; }
@@ -1499,13 +1125,10 @@ details[open] > .details-summary::before { transform: rotate(90deg); }
 .copy-btn-pro:hover { background: var(--surface-2); }
 
 
-/* narrow-screen: keep the code pane's own horizontal scroll only */
 @media (max-width: 980px) { .app-shell { overflow: visible; } }
 
-/* text selection -- gold highlight, dark ink (robust in both themes) */
 ::selection { background: rgba(234, 174, 61, 0.3); color: #0a0a0a; }
 
-/* scrollbar aesthetics (progressive; harmless if unsupported) */
 .rail-left, .rail-right, .code-body { scrollbar-width: thin; scrollbar-color: var(--scrollbar) transparent; }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -1517,12 +1140,6 @@ details[open] > .details-summary::before { transform: rotate(90deg); }
 <div class="app-shell" id="app">
 
   <header class="topbar">
-    <!-- The two pane toggles, as ONE segmented control at the head of the bar.
-         Same panel glyph mirrored left/right (the filled edge is the rail each
-         button hides), so the pair reads as a layout control rather than as a
-         burger and an unrelated icon sitting either side of the bar. Both stay
-         reachable while their rail is hidden, which is why neither lives in the
-         rail it controls. -->
     <div class="top-btn-pair" role="group" aria-label="Show or hide the side panels">
       <button type="button" class="top-btn top-btn-icon" id="rail-toggle" aria-pressed="false" aria-controls="file-tree" title="Hide the file tree" aria-label="Hide the file tree">
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
@@ -1618,32 +1235,20 @@ details[open] > .details-summary::before { transform: rotate(90deg); }
       <div class="tree" id="file-tree" role="group" aria-label="File tree"></div>
     </div>
   </aside>
-  <!-- A focusable role="separator" is a WINDOW SPLITTER, so it carries the width
-       it controls as its value. Without that the tab stop announced only a name
-       and the ring looked like it had landed on nothing. -->
   <div class="pane-resizer" id="resize-left" role="separator" aria-orientation="vertical" tabindex="0"
        aria-controls="rail-left" aria-valuemin="180" aria-valuenow="262"
        aria-label="File tree width — arrow keys resize"
        title="Drag to resize the file tree (arrow keys also work; hold Shift for a bigger step)"></div>
 
   <main class="pane-center" aria-label="Original source, painted by protection intensity">
-    <!-- Two rows, one sticky block. Row 1 answers "what am I looking at and where
-         did this source come from"; row 2 is the pane's own switches. The six
-         headline metrics that used to occupy the right half of row 1 now live in
-         the inspector rail, where the rest of the per-file facts already were. -->
     <div class="file-summary" id="file-summary">
       <div class="file-head-row">
         <div class="file-summary-path" id="file-summary-path"></div>
-        <!-- Same copy mechanism as the Pro-directive CTAs: `data-copy` + the
-             shared copyText(), just an icon-sized button. -->
         <button type="button" class="icon-btn" id="copy-path" data-copy="" data-copied-label="✓" aria-label="Copy the full file path" data-tip="Copy this file's full path">⧉</button>
         <span class="file-head-spacer"></span>
         <span id="source-origin-note" class="mono" tabindex="0">—</span>
       </div>
       <div class="code-toolbar" id="code-toolbar">
-        <!-- Syntax colour is a foreground-only layer, but it is still a second thing
-             to read on a busy line -- so it stays switchable, and the switch names
-             the language the grammar actually claimed for this file. -->
         <label class="toggle-inline" id="syntax-label" data-tip="Colour the source by its own grammar (comments, keywords, strings, numbers). Foreground only — every background in this pane belongs to the protection overlay.">
           <input type="checkbox" id="syntax-toggle" checked />
           <span id="syntax-toggle-text">Syntax</span>
@@ -1664,19 +1269,11 @@ details[open] > .details-summary::before { transform: rotate(90deg); }
        aria-label="Inspector width — arrow keys resize"
        title="Drag to resize the inspector (arrow keys also work; hold Shift for a bigger step)"></div>
   <aside class="rail-right" id="rail-right" aria-label="Inspector and weak spots">
-    <!-- PINNED on top: the inspector (class score bar + lineage + complexity)
-         stays fixed so the current selection is always visible; if its detail
-         runs long, the pin scrolls on its own rather than pushing the list off. -->
     <div class="rail-right-pin">
-      <!-- per-FILE facts (moved out of the code pane's header). Constant for the
-           whole file: nothing here reacts to the selection. -->
       <div class="rail-section file-band-section">
         <span class="eyebrow">This file</span>
         <div class="file-band" id="file-summary-metrics"></div>
       </div>
-      <!-- COLLAPSED by default: the header states what the section holds, so a
-           reader who has selected nothing is not shown a second copy of the
-           "This file" band above. -->
       <div class="rail-section rail-collapsible is-collapsed" id="inspector-section">
         <div class="rail-section-headrow">
           <button type="button" class="rail-section-head" id="inspector-head" aria-expanded="false" aria-controls="inspector">
@@ -1687,8 +1284,6 @@ details[open] > .details-summary::before { transform: rotate(90deg); }
         <div id="inspector"></div>
       </div>
     </div>
-    <!-- SCROLLS below the pin: the (potentially long) weak-spots list, collapsed
-         into compact rows. The size caveat now lives in the header tooltip. -->
     <div class="rail-right-scroll">
       <div class="rail-section rail-collapsible weakspots-section is-collapsed" id="weakspots-section">
         <div class="rail-section-headrow">
@@ -1704,8 +1299,6 @@ details[open] > .details-summary::before { transform: rotate(90deg); }
 
 </div>
 
-<!-- Legend / "about this build" popover: the class distribution, reversal-class
-     legend, heat scale, and engine info moved off the left rail. -->
 <div class="popover" id="build-popover" role="dialog" aria-label="Legend and build info" hidden>
   <div class="popover-section">
     <span class="eyebrow">Class distribution · selected file</span>
@@ -1738,11 +1331,6 @@ details[open] > .details-summary::before { transform: rotate(90deg); }
 <script id="afterpack-data" type="application/octet-stream">__AFTERPACK_DATA__</script>
 <script id="afterpack-codec">
 "use strict";
-/* AFTERPACK_DECODER_BEGIN -- mirrored VERBATIM from packages/protection-map/codec.mjs.
-   Keep byte-identical with the exported afterpackDecodeDocument there; codec.test.mjs
-   guards the two copies against drift. Turns the compact v4 envelope (legend-once +
-   dictionary + columnar tables) back into the rich `{ files: [...] }` shape the rest
-   of this viewer already renders. Self-contained (only its `c` argument). */
 function afterpackDecodeDocument(c) {
   const dict = c.dict || {};
   const cols = c.columns || {};
@@ -1751,8 +1339,6 @@ function afterpackDecodeDocument(c) {
   const lineageCols = cols.lineage || [];
   const legend = c.legend || {};
 
-  // Rebuild an array-of-objects from a `{ n, cols }` columnar table, dereferencing
-  // any column whose name is a dictionary field.
   const decodeTable = (table, colNames) => {
     const n = table?.n || 0;
     const src = table?.cols || {};
@@ -1775,13 +1361,11 @@ function afterpackDecodeDocument(c) {
     const rsrc = rdec.src;
     for (let i = 0; i < regions.length; i++) {
       const region = regions[i];
-      // Reassemble the nested `perf` object (split into flat columns on the wire).
       const decodeOps = region.decodeOps;
       region.perf = { costClass: region.costClass, decodeOps, callFrames: region.callFrames };
       delete region.costClass;
       delete region.decodeOps;
       delete region.callFrames;
-      // Lineage tuples -> objects (dict-deref transform/category/phase).
       region.lineage = rsrc.lineage
         ? (rsrc.lineage[i] || []).map((t) => {
             const step = {};
@@ -1795,12 +1379,10 @@ function afterpackDecodeDocument(c) {
       if (rsrc.lineageCapped && rsrc.lineageCapped[i] != null) {
         region.lineageCapped = rsrc.lineageCapped[i];
       }
-      // Derived-from-legend fields (dropped from the wire, re-attached by class).
       const lg = legend[region.reversalClass] || {};
       region.why = lg.why == null ? undefined : lg.why;
       region.tier = lg.tier == null ? null : lg.tier;
       region.ceiling = lg.ceiling == null ? null : lg.ceiling;
-      // Derived-cheap fields the viewer's fidelity expects.
       region.annotations = decodeOps > 0 ? ["materializationSite"] : [];
       region.outputSpan = null;
     }
@@ -1823,11 +1405,7 @@ function afterpackDecodeDocument(c) {
     files,
   };
 }
-/* AFTERPACK_DECODER_END */
 
-/* Inflate a base64(gzip(JSON)) payload with the native DecompressionStream --
-   no external dependency (the self-contained-HTML/CSP constraint forbids one) and
-   no network. Returns the decompressed JSON text. */
 async function afterpackInflateBase64Gzip(b64) {
   var binary = atob(b64);
   var bytes = new Uint8Array(binary.length);
@@ -1841,15 +1419,6 @@ async function afterpackInflateBase64Gzip(b64) {
 (async function () {
   "use strict";
 
-  /* ============================================================
-   * 1. Load the embedded document.
-   *    The payload is the COMPACT v4 envelope (see codec.mjs): gzip-deflated +
-   *    base64. We inflate it with the native DecompressionStream and decode it
-   *    back to the rich `{ files: [ProtectionMapData, ...] }` shape the rest of
-   *    this viewer renders. A payload that begins with `{` is instead read as
-   *    raw JSON -- the uncompressed embed, kept so every artifact renders in
-   *    one viewer.
-   * ============================================================ */
   var dataEl = document.getElementById("afterpack-data");
   var DATA = null;
   var MAP_BYTES = null;
@@ -1857,18 +1426,12 @@ async function afterpackInflateBase64Gzip(b64) {
   var codeBodyEl = document.getElementById("code-body");
   try {
     var payload = dataEl.textContent.trim();
-    /* The artifact's OWN weight, measured off the block we are about to decode --
-       gzip bytes for the compact embed (base64 is 4 chars per 3 bytes, padding
-       excluded), UTF-8 bytes for the legacy raw-JSON one. It replaces the old
-       "DEV ONLY" badge in the topbar: that badge never changed and gave the
-       reader nothing to act on, and its warning now rides in this chip's tooltip
-       -- which is where every other caveat in this viewer lives. */
     MAP_ENCODING = payload.charAt(0) === "{" ? "raw JSON" : "gzip";
     MAP_BYTES = payload.charAt(0) === "{"
       ? new TextEncoder().encode(payload).length
       : Math.floor(payload.replace(/=+$/, "").length * 3 / 4);
     if (payload.charAt(0) === "{") {
-      DATA = JSON.parse(payload); // legacy uncompressed rich JSON
+      DATA = JSON.parse(payload);
     } else {
       codeBodyEl.textContent = "Decompressing Protection Map…";
       var json = await afterpackInflateBase64Gzip(payload);
@@ -1880,12 +1443,6 @@ async function afterpackInflateBase64Gzip(b64) {
   }
   if (!DATA || !Array.isArray(DATA.files)) DATA = { files: [] };
 
-  /* ============================================================
-   * 2. Color math -- OKLab/OKLCH conversion + perceptual lerp.
-   *    Turns the discrete design-token ramp stops (read live off CSS
-   *    custom properties, so the toggle and the theme both stay a
-   *    single source of truth) into a smooth continuous ramp.
-   * ============================================================ */
   function s2lin(c) { return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
   function lin2s(c) { c = Math.max(0, Math.min(1, c)); return c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055; }
   function hex2rgb(hex) {
@@ -1942,56 +1499,13 @@ async function afterpackInflateBase64Gzip(b64) {
     for (var i = 0; i <= 6; i++) out.push(readVar("--" + prefix + "-" + i));
     return out;
   }
-  // token wash: alpha climbs with the region's PER-FILE relative heat metric
-  // (see heatNorm), so the file's own hottest region(s) read most saturated,
-  // capped well below 1 so the page's own text color stays legible painted
-  // straight on top (no per-token ink swap needed). The floor is deliberately
-  // low now: a low-normalized region (the file's coolest positive-score
-  // region) should read as barely-there, not as a rumour of the old flat
-  // 0.28 floor -- the whole point of the relative ramp is none -> yellow -> red.
   function tokenAlpha(m) { return m <= 0 ? 0 : Math.min(0.5, 0.10 + (m / 100) * 0.42); }
-  // Renamed BASELINE wash: a faint teal (--class-renamed hue). Different HUE
-  // (teal vs the heat ramp's gold/red) so it never blurs into region heat even
-  // where the two land at similar alpha. Never applied where a region covers
-  // the token -- the region always wins (see the run builder / painter).
-  // EYEBALL: tune here.
   var RENAMED_WASH_ALPHA = 0.16;
-  // EXTRACTED wash: the `Globals` lane (a property name / free global routed
-  // through the constant pool) sits one tier ABOVE the rename baseline. Same
-  // teal hue -- both are class-1, injective, pool-recoverable re-encodings --
-  // but a step more saturated, so the two compact lanes read as
-  // related-but-distinct. EYEBALL: tune here.
   var EXTRACTED_WASH_ALPHA = 0.22;
-  // per-line wash is near-eliminated: ordinary and low-region lines get NO tint
-  // (kills the old distracting grey "zebra"), so the heat lives at the TOKEN
-  // level. Only a line whose covered span is DOMINATED by tokens that are hot
-  // RELATIVE to this file carries a whisper (>= 60 avg normalized metric),
-  // capped very low to stay clean in dark.
   function lineAlpha(m) { return m < 60 ? 0 : Math.min(0.07, ((m - 60) / 40) * 0.07); }
   function heatSolid(score) { return rampColor(currentRamp("heat"), Math.max(0, Math.min(100, score)) / 100); }
 
-  /* The per-kind directive TINT is gone with the region wash that used it: the
-   code pane paints the marker text, not the block, so there is no background to
-   mix against the heat ramp's contrast headroom and no hue to pick per kind.
-   `DIRECTIVE_LEGEND_ORDER` / `DIRECTIVE_LEGEND_META` below still name the kinds
-   for the legend rows; only the colour machinery is dropped. */
 
-  /* ---- contrast floor for the syntax layer --------------------------------
-   * The grammar may only ever set a FOREGROUND (see the `.lc i` note), so the
-   * heat wash composites straight under it -- and somewhere up the ramp that
-   * composite eats the ink's contrast whatever hue it is. Rather than hand-pick
-   * a score, MEASURE it: walk the ramp, composite each stop at the alpha the
-   * painter would actually use, and return the first score where any syntax
-   * colour falls under INK_MIN_CONTRAST. At and above it the run is stamped
-   * `.tok-ink-yield` and the grammar hands the token back to the pane's text
-   * colour. Recomputed on every paint, so it tracks a theme flip and stays
-   * correct if the ramp is ever retuned again.
-   *
-   * The floor is the worst syntax-ink ratio the PREVIOUS palette shipped
-   * (3.19:1 dark / 4.20:1 light), rounded to one number -- so no token in this
-   * viewer reads worse than it did before the VS Code retheme.
-   * `--syn-comment` is excluded because it already yields unconditionally over
-   * any wash (the rule above). */
   var INK_MIN_CONTRAST = 4.2;
   var INK_COLORS = ["--syn-key", "--syn-str", "--syn-num"];
   function relLuminance(rgb01) {
@@ -2013,7 +1527,7 @@ async function afterpackInflateBase64Gzip(b64) {
         if (contrastRatio(inks[k], comp) < INK_MIN_CONTRAST) return m;
       }
     }
-    return 101; // the whole ramp clears the floor
+    return 101;
   }
 
   function escapeHtml(str) {
@@ -2030,10 +1544,6 @@ async function afterpackInflateBase64Gzip(b64) {
   }
   function fmtNum(n) { return n == null ? "—" : n.toLocaleString(); }
 
-  /* ============================================================
-   * 3. Reversal-class metadata (client-side legend copy; every
-   *    region's own `why` is data-driven and shown separately).
-   * ============================================================ */
   var CLASS_ORDER = ["preserved", "renamed-encoded", "flattened-fused", "destroyed-fused"];
   var CLASS_META = {
     "preserved": { label: "Preserved", note: "Left readable — either the engine had to keep it literal (import path, directive, property key) or no transform reached it. Not a claim about who wrote it." },
@@ -2042,9 +1552,6 @@ async function afterpackInflateBase64Gzip(b64) {
     "destroyed-fused": { label: "Destroyed & fused", note: "Boundary-destroying fusion across the bundle — recovering authored structure is computationally infeasible for a static reader. (Pro)" }
   };
   var CATEGORY_LABEL = { Data: "data", Structural: "struct", Control: "control" };
-  /* One drawn warning mark, so every surface that needs one looks identical and
-     none of them depend on an emoji font. `currentColor` so the caller's own
-     severity colour applies. */
   var WARN_ICON =
     '<span class="pin" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" ' +
     'stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' +
@@ -2052,19 +1559,8 @@ async function afterpackInflateBase64Gzip(b64) {
   var SEVERITY_ICON = { leak: "🔓", propertyName: "🔑", weak: "〰" };
   var SEVERITY_LABEL = { leak: "Leak", propertyName: "Property name", weak: "Weak" };
   var MACHINERY_BLURB = "Whole-file pipeline bookkeeping — materialization plumbing, wrapper IIFEs, cached-string tables, and similar — that doesn't map to any specific span of your source. Excluded from the heat map and from token selection on purpose: every character in the file technically falls inside this bucket, so painting or selecting it would make the whole file look uniformly “protected” and hide the real, per-token signal underneath.";
-  // Shown over ORIGINAL source, where an unlit span can't be engine scaffolding
-  // (that lives in the emitted dist). Honest "why isn't this lit?" answer now that
-  // RENAMED identifiers have their own baseline layer: an unlit span here is
-  // genuinely plain — not a renamed token. It is either required syntax the build
-  // keeps verbatim, or code the bundler removed before AfterPack saw it.
   var UNTRANSFORMED_BLURB = "This span is unlit because it is genuinely plain — required syntax the build keeps verbatim (a keyword, punctuation, a property key, or a module specifier), or code your bundler removed before AfterPack ran. Renamed identifiers are shown on their own baseline layer, so an unlit span is almost always one that is truly unchanged or was already gone — not a renamed identifier. Unlit here means plain-or-removed, not “untransformed but still exposed”.";
 
-  // Plain-English gloss for the engine's mechanism / preservedReason codes: a
-  // developer reads "import path — must stay literal", not "module-specifier".
-  /* Every sentence the inspector used to PRINT now lives here and is rendered as
-     a `data-tip` instead -- the panel shows values, the tooltip carries the
-     explanation. Collected in one table on purpose: this is the viewer's whole
-     prose surface, so a copy fix has exactly one place to land. */
   var INSP_COPY = {
     score: "The engine's 0–100 protection score for this span — how hard the ledger says this region is to reverse.",
     why: "The engine's own one-line account of what it did to this span.",
@@ -2126,40 +1622,14 @@ async function afterpackInflateBase64Gzip(b64) {
     return '<span class="class-chip' + (ghost ? " is-ghost" : "") + '" data-class="' + cls + '"><span class="dot" aria-hidden="true"></span>' + escapeHtml(label) + "</span>";
   }
 
-  /* ============================================================
-   * 3b. Syntax grammars + the one-pass lexer behind the code pane's
-   *     FOREGROUND colour layer.
-   *
-   *     Why hand-rolled: the viewer is a single self-contained file with no
-   *     network, so a real highlighter would have to be INLINED into every
-   *     artifact -- the smallest credible ones are 20-40 KB minified, for a job
-   *     that needs exactly four token classes here. This lexer is ~4 KB of
-   *     readable source and, crucially, it emits a token BOUNDARY LIST rather
-   *     than markup: the code painter folds those boundaries into the runs it
-   *     already builds for the heat overlay, so there is ONE span structure in
-   *     the pane, not a highlighter's DOM fighting the map's DOM.
-   *
-   *     Adding a language = adding one entry to GRAMMARS. The scanner itself is
-   *     generic over the spec (comment delimiters, quote characters, whether the
-   *     language has template literals / regex literals, keyword list); nothing
-   *     below this table knows the word "JavaScript".
-   * ============================================================ */
   var GRAMMARS = [
     {
       id: "js",
       label: "JS / TS",
       ext: ["js", "jsx", "mjs", "cjs", "ts", "tsx", "mts", "cts"],
-      /* The subset of `ext` whose files carry ERASED type syntax (see the
-         type-position scanner). Same table, so the header's "JS / TS" label and
-         the scanner can never disagree about which files are TypeScript. */
       typed: ["ts", "tsx", "mts", "cts"],
       line: "//", block: ["/*", "*/"],
       quotes: "'\"", template: "`", regex: true,
-      // Deliberately excludes the contextual names that are far more often
-      // ordinary identifiers than keywords (`get`, `set`, `module`, `require`,
-      // `constructor`) -- colouring `map.get(x)` as a keyword is worse than
-      // leaving one real keyword plain. TS primitive type names ARE included:
-      // `useState<string | null>` is a large share of what makes .ts/.tsx read.
       keywords: "abstract any as asserts async await bigint boolean break case catch class const continue debugger declare default delete do else enum export extends false finally for from function if implements import in infer instanceof interface is keyof let never new null number object of override private protected public readonly return satisfies static string super switch symbol this throw true try type typeof undefined unique unknown var void while with yield"
     },
     {
@@ -2179,8 +1649,6 @@ async function afterpackInflateBase64Gzip(b64) {
     (g.typed || []).forEach(function (e) { g.typedExt[e] = true; });
     g.ext.forEach(function (e) { GRAMMAR_BY_EXT[e] = g; });
   });
-  /* Extension lookup, tolerant of the `?query` / `#2` suffixes bundlers put on a
-   * source-map `sources[]` entry (e.g. `parser.ts#2` for a duplicated module). */
   function extOf(path) {
     var m = /\.([A-Za-z0-9]+)(?:[?#][^./\\]*)?$/.exec(path || "");
     return m ? m[1].toLowerCase() : null;
@@ -2194,27 +1662,12 @@ async function afterpackInflateBase64Gzip(b64) {
     return !!(g && g.typedExt[e]);
   }
 
-  /* Token types the lexer emits. `w`/`p`/`i`/`y` carry NO colour (see the CSS
-   * note) but every one of them is used by the inspector to say what an
-   * un-attributed token actually is. */
-  // `v` (a keyword-shaped VALUE literal) keeps the KEYWORD colour: syntax
-  // highlighting is a lexical statement and `null` really is a keyword token.
-  // Only the inspector's CLAIM about it differs, which is the thing that was
-  // wrong.
   var SYN_CLASS = { c: "sy-c", k: "sy-k", v: "sy-k", s: "sy-s", n: "sy-n" };
   var TOKEN_KIND = {
     w: "whitespace", p: "punctuation / operator", i: "identifier", y: "property name",
     k: "keyword", s: "string literal", n: "number literal", c: "comment", "?": "source text",
-    /* `v` is NOT a lexer type -- the lexer emits `k` for these. The inspector
-     * promotes `k` -> `v` for the four keyword-shaped VALUES (see
-     * VALUE_LITERAL_TEXT), because "keyword" is a lexical fact that was being
-     * read as a protection claim: `if`/`return` must survive verbatim, but
-     * `null`/`true`/`false`/`undefined` are ordinary expressions the engine
-     * rewrites, and telling a customer no transform can touch them is false. */
     v: "value literal"
   };
-  /* The keyword-shaped VALUE literals -- lexically keywords, semantically
-   * expressions. `LowerLiterals` rewrites every one of them. */
   var VALUE_LITERAL_TEXT = { "null": 1, "true": 1, "false": 1, "undefined": 1 };
   var NO_REGEX_AFTER = { "this": 1, "true": 1, "false": 1, "null": 1, "undefined": 1, "super": 1 };
 
@@ -2223,25 +1676,14 @@ async function afterpackInflateBase64Gzip(b64) {
   function isIdStartCh(ch) { return (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z") || ch === "_" || ch === "$" || ch > "\u007f"; }
   function isIdPartCh(ch) { return isIdStartCh(ch) || isDigitCh(ch); }
 
-  /**
-   * Scan `src` under grammar `g` into a flat, gap-free token boundary list:
-   * `{ starts: [charIndex...], types: "wkip..." }`, where token `i` covers
-   * `[starts[i], starts[i+1])` and the last runs to end-of-source. Gap-free is
-   * the contract the painter relies on -- every character belongs to exactly one
-   * token, so slicing a run by tokens can never lose or duplicate text.
-   */
   function lexSource(src, g) {
     var starts = [], types = [], n = src.length, i = 0;
-    var prevT = "", prevStart = 0, prevEnd = 0; // last token that is not space/comment
-    var depth = 0, tplDepth = [];              // brace depth + depths a template resumes at
+    var prevT = "", prevStart = 0, prevEnd = 0;
+    var depth = 0, tplDepth = [];
     function push(s, t) {
       starts.push(s); types.push(t);
       if (t !== "w" && t !== "c") { prevT = t; prevStart = s; prevEnd = i; }
     }
-    // A `/` opens a regex only where a VALUE may start. Beyond the usual closers,
-    // `<`/`>`/`.` are excluded because none of them can legally precede a regex in
-    // JS -- but all three DO precede one in JSX text (`</div>`, `./dist`), where a
-    // greedy regex scan would swallow the rest of the line.
     function regexOk() {
       if (prevT === "") return true;
       if (prevT === "i" || prevT === "y" || prevT === "n" || prevT === "s") return false;
@@ -2249,17 +1691,12 @@ async function afterpackInflateBase64Gzip(b64) {
       var c = src.charAt(prevEnd - 1);
       return c !== ")" && c !== "]" && c !== "<" && c !== ">" && c !== ".";
     }
-    // Template body from `s`: runs to the closing backtick, or stops at `${` and
-    // hands control back to the main loop until the matching `}`.
     function scanTemplate(s) {
       while (i < n) {
         var d = src.charAt(i);
         if (d === "\\") { i += 2; continue; }
         if (d === g.template) { i++; push(s, "s"); return; }
         if (d === "$" && src.charAt(i + 1) === "{") {
-          // `}${` back to back leaves NO literal chunk between the two holes --
-          // pushing one anyway would emit a zero-width token and break the
-          // "every character belongs to exactly one token" contract.
           if (i > s) push(s, "s");
           var ps = i; i += 2; push(ps, "p");
           tplDepth.push(depth); depth++;
@@ -2292,9 +1729,6 @@ async function afterpackInflateBase64Gzip(b64) {
           if (d === c) { j++; closed = true; break; }
           j++;
         }
-        // An unterminated quote is a syntax error in every language here, so it is
-        // almost always an apostrophe in JSX text ("Don't"). Emit ONE punctuation
-        // character rather than swallowing the rest of the line as a string.
         if (closed) { i = j; push(s, "s"); } else { i = s + 1; push(s, "p"); }
         continue;
       }
@@ -2310,7 +1744,7 @@ async function afterpackInflateBase64Gzip(b64) {
         i++;
         while (i < n) {
           d = src.charAt(i);
-          if (isIdPartCh(d) || d === ".") { i++; continue; }           // 0x1f / 1_000 / 10n / 1.5 / 1e3
+          if (isIdPartCh(d) || d === ".") { i++; continue; }
           e = src.charAt(i - 1);
           if ((d === "+" || d === "-") && (e === "e" || e === "E") && isDigitCh(src.charAt(i + 1))) { i++; continue; }
           break;
@@ -2320,9 +1754,6 @@ async function afterpackInflateBase64Gzip(b64) {
       if (isIdStartCh(c)) {
         i++;
         while (i < n && isIdPartCh(src.charAt(i))) i++;
-        // A name reached through `.` / `?.` is a PROPERTY key -- never a keyword,
-        // and never a binding the renamer is allowed to touch. The inspector says
-        // exactly that when you click one.
         var afterDot = prevT === "p" && src.charAt(prevEnd - 1) === ".";
         push(s, afterDot ? "y" : (g.kw[src.slice(s, i)] ? "k" : "i"));
         continue;
@@ -2341,14 +1772,12 @@ async function afterpackInflateBase64Gzip(b64) {
             j++;
           }
           if (done) {
-            while (j < n && isIdPartCh(src.charAt(j))) j++;             // flags
+            while (j < n && isIdPartCh(src.charAt(j))) j++;
             i = j; push(s, "s"); continue;
           }
         }
         i++; push(s, "p"); continue;
       }
-      // Punctuation, greedily: `===`, `?.`, `);` become ONE token, which keeps the
-      // span count down and makes `?.` selectable as the single operator it is.
       i++;
       while (i < n) {
         d = src.charAt(i);
@@ -2361,14 +1790,10 @@ async function afterpackInflateBase64Gzip(b64) {
     return { starts: starts, types: types.join("") };
   }
 
-  /* Lexed lazily, per file, on first paint -- a 331-file document never pays for
-   * the 330 files nobody opened. `null` = no grammar claims this extension, which
-   * the painter and the inspector both handle (no colour, one span per run). */
   function lexFile(file) {
     if (file.syn === undefined) file.syn = file.grammar ? lexSource(file.source, file.grammar) : null;
     return file.syn;
   }
-  /** Index of the token containing `pos` (binary search; -1 when unlexed). */
   function tokenIndexAt(syn, pos) {
     if (!syn) return -1;
     var lo = 0, hi = syn.starts.length - 1;
@@ -2380,38 +1805,12 @@ async function afterpackInflateBase64Gzip(b64) {
   }
   function tokenEnd(syn, idx, srcLen) { return idx + 1 < syn.starts.length ? syn.starts[idx + 1] : srcLen; }
 
-  /* ============================================================
-   * 3c. TypeScript TYPE POSITIONS -- the second inert class.
-   *
-   *     `tsc` erases every one of these before AfterPack sees the file, so no
-   *     region, rename or extraction can ever land on them and the inspector
-   *     can only ever answer "Not attributed". They are rendered like comments
-   *     and punctuation: coloured, but not hoverable, focusable or clickable.
-   *
-   *     THIS IS NOT A TYPESCRIPT PARSER and must never become one. It reads the
-   *     lexer's token boundaries and recognises four shapes; everything else
-   *     stays selectable, because leaving a type clickable is a nuisance while
-   *     making real code inert is a lie about what the reader may inspect. Every
-   *     rule below is one-sided in that direction -- an ambiguous `:` (object
-   *     literal, ternary, label, `case`) or `<` (less-than) is left alone.
-   * ============================================================ */
-  /* Keywords after which a type (or an import clause) cannot have ended, so a
-   * line break there is a continuation and not an ASI statement boundary. */
   var TS_TYPE_CONT = { extends: 1, keyof: 1, typeof: 1, infer: 1, in: 1, is: 1, asserts: 1, readonly: 1, "new": 1, from: 1 };
-  /* Leading punctuation no STATEMENT can begin with -- prettier breaks long
-   * unions and conditional types onto lines that start with one of these. */
   var TS_LINE_CONT = { "|": 1, "&": 1, "?": 1, ":": 1, ".": 1 };
-  /* `default` is deliberately absent: a switch's `default:` is the one shape
-   * that would otherwise read as a return-type annotation and swallow its arm. */
   var TS_FN_HEAD = { "export": 1, "function": 1, async: 1, declare: 1, "static": 1, "private": 1, "protected": 1, "public": 1, abstract: 1, override: 1 };
   var TS_HEAD_PREFIX = { "export": 1, declare: 1, "default": 1 };
   var TS_DECLARE_NEXT = { module: 1, namespace: 1, global: 1 };
 
-  /* The lexer merges adjacent punctuation into ONE token (`?:`, `():`, `>>`), so
-   * a scanner that reasoned per token could not see the individual brackets. The
-   * atom list splits punctuation back to single characters, drops whitespace and
-   * comments, and records for each atom whether a line break precedes it (the
-   * only thing the ASI guards below need). */
   function tsAtoms(src, syn) {
     var out = [], starts = syn.starts, types = syn.types, n = starts.length, prevEnd = 0;
     for (var i = 0; i < n; i++) {
@@ -2433,8 +1832,6 @@ async function afterpackInflateBase64Gzip(b64) {
 
   function scanTypeRanges(src, syn) {
     var A = tsAtoms(src, syn), n = A.length, out = [];
-    /* One frame per open bracket. `ternary` is what keeps `cond ? a : b` out of
-     * the annotation rule: an unmatched `?` in this frame claims the next `:`. */
     var stack = [{ kind: "brace", ternary: 0, decl: false, head: null }];
     var classPending = false;
     function top() { return stack[stack.length - 1]; }
@@ -2447,11 +1844,6 @@ async function afterpackInflateBase64Gzip(b64) {
     }
     function continues(a) { return !!a && a.t === "p" && TS_LINE_CONT[a.x] === 1; }
     function breaksLine(a, prev, k, start) { return k > start && a.nl && complete(prev) && !continues(a); }
-    /* A type expression starting at `k`, up to the first terminator at its own
-     * nesting depth: `,` `;` `=` (but not `=>`), any closing bracket, a `{` that
-     * is not the type's own leading object literal, or a line break after a
-     * syntactically complete type (ASI -- without it a missing `;` swallows the
-     * next statement). Returns the atom index one PAST the type. */
     function consumeType(k) {
       var depth = 0, prev = null, start = k, fnType = isP(A[k], "(");
       while (k < n) {
@@ -2459,9 +1851,6 @@ async function afterpackInflateBase64Gzip(b64) {
         if (depth === 0 && breaksLine(a, prev, k, start)) break;
         if (a.t === "p") {
           var c = a.x;
-          /* A `{` at depth 0 is the STATEMENT BODY (`function f(): T {`) unless
-             the type cannot have ended yet -- it opens the annotation, or the
-             last thing read was `|`, `&`, `readonly`, `keyof` ... */
           if (c === "(" || c === "[" || c === "<" || (c === "{" && (depth > 0 || k === start || !complete(prev)))) {
             depth++;
           } else if (c === ")" || c === "]" || c === ">" || c === "}") {
@@ -2470,10 +1859,6 @@ async function afterpackInflateBase64Gzip(b64) {
           } else if (depth === 0) {
             if (c === "," || c === ";" || c === "{") break;
             if (c === "=") {
-              /* `=>` continues a FUNCTION type (`(a: T) => void`) and ends an
-                 arrow whose return type this is (`(x): T => body`). The
-                 parameter list is what tells them apart, and getting it wrong
-                 the other way would swallow a live arrow body. */
               if (!(fnType && isP(prev, ")") && isP(A[k + 1], ">") && A[k + 1].s === a.e)) break;
               prev = A[k + 1];
               k += 2;
@@ -2486,7 +1871,6 @@ async function afterpackInflateBase64Gzip(b64) {
       }
       return k;
     }
-    /* Balanced `<...>` / `(...)` / `[...]` skip used by the header scans. */
     function skipBalanced(k, open, close) {
       var depth = 0;
       while (k < n) {
@@ -2499,8 +1883,6 @@ async function afterpackInflateBase64Gzip(b64) {
       }
       return -1;
     }
-    /* The rest of a statement, brackets balanced: through a `;`, or up to a line
-     * break once the statement can end there. Returns the index one past it. */
     function endOfStatement(k) {
       var depth = 0, prev = null, start = k;
       while (k < n) {
@@ -2516,8 +1898,6 @@ async function afterpackInflateBase64Gzip(b64) {
       }
       return k;
     }
-    /* The `{` that opens a type-only statement's body, or -1: skipped past the
-     * header's own `<...>` / `(...)` and giving up at a `;` or a stray closer. */
     function headerBrace(k) {
       var depth = 0;
       while (k < n) {
@@ -2535,8 +1915,6 @@ async function afterpackInflateBase64Gzip(b64) {
     }
     function braceBody(k) { return skipBalanced(k, "{", "}"); }
 
-    /* Matching bracket for every `(` `[` `{`, both ways, in one pass. `<` is NOT
-     * paired here -- it is `less than` as often as it is a type-argument list. */
     var match = new Array(n);
     var open = [];
     for (var bi = 0; bi < n; bi++) {
@@ -2547,8 +1925,6 @@ async function afterpackInflateBase64Gzip(b64) {
         match[o] = bi; match[bi] = o;
       }
     }
-    /* Back over a `<...>` that ends at `i`, to its `<`. Bounded: anything that
-     * cannot appear inside a type-argument list aborts the walk. */
     function isArrow(i) { return isP(A[i], "=") && isP(A[i + 1], ">") && A[i + 1].s === A[i].e; }
     function backOverTypeArgs(i) {
       var d = 0;
@@ -2563,16 +1939,11 @@ async function afterpackInflateBase64Gzip(b64) {
       }
       return -1;
     }
-    /* A `(` that opens a PARAMETER LIST, not just any parenthesised expression.
-     * This is what keeps JSX out: `return ( <span>Total: {n}</span> )` puts a
-     * colon inside a paren frame, and treating every paren as a parameter list
-     * made real JSX text and the expressions beside it inert. */
     function isParamList(k, encl) {
       var m = match[k];
       if (m == null) return false;
       var nx = A[m + 1];
       if (isArrow(m + 1)) return true;
-      // `(x): R => …` -- an arrow whose return type sits between `)` and `=>`.
       if (isP(nx, ":") && isArrow(consumeType(m + 2))) return true;
       if (isP(A[k - 1], ">")) {
         var lt = backOverTypeArgs(k - 1);
@@ -2588,9 +1959,6 @@ async function afterpackInflateBase64Gzip(b64) {
       return encl.kind === "classbody" || isP(nx, "{");
     }
 
-    /* `head` = this atom opens a line, allowing for `export` / `declare` /
-     * `default` in front of it. That, and not a general statement tracker, is
-     * what "a line starting with interface/type/declare" means here. */
     var head = new Array(n);
     for (var h = 0; h < n; h++) {
       head[h] = h === 0 || A[h].nl ||
@@ -2632,9 +2000,6 @@ async function afterpackInflateBase64Gzip(b64) {
           var before = A[k - 1];
           var okBefore = isName(before) || isP(before, "?") || isP(before, ")") ||
             isP(before, "]") || isP(before, "}");
-          /* A RETURN type: the `)` before this colon closes a parameter list.
-             Valid in any frame, which is what makes `arr.map((x): R => …)`
-             work without opening the whole call's parens to annotations. */
           var retType = isP(before, ")") && match[k - 1] != null && paramParen[match[k - 1]] === true;
           var okFrame = f.kind === "params" || f.kind === "classbody" || retType ||
             ((f.kind === "brace") && (f.decl === true || TS_FN_HEAD[f.head] === 1));
@@ -2644,11 +2009,6 @@ async function afterpackInflateBase64Gzip(b64) {
           }
           k++; continue;
         }
-        /* Explicit type ARGUMENTS at a call site (`useState<string | null>(`).
-         * `<` is `less than` far more often than it is a type-argument list, so
-         * this fires only on the one shape plain JS cannot produce: no space
-         * before the `<`, nothing but type syntax inside, no line break, and a
-         * `(` or a backtick immediately after the `>`. */
         if (c === "<" && isName(A[k - 1]) && A[k - 1].e === a.s) {
           var d = 0, ok = true, m = k;
           while (m < n) {
@@ -2693,13 +2053,11 @@ async function afterpackInflateBase64Gzip(b64) {
           k++; continue;
         }
         if (head[k] && a.x === "type" && A[k + 1]) {
-          /* `export type { A, B } from "..."` -- the whole clause is erased. */
           if (isP(A[k + 1], "{") || isP(A[k + 1], "*")) {
             j = endOfStatement(k + 1);
             if (j > k) { add(a.s, A[j - 1].e); k = j; continue; }
             k++; continue;
           }
-          /* `type Alias<T> = ...` -- an alias, never the property key `type:`. */
           if (A[k + 1].t === "i") {
             j = k + 2;
             if (isP(A[j], "<")) j = skipBalanced(j, "<", ">");
@@ -2723,7 +2081,6 @@ async function afterpackInflateBase64Gzip(b64) {
     }
     return file.__typeRanges;
   }
-  /** Whether `pos` falls inside one of the (sorted, disjoint) type ranges. */
   function inTypeRange(ranges, pos) {
     if (!ranges) return false;
     var lo = 0, hi = ranges.length - 1;
@@ -2736,23 +2093,6 @@ async function afterpackInflateBase64Gzip(b64) {
     return false;
   }
 
-  /* ============================================================
-   * 4. Span-unit normalization (per file).
-   *
-   *    Every span in the document is measured against its own
-   *    `file.originalSource`, and the envelope's `spanUnits` says in
-   *    WHICH unit. Documents from schema v4 on say "utf16" -- the same
-   *    unit this JS indexes the string in -- so `source.slice(span[0],
-   *    span[1])` is already exactly the attributed text and the mapping
-   *    below is the identity.
-   *
-   *    Older documents (and any map already in storage, which is why
-   *    this path stays) carry no `spanUnits` and their spans are the
-   *    engine's native UTF-8 BYTE offsets. Any non-ASCII character makes
-   *    the two units diverge, by a drift that GROWS with each one -- so
-   *    an unconverted byte span reads as a near-miss that wanders,
-   *    which is a misattribution, not a rendering nit. Convert those.
-   * ============================================================ */
   function buildByteStarts(str) {
     var starts = new Array(str.length + 1);
     var byteOffset = 0;
@@ -2761,20 +2101,8 @@ async function afterpackInflateBase64Gzip(b64) {
       starts[i] = byteOffset;
       var codePoint = str.codePointAt(i);
       var units = codePoint > 0xffff ? 2 : 1;
-      // UTF-8 byte length of the code point, computed directly rather than by
-      // round-tripping through a per-char `TextEncoder.encode` allocation.
       var chunkLen =
         codePoint < 0x80 ? 1 : codePoint < 0x800 ? 2 : codePoint < 0x10000 ? 3 : 4;
-      // A supplementary-plane code point occupies TWO UTF-16 units but has a
-      // single byte start, and the lookup below returns the HIGHEST index whose
-      // start is <= the queried byte. So the trailing low surrogate must carry
-      // the byte start of the NEXT character, not the pair's own: writing
-      // `byteOffset` here made the pair's start resolve one unit late, onto the
-      // low surrogate, and a slice from there begins on a lone surrogate --
-      // an attribution one unit off its token. With the next character's start
-      // here, `starts` is strictly increasing across the pair, the pair's byte
-      // start resolves to the HIGH surrogate, and a byte landing mid-pair
-      // (which a well-formed span never is) still rounds down onto it.
       if (units === 2) starts[i + 1] = byteOffset + chunkLen;
       byteOffset += chunkLen;
       i += units;
@@ -2782,15 +2110,6 @@ async function afterpackInflateBase64Gzip(b64) {
     starts[str.length] = byteOffset;
     return starts;
   }
-  /* A v4+ document is already in this unit, so all that is left is the same
-   * [0, len] CLAMP `makeByteToChar` applies below -- which is not cosmetic. The
-   * `sourceOrigin:"machinery"` entry carries BUNDLE offsets measured against a
-   * ~230-character note, so its spans run far past the text they are painted
-   * over; unclamped they index off the end of the source, coverage reads in the
-   * thousands of percent, and every one of them adds its own pair of sweep-line
-   * boundaries past `sourceLen`. In-range offsets pass through untouched.
-   * (`offset > 0` is tested first so a missing/NaN offset lands on 0 instead of
-   * slipping through both comparisons.) */
   function makeSameUnits(len) {
     return function (offset) { return offset > 0 ? (offset < len ? offset : len) : 0; };
   }
@@ -2809,53 +2128,12 @@ async function afterpackInflateBase64Gzip(b64) {
     };
   }
 
-  /* ============================================================
-   * 5. Per-file preprocessing: regions, spotlights, the machinery
-   *    (whole-file "engine scaffolding") bucket, and the sweep-line
-   *    fill run over region + spotlight boundaries.
-   *
-   *    Fill rule: color_at(char) = the SMALLEST-WIDTH (deepest, most
-   *    specific) non-machinery region whose span contains it. This
-   *    replaces v1's "max entropy wins" rule -- a region's identity
-   *    IS its reversal class now, so the most specific region is
-   *    always the right one to paint AND to select on click (a click
-   *    can never resolve to a coarse ancestor region anymore).
-   *
-   *    The machinery/background bucket (nodeKind Program/IIFE-shaped,
-   *    reversalClass "preserved", score 0, span covering the whole
-   *    file) is excluded from ever winning a run. Every character not
-   *    covered by a more specific region still falls inside it (its
-   *    span is the whole file), so those gap runs paint as a flat,
-   *    constant, near-neutral `--wash` -- never the score-scaled heat
-   *    ramp -- and clicking one shows the "engine scaffolding /
-   *    un-attributable" panel instead of a region card.
-   * ============================================================ */
-  // Classify a directive keyword into one of the four overlay KINDS. The named
-  // presets get their own ring; any K=V directive (leading key label) is `custom`.
   function directiveKindOf(keyword) {
     return keyword === "skip" || keyword === "hardened" || keyword === "destroy"
       ? keyword
       : "custom";
   }
 
-  /* THE RECORDED SPAN IS NOT THE MARKER-TO-MARKER SOURCE SPAN. `aggregate.
-     directives` carries the region the engine RESOLVED for a marker, and on a
-     bundled build that range is back-coloured through the build source map --
-     so it routinely ends well past the closing `/* @afterpack end *\/`, and the
-     gutter bar ran on for lines the reader can plainly see are outside the
-     block. The source is right here, so the closing marker is read out of it and
-     the recorded end is pulled BACK (never pushed out) to the end of that
-     marker's line.
-
-     Each directive is anchored on the NEAREST marker carrying its own keyword
-     (the recorded start can drift either side of it), then the close is matched
-     by depth from there. A directive whose closing marker cannot be identified
-     is left exactly as recorded -- an unclamped span over-reports, but a
-     mis-paired one would clip a block that is genuinely longer.
-
-     Only keywords this file actually RECORDS are read as markers, the same rule
-     the painter uses, so a comment that merely mentions `@afterpack` in prose
-     cannot invent a nesting level. */
   function clampDirectivesToEndMarkers(source, directives) {
     if (!directives.length) return;
     var allowed = { end: true };
@@ -2920,14 +2198,6 @@ async function afterpackInflateBase64Gzip(b64) {
       var span = s.span || [0, 0];
       var startChar = byteToChar(span[0]);
       var endChar = Math.max(byteToChar(span[1]), startChar);
-      // The engine's spotlight span can cover the whole enclosing statement
-      // (e.g. a labeled loop), not just the leaked literal -- narrow the
-      // painted/clickable range to the exact `sample` text when it's found
-      // inside that span, so the red underline + pin land on the actual
-      // leak, not the surrounding control flow that happens to contain it.
-      // When the sample text appears MORE THAN ONCE inside the span, prefer the
-      // occurrence nearest the pre-narrow span MIDPOINT (the leaked literal the
-      // engine centred the span on) rather than blindly pinning the first.
       if (s.sample) {
         var local = source.slice(startChar, endChar);
         var mid = local.length / 2;
@@ -2945,25 +2215,12 @@ async function afterpackInflateBase64Gzip(b64) {
       return { idx: idx, raw: s, startChar: startChar, endChar: endChar };
     });
 
-    // NEW third tier: the RENAMED baseline. `renamedSpans` is an array of
-    // [startByte, endByte] pairs (one per renamed identifier occurrence) in the
-    // SAME original-source byte space as region spans. Map each to char range;
-    // drop empties. Painted/selected ONLY where no region covers the token, so
-    // the rename layer is strictly the bottom tier (a region always wins).
     var renamedRanges = (fdoc.renamedSpans || []).map(function (pair) {
       var sc = byteToChar(pair[0]);
       var ec = Math.max(byteToChar(pair[1]), sc);
       return { startChar: sc, endChar: ec };
     }).filter(function (r) { return r.endChar > r.startChar; });
 
-    // FOURTH tier: the `Globals` EXTRACTION lane. `extractedSpans` is a FLAT int
-    // array -- startByte, endByte, kind repeated (kind 0 = property name, 1 =
-    // free/global identifier) -- in the SAME original-source byte space as region
-    // spans. Flat rather than regions, or even nested triples, because a build
-    // carries ~150k of them and each adds one bit past its span: it is the same
-    // trade `renamedSpans` already made, taken one step further because this is
-    // the lane the stored map's byte budget binds on. Painted/selected only where
-    // no region covers the token; it outranks the rename baseline.
     var extractedFlat = fdoc.extractedSpans || [];
     var extractedRanges = [];
     for (var xi = 0; xi + 2 < extractedFlat.length; xi += 3) {
@@ -2977,12 +2234,6 @@ async function afterpackInflateBase64Gzip(b64) {
       }
     }
 
-    // Recorded directive markers: the `/* @afterpack ... */` markers this build
-    // FOUND (`aggregate.directives`; Pro-only, empty on Free). Each carries its
-    // keyword, ORIGINAL-source span, and the posture written on it (target/floor)
-    // -- never an outcome. Mapped to char ranges + an overlay `kind` so the
-    // operator sees WHERE markers were recorded -- an annotation layer ORTHOGONAL
-    // to the heat wash (a directive ring rides over whatever paint is underneath).
     var directives = ((fdoc.aggregate && fdoc.aggregate.directives) || []).map(function (d, idx) {
       var span = d.span || [0, 0];
       var sc = byteToChar(span[0]);
@@ -3035,8 +2286,6 @@ async function afterpackInflateBase64Gzip(b64) {
       }
       return -1;
     }
-    // Innermost (narrowest) directive covering a segment / point -- so a nested
-    // marker's ring wins over an enclosing one.
     function directiveForRange(start, end) {
       var best = -1, bestW = Infinity;
       for (var i = 0; i < directives.length; i++) {
@@ -3048,8 +2297,6 @@ async function afterpackInflateBase64Gzip(b64) {
       }
       return best;
     }
-    // Attach the covering directive (if any) to each region, so the region's
-    // detail card can state which `/* @afterpack ... */` marker was recorded over it.
     regions.forEach(function (r) {
       var di = directiveForRange(r.startChar, Math.min(r.startChar + 1, r.endChar));
       r.directive = di >= 0 ? directives[di] : null;
@@ -3061,14 +2308,8 @@ async function afterpackInflateBase64Gzip(b64) {
       if (segEnd <= segStart) continue;
       var winner = winnerFor(segStart, segEnd);
       var spot = spotlightForRange(segStart, segEnd);
-      // Tier order, strictly: region > extracted > renamed. A region always wins
-      // the fill, so both compact lanes are resolved only when none covers the
-      // run; and an extracted token outranks the rename baseline, because a
-      // pooled property/global says strictly more than "this name changed".
       var extIdx = winner ? -1 : extractedForRange(segStart, segEnd);
       var renIdx = winner || extIdx >= 0 ? -1 : renamedForRange(segStart, segEnd);
-      // Directive ring is ORTHOGONAL to which layer paints the fill: resolve it
-      // independently so it shows over a region, a renamed token, or bare space.
       var dirIdx = directiveForRange(segStart, segEnd);
       runs.push({
         start: segStart, end: segEnd,
@@ -3090,9 +2331,6 @@ async function afterpackInflateBase64Gzip(b64) {
       }
     });
 
-    // Width-weighted average protection score over the resolved (deepest-
-    // region) runs -- the file tree's complexity bar, always protection-
-    // scale regardless of the code pane's active mode toggle.
     var sumW = 0, totalW = 0;
     mergedRuns.forEach(function (run) {
       if (run.regionIdx == null) return;
@@ -3105,20 +2343,9 @@ async function afterpackInflateBase64Gzip(b64) {
     var displayPath = (fdoc.file && fdoc.file.path) || null;
     var displayName = displayPath ? displayPath.split(/[\\/]+/).pop() : "(unnamed input " + (fileIdx + 1) + ")";
     var leakCount = (fdoc.aggregate && fdoc.aggregate.leakCount) || 0;
-    // WEAK SPOTS vs LEAKS -- two names the viewer used to mix up. A weak spot is
-    // one `spotlights[]` entry: a readable literal that survived the build. The
-    // engine counts them as `aggregate.weakRegions` (its own name for the same
-    // number) and the dashboard's "Weak spots" tile sums that field. A LEAK is the
-    // subset whose severity is `leak`; the rest are residual property names. The
-    // painted list is the authority, so the count comes off it and the aggregate
-    // is only a fallback for a document that shipped no spotlight array.
     var weakSpotCount = spotlights.length ||
       ((fdoc.aggregate && fdoc.aggregate.weakRegions) || 0);
 
-    // How much of this file the map can actually SPEAK for, in characters: a
-    // ledger region, the renamed baseline, or neither. The last bucket is the
-    // majority in most real files and the viewer says so out loud rather than
-    // leaving the reader to infer that unpainted == unprotected.
     var covRegion = 0, covRenamed = 0, covExtracted = 0;
     mergedRuns.forEach(function (run) {
       var len = run.end - run.start;
@@ -3147,15 +2374,6 @@ async function afterpackInflateBase64Gzip(b64) {
 
   var FILES = DATA.files.map(prepareFile);
 
-  /* ============================================================
-   * 6. Recursive file tree, built from each file's `path` split on
-   *    "/". One file today; structured so a multi-file document
-   *    (many `FileEntry`-shaped docs in `files[]`) nests into real
-   *    folders without any changes to this code.
-   * ============================================================ */
-  /* The segments buildTree() nests a file under. ONE source of truth, so the
-     "expand every folder down to this file" walk below can never disagree with
-     the tree it is walking. */
   function treePartsFor(f) {
     return f.displayPath ? f.displayPath.split(/[\\/]+/).filter(Boolean) : [f.displayName];
   }
@@ -3175,8 +2393,6 @@ async function afterpackInflateBase64Gzip(b64) {
         if (!next) { next = { type: "folder", name: part, key: keyAcc, depth: node.depth + 1, children: [] }; node.children.push(next); }
         node = next;
       }
-      // `f.fileIdx` indexes the GLOBAL FILES array, so filtering to a subset here
-      // keeps click/selection wiring correct (never the local loop index).
       node.children.push({ type: "file", name: parts[parts.length - 1], depth: node.depth + 1, fileIdx: f.fileIdx });
     });
     (function sortNode(node) {
@@ -3194,62 +2410,16 @@ async function afterpackInflateBase64Gzip(b64) {
     });
   }
 
-  /* v3: each file carries `file.vendor` (path under node_modules). The App/Vendor
-   * filter lets the developer see THEIR code and ignore third-party internals
-   * (e.g. React's thousands of literal leaks) without them being dropped. */
-  /* ============================================================
-   * 6b. Deep links. The dashboard's protection tile says "open the
-   *     Protection Map to see exactly where they are", so it has to
-   *     be able to link INTO a file and INTO the weak-spot facet:
-   *     `#file=<path>` and `#filter=<all|app|vendor|weak|marked>`,
-   *     read on load and on `hashchange`, and mirrored back as the
-   *     reader browses. Everything degrades to the default view --
-   *     a path this map does not carry, or a facet that would select
-   *     nothing, falls back and SAYS SO in the rail instead of
-   *     landing the reader somewhere unexplained.
-   *
-   *     `#rail=<collapsed|open>` and `#theme=<dark|light>` FORCE the
-   *     file rail's start state and the color theme, outranking both
-   *     the remembered preference and the OS. An embedder (the docs
-   *     page frames this viewer) needs a deterministic first paint
-   *     that matches its host, and both of those settings live in
-   *     origin-scoped `localStorage` -- so without these the frame
-   *     would open differently depending on what the visitor had done
-   *     in an earlier map on that origin. NEITHER is remembered:
-   *     forcing a view is not the reader choosing one, and writing it
-   *     back would re-theme every other map on the origin.
-   *
-   *     `#weakspots=<collapsed|open|hidden>` forces the right rail's
-   *     weak-spots section the same way, and takes THREE states
-   *     rather than two because an embedder needs a third answer:
-   *       collapsed  header + count only. The default, and what a
-   *                  reader gets with nothing stored.
-   *       open       the list expanded on first paint.
-   *       hidden     the section is not rendered at all. A marketing
-   *                  or docs embed showing one small file turns a
-   *                  list of unrenameable property names (`push`,
-   *                  `length`) into a verdict it never earned; the
-   *                  count alone still reads that way out of context.
-   *     Like `#rail=` and `#theme=`, none of the three is remembered.
-   *
-   *     The reader still owns the controls. Both toggles keep working
-   *     inside a framed map, and a deliberate click IS remembered.
-   * ============================================================ */
   var FILTER_ALIAS = {
     all: "all", app: "app", src: "app", source: "app",
     vendor: "vendor", node_modules: "vendor",
     weak: "weak", weakspots: "weak", "weak-spots": "weak", leak: "weak", leaks: "weak",
     marked: "marked", directive: "marked", directives: "marked"
   };
-  /* Words only, no `0`/`1`: `rail=1` reads as both "collapsed on" and "one rail
-     showing" depending on who wrote the link, and a deep link that means the
-     opposite of what its author intended is worse than one that is ignored. */
   var RAIL_ALIAS = {
     collapsed: true, hidden: true, closed: true, off: true,
     open: false, shown: false, expanded: false, on: false
   };
-  /* Three states, so `RAIL_ALIAS`'s boolean will not do: `hidden` is not a
-     louder `collapsed`, it is "do not show this section at all". */
   var WEAKSPOTS_ALIAS = {
     collapsed: "collapsed", closed: "collapsed", off: "collapsed",
     hidden: "hidden", none: "hidden",
@@ -3263,7 +2433,7 @@ async function afterpackInflateBase64Gzip(b64) {
       var eq = pair.indexOf("=");
       if (eq <= 0) return;
       var k = pair.slice(0, eq).toLowerCase(), v = pair.slice(eq + 1);
-      try { v = decodeURIComponent(v.replace(/\+/g, " ")); } catch (e) { /* keep the raw value */ }
+      try { v = decodeURIComponent(v.replace(/\+/g, " ")); } catch (e) {}
       if (k === "file" || k === "path") out.file = v;
       else if (k === "filter" || k === "tab") {
         var canon = FILTER_ALIAS[v.toLowerCase()];
@@ -3282,10 +2452,6 @@ async function afterpackInflateBase64Gzip(b64) {
     return out;
   }
   function normPath(p) { return String(p == null ? "" : p).replace(/\\/g, "/").replace(/^\.?\/+/, ""); }
-  /* A linked path resolves by exact match, then case-insensitively, then by an
-     UNAMBIGUOUS trailing-segment or basename match -- the dashboard and the map
-     do not always agree on how much of the prefix to carry. Ambiguity is a miss,
-     never a guess: -1 means "not in this map" and the caller falls back. */
   function findFileIdxByPath(want) {
     if (!want) return -1;
     var w = normPath(want), wl = w.toLowerCase();
@@ -3312,46 +2478,26 @@ async function afterpackInflateBase64Gzip(b64) {
     el.textContent = text || "";
     el.hidden = !text;
   }
-  /* Mirror the open file + facet back into the fragment so the address bar is
-     always a link to what you are looking at. `replaceState`, deliberately:
-     browsing a tree must not fill the Back button, and it fires no hashchange
-     (so this can never re-enter the reader below). Slashes stay literal -- the
-     fragment is for humans to copy. */
   function syncHash() {
     if (typeof history === "undefined" || !history.replaceState) return;
     var f = state.activeFileIdx >= 0 ? FILES[state.activeFileIdx] : null;
     var parts = [];
     if (f) parts.push("file=" + encodeURIComponent(f.displayPath || f.displayName).replace(/%2F/gi, "/"));
     if (activeFileFilter !== "all") parts.push("filter=" + activeFileFilter);
-    // With nothing to name, CLEAR the fragment by restating the path -- an empty
-    // (or whitespace) relative URL resolves against the current one and would
-    // rewrite the address bar to the last path segment.
     var url = "#" + parts.join("&");
     if (!parts.length) {
       var loc = window.location || {};
       url = (loc.pathname || "") + (loc.search || "");
       if (!url) return;
     }
-    try { history.replaceState(null, "", url); } catch (e) { /* file:// or a sandboxed frame */ }
+    try { history.replaceState(null, "", url); } catch (e) {}
   }
 
   var HASH0 = readHashParams();
   var activeFileFilter = "all";
   var FILE_FILTERS = ["all", "app", "vendor", "weak", "marked"];
   function isVendorFile(f) { return !!(f && f.doc && f.doc.file && f.doc.file.vendor); }
-  /* #15: a file is MARKED when the build RECORDED at least one `@afterpack`
-     marker over a span in it. Read straight off `file.directives` -- the same
-     list the code pane draws its rings from and the build popover's legend
-     counts. The viewer never scans your source for marker comments, so a marker
-     the build never recorded (Free, or a span attribution dropped) does not
-     light a file up, which is the honest answer. */
   function isMarkedFile(f) { return !!(f && f.directives && f.directives.length); }
-  /* A file is WEAK when the build recorded at least one weak spot in it (one
-     `spotlights[]` entry -- a readable literal that survived). This is the facet
-     the dashboard's "Weak spots" tile links to; `Marked` next to it is a
-     different question entirely (did the build record an @afterpack marker here),
-     and
-     conflating the two is what made the weak spots unreachable. */
   function isWeakFile(f) { return !!(f && f.weakSpotCount > 0); }
   function markedKeywords(f) {
     var seen = {}, out = [];
@@ -3372,11 +2518,6 @@ async function afterpackInflateBase64Gzip(b64) {
     return base.filter(matchesQuery);
   }
 
-  /* Resolve the load-time fragment HERE -- before the first tree is built --
-     because it decides which facet is active and which file opens. A facet that
-     would select nothing, or a path this map does not carry, falls back to the
-     default view and leaves the reason in the rail. A named FILE outranks a named
-     facet: a link to a specific file must open that file. */
   var deeplinkNote = "";
   var linkedFileIdx = -1;
   if (HASH0.unknownFilter) {
@@ -3402,9 +2543,6 @@ async function afterpackInflateBase64Gzip(b64) {
   var allFolderKeys = [];
   collectFolderKeys(TREE, allFolderKeys);
 
-  /* `{ "src": true, "src/lib": true }` -- every folder key on the way down to one
-     file, and nothing else. This is what "collapsed except the open file's
-     ancestors" is made of. */
   function ancestorExpansion(fileIdx) {
     var out = {};
     var f = fileIdx >= 0 ? FILES[fileIdx] : null;
@@ -3417,16 +2555,6 @@ async function afterpackInflateBase64Gzip(b64) {
     return out;
   }
 
-  /* ============================================================
-   * 7. State + selection.
-   *    state.selection is `null` until the user interacts (renders
-   *    the file-level aggregate default); once set, it always has
-   *    both `regionIdx`/`spotlightIdx` (either may be null) --
-   *    both-null-but-non-null-selection means "clicked a span with
-   *    no more specific region", i.e. the machinery/gap panel.
-   * ============================================================ */
-  /* Which file opens: the deep link's, else the first file the active facet
-     actually shows (not FILES[0], which a facet may be hiding). */
   var initialFileIdx = (function () {
     if (linkedFileIdx >= 0) return linkedFileIdx;
     var visible = filteredFiles();
@@ -3441,26 +2569,15 @@ async function afterpackInflateBase64Gzip(b64) {
     railManual: false,
     inspectorCollapsed: false,
     treeQuery: "",
-    /* COLLAPSED on open, except the chain down to the file that is showing. A
-       real build carries hundreds of files; a fully-expanded tree buries the one
-       the reader came for (and, since a folder now badges the weak spots in its
-       subtree, a closed folder still admits what is inside it). */
     expandedFolders: ancestorExpansion(initialFileIdx)
   };
   function activeFile() { return state.activeFileIdx >= 0 ? FILES[state.activeFileIdx] : null; }
-  /* Open (never close) the chain down to the active file, so it is on screen
-     after a filter change, a deep link, or a jump from another pane. */
   function revealActiveFile() {
     var open = ancestorExpansion(state.activeFileIdx);
     for (var k in open) {
       if (Object.prototype.hasOwnProperty.call(open, k)) state.expandedFolders[k] = true;
     }
   }
-  /* After the tree is rebuilt, folders stay as the reader left them -- except
-     while a path search is running, or while a FINDINGS facet (Weak / Marked) is
-     on. Both are short, deliberately-chosen lists of hits: a hit you have to go
-     hunting for through closed folders is not a hit you found. All / App / Vendor
-     are the browsing facets and keep the collapsed default. */
   var FACET_EXPANDS_ALL = { weak: 1, marked: 1 };
   function facetExpandsAll() { return !!(state.treeQuery || FACET_EXPANDS_ALL[activeFileFilter]); }
   function reapplyExpansion() {
@@ -3468,26 +2585,13 @@ async function afterpackInflateBase64Gzip(b64) {
     revealActiveFile();
   }
   function regionByIdx(file, idx) { return idx == null ? null : file.regions[idx]; }
-  /* A file's source origin ("original" / "machinery" / default "engineInput"). */
   function sourceOriginOf(file) { return (file.doc.file && file.doc.file.sourceOrigin) || "engineInput"; }
 
-  /* ============================================================
-   * 8. Code pane painting -- heat WASH (background-color), not
-   *    outlines. Two layers: a per-line ambient wash (faint, diluted
-   *    by any uncovered chars on the line) underneath a per-token
-   *    wash (stronger, alpha scaled by score/cost). Adjacent runs
-   *    that resolve to the same region are merged upstream in
-   *    `mergedRuns`, so same-color stretches are already single DOM
-   *    spans, not one-per-character.
-   * ============================================================ */
   var codeBody = document.getElementById("code-body");
 
   function metricForRegion(region) {
     return region ? (region.heatNorm || 0) : 0;
   }
-  // A region the engine left literal ON PURPOSE (module specifier / directive /
-  // public key ...) -- either flagged with a `preservedReason`, or a real
-  // (non-machinery) `preserved` region. Painted distinctly, never as heat.
   function isPreservedRegion(region) {
     return !!(region && (region.raw.preservedReason || region.raw.reversalClass === "preserved"));
   }
@@ -3497,31 +2601,14 @@ async function afterpackInflateBase64Gzip(b64) {
     var renamedHex = readVar("--class-renamed");
     var inkYield = inkYieldScore(heatRamp);
     var src = file.source;
-    /* NO PER-KIND TINT ANY MORE. The code pane paints the MARKER, not the
-       region, and every kind gets the same brand gradient there -- so computing
-       four hues on every repaint was work with no consumer, and the legend that
-       taught those four hues was a key to a pane that speaks one colour. */
 
-    /* ---- syntax layer -------------------------------------------------------
-     * One lexer pass (cached on the file) gives a gap-free token boundary list.
-     * The painter does NOT build its own spans from it: it slices each of the
-     * runs the heat overlay already resolved, so the overlay keeps owning the
-     * outer element (hover ring, directive ring, selection, region indices) and
-     * the grammar only ever contributes an inner <i class="sy-…"> around a
-     * comment / keyword / string / number. Un-attributed stretches are the one
-     * place the boundaries also split the OUTER element -- there is no region to
-     * keep whole there, and one span per token is what makes every token
-     * individually inspectable. */
-    // The lexer always runs (when a grammar claims the file): its boundaries are
-    // what makes every un-attributed token individually inspectable, which is a
-    // correctness feature, not a decoration. The toggle only suppresses COLOUR.
     var syn = lexFile(file);
     var typeRanges = typeRangesFor(file);
     var colored = state.syntaxOn;
     var synStarts = syn ? syn.starts : null;
     var synTypes = syn ? syn.types : null;
     var synN = syn ? synStarts.length : 0;
-    var cursor = 0; // token index; runs arrive in source order, so it only walks forward
+    var cursor = 0;
     function tokAt(pos) {
       while (cursor + 1 < synN && synStarts[cursor + 1] <= pos) cursor++;
       while (cursor > 0 && synStarts[cursor] > pos) cursor--;
@@ -3531,31 +2618,8 @@ async function afterpackInflateBase64Gzip(b64) {
       var e = ti + 1 < synN ? synStarts[ti + 1] : src.length;
       return e < limit ? e : limit;
     }
-    /** Escaped source `[a,b)` with the grammar's colour spans woven in. */
-    /* WHERE THE `@afterpack` MARKERS ARE WRITTEN.
-     *
-     * The Protection Map records each directive's REGION -- often
-     * hundreds of lines -- and never the marker text itself, so the marker has
-     * to be located by reading the source, the same way the engine finds it.
-     * Cached on the file: a repaint (theme flip, syntax toggle, selection) must
-     * not re-scan a 100 KB file.
-     *
-     * Deliberately tolerant about the shape. `/* @afterpack skip *\/`,
-     * `// @afterpack hardened`, `/* @afterpack end *\/` and attribute forms all
-     * write the marker the same way, so the keyword is matched on its own and
-     * the parameters are whatever follows it on that line up to a comment
-     * terminator. Nothing here decides what a directive MEANS -- that is the
-     * engine's job, and the map already carries the result.
-     */
     function markersFor(f) {
       if (f.__markers) return f.__markers;
-      /* ONLY MARKERS THE ENGINE RECORDED. A regex over the source alone paints
-         any comment that merely MENTIONS the word -- "see the @afterpack docs
-         for the skip syntax" would render as a live directive with " docs for
-         the skip syntax" styled as its parameters, claiming a control the map
-         does not record. So the keyword must be one this file actually carries
-         (plus `end`, which closes a block and is not itself recorded as a
-         directive), and a file with no directives at all highlights nothing. */
       var allowed = {};
       var any = false;
       for (var k = 0; k < (f.directives || []).length; k++) {
@@ -3565,10 +2629,6 @@ async function afterpackInflateBase64Gzip(b64) {
       if (!any) { f.__markers = []; return f.__markers; }
       allowed.end = true;
       var out = [];
-      /* The parameter is the NEXT WORD ONLY. Matching to the end of the comment
-         swallowed prose -- `/* @afterpack skip — keep this readable *\/` styled
-         the whole trailing sentence as a parameter, contradicting the rule that
-         everything which is not the marker keeps ordinary comment colour. */
       var re = /@afterpack[ \t]+([A-Za-z][\w-]*)/g;
       var m;
       while ((m = re.exec(f.source)) !== null) {
@@ -3580,16 +2640,10 @@ async function afterpackInflateBase64Gzip(b64) {
       f.__markers = out;
       return out;
     }
-    /* A comment, with any `@afterpack` marker inside it picked out. Everything
-     * that is not the keyword or its parameters keeps ordinary comment colour --
-     * the reader asked for the marker to stand out, not the sentence around it. */
     function commentInner(a, b) {
       var ms = markersFor(file);
       var hit = [];
       for (var i = 0; i < ms.length; i++) {
-        // OVERLAP, not containment: a marker whose keyword starts before this
-        // segment still has a tail inside it, and testing `kwStart >= a` alone
-        // dropped that tail to plain comment text.
         if (ms[i].kwStart < b && ms[i].argEnd > a) hit.push(ms[i]);
       }
       if (!hit.length) return escapeHtml(src.slice(a, b));
@@ -3597,14 +2651,6 @@ async function afterpackInflateBase64Gzip(b64) {
       for (var j = 0; j < hit.length; j++) {
         var m2 = hit[j];
         if (m2.kwStart > cur) out += escapeHtml(src.slice(cur, m2.kwStart));
-        /* EVERY slice is clamped to [a, b), not just the argument. A run
-           boundary can land inside a marker -- a renamed span, an extracted
-           name or a region edge cutting through the comment -- and an unclamped
-           keyword slice emits characters past `b` that the NEXT segment then
-           emits again, showing the text twice. */
-        // BOTH ends of every slice are clamped to [a, b). Clamping only the end
-        // still re-emitted the head of a marker that began in an earlier
-        // segment, so a split marker rendered its text twice.
         var kwFrom = Math.max(m2.kwStart, cur);
         var kwTo = Math.min(m2.kwEnd, b);
         if (kwTo > kwFrom) {
@@ -3622,10 +2668,6 @@ async function afterpackInflateBase64Gzip(b64) {
     }
 
     function synInner(a, b) {
-      // `colored` off means the GRAMMAR yields, not the directive marker: the
-      // gutter still draws a brand bar for this region, and a bar pointing at
-      // an unstyled comment is a signpost to nothing. Markers are not grammar —
-      // they are the reader's own annotation — so they are painted either way.
       if (!syn) return escapeHtml(src.slice(a, b));
       if (!colored) return commentInner(a, b);
       var out = "", ti = tokAt(a);
@@ -3640,10 +2682,6 @@ async function afterpackInflateBase64Gzip(b64) {
       }
       return out;
     }
-    /** An un-attributed stretch: one `--wash` band, one `.tok` per real token.
-     *  `directive` is the marker recorded over this stretch, if any -- carried
-     *  onto the INSPECTABLE tokens only, so "a marker was recorded here" survives
-     *  without putting it on every semicolon. */
     function unlitInner(a, b, directive) {
       if (!syn) {
         return '<span class="unlit"><span class="tok tok-unlit" tabindex="-1" data-unlit="' + a + '" data-ue="' + b +
@@ -3655,32 +2693,8 @@ async function afterpackInflateBase64Gzip(b64) {
         if (stop <= a) { out += escapeHtml(src.slice(a, b)); break; }
         var t = synTypes.charAt(ti);
         var piece = escapeHtml(src.slice(a, stop));
-        // Same keyword -> value-literal promotion the inspector makes, so the
-        // hover title cannot say "keyword" about a token the engine rewrites.
         if (t === "k" && VALUE_LITERAL_TEXT[src.slice(a, stop)] === 1) t = "v";
-        // NOTHING TO SAY, SO NOT SELECTABLE.
-        //
-        // Comments, whitespace and punctuation carry no protection and never
-        // will: the engine attributes none of them (0 of 19,882 regions on a
-        // real build). They were still rendered as focusable, clickable,
-        // title-bearing tokens, so a reader hunting for something to inspect
-        // kept landing on a `;` and being told "punctuation / operator" -- noise
-        // competing with the tokens that DO have an answer.
-        //
-        // They now render as inert text. A comment still goes through
-        // `commentInner` so an `@afterpack` marker inside it keeps its styling.
-        //
-        // Identifiers, strings, numbers and keywords stay selectable even when
-        // un-attributed: "why was THIS not protected" is a real question.
-        //
-        // TYPE POSITIONS join the inert class (section 3c). `tsc` erases them
-        // before the engine runs, so the map can never have anything to say
-        // about a type name -- only the tractable, unambiguous shapes are
-        // recognised, and an ambiguous one stays selectable.
         if (t === "c") {
-          // The toggle only suppresses COLOUR (the pane's stated contract), so
-          // an un-attributed comment must not keep its grammar class -- and its
-          // `--ground` mask -- while every other token drops theirs.
           out += colored
             ? '<i class="sy-c">' + commentInner(a, stop) + "</i>"
             : commentInner(a, stop);
@@ -3688,17 +2702,8 @@ async function afterpackInflateBase64Gzip(b64) {
           var syCls = colored ? SYN_CLASS[t] : null;
           out += syCls ? '<i class="' + syCls + '">' + piece + "</i>" : piece;
         } else {
-          // `tabindex="-1"`, deliberately: these are the MAJORITY of tokens in a
-          // file, so putting them in the tab order would bury the attributed ones
-          // (the ones with something to say) under hundreds of stops. They stay
-          // clickable, programmatically focusable, and keyboard-activatable once
-          // focused -- the tab order keeps meaning "the painted findings".
           var cls = colored ? SYN_CLASS[t] : null;
           var dirAttr = directive ? ' data-directive="' + directive.kind + '"' : "";
-          // ESCAPED, like the attributed path 100 lines below. `keyword` comes
-          // straight off the map document (unlike `kind`, which is constrained
-          // to four literals), so a `"` in it would close the attribute early
-          // and turn the rest into stray attributes on the token.
           var dirTitle = directive
             ? escapeAttr(" — Directive: /* @afterpack " + directive.keyword + " */")
             : "";
@@ -3713,7 +2718,6 @@ async function afterpackInflateBase64Gzip(b64) {
     var lineChunks = [[]];
     var lineWSum = [0];
     var lineWLen = [0];
-    /** Whether each line carries any `@afterpack`-marked run (gutter bar). */
     var lineDir = [false];
 
     file.mergedRuns.forEach(function (run) {
@@ -3721,55 +2725,30 @@ async function afterpackInflateBase64Gzip(b64) {
       var region = regionByIdx(file, run.regionIdx);
       var preserved = isPreservedRegion(region);
       var metric = region && !preserved ? metricForRegion(region) : 0;
-      // Renamed-only: covered by the rename baseline but by NO region (regionIdx
-      // is nulled in the run builder whenever a region wins, so this is mutually
-      // exclusive with `region`). Bottom tier -- faint teal, never heat.
       var renamedOnly = !region && run.renamedIdx != null;
-      // Extracted-only: the `Globals` lane covers this token and no region does
-      // (the run builder already nulls the lane indices whenever a region wins,
-      // and nulls `renamedIdx` whenever the extraction lane claims the run, so
-      // the three are mutually exclusive by construction).
       var extractedOnly = !region && run.extractedIdx != null;
       var extracted = extractedOnly ? file.extractedRanges[run.extractedIdx] : null;
       var bg = "transparent", dataClass = "", extraCls = "";
       if (region) {
         if (preserved) {
-          dataClass = "preserved"; // neutral bottom-rung wash via .tok-preserved
+          dataClass = "preserved";
           extraCls = " tok-preserved";
         } else {
           bg = hexToRgba(rampColor(heatRamp, metric / 100), tokenAlpha(metric));
           dataClass = region.raw.reversalClass || "";
-          // past the measured floor the wash owns this token; the grammar yields
           if (metric >= inkYield) extraCls += " tok-ink-yield";
         }
       } else if (extractedOnly) {
-        bg = hexToRgba(renamedHex, EXTRACTED_WASH_ALPHA); // teal, a step up from the baseline
+        bg = hexToRgba(renamedHex, EXTRACTED_WASH_ALPHA);
         extraCls = " tok-extracted";
-        dataClass = "renamed-encoded"; // an injective, pool-recoverable re-encoding
+        dataClass = "renamed-encoded";
       } else if (renamedOnly) {
-        bg = hexToRgba(renamedHex, RENAMED_WASH_ALPHA); // faint teal baseline wash
+        bg = hexToRgba(renamedHex, RENAMED_WASH_ALPHA);
         extraCls = " tok-renamed";
       }
-      // else: machinery / gap -- the flat `--wash` band is painted by `.unlit`
-      // (a CSS class, not an inline colour, so it also survives a theme flip).
       var spotlight = run.spotlightIdx != null ? file.spotlights[run.spotlightIdx] : null;
-      // ATTRIBUTED = there is something to inspect (a region, a weak spot, or a
-      // renamed-only token). `.tok-hot` drives the pointer cursor + hover
-      // affordance, and it is what the click handler tests to decide "inspect
-      // this" vs "clear the selection" -- so a renamed-only token is selectable
-      // and truly-unlit space still deselects.
       var attributed = !!region || !!spotlight || extractedOnly || renamedOnly;
-      // The `/* @afterpack ... */` marker (if any) recorded over this token.
       var directive = run.directiveIdx != null ? file.directives[run.directiveIdx] : null;
-      // A directive ring has to stay on ONE element spanning the whole run, so a
-      // directive-covered run keeps the single-span shape even with no region
-      // under it (it is still clickable -- the marker is worth reading).
-      // A directive-covered run used to be kept WHOLE so the region tint could
-      // ride across it as one continuous band. The tint is gone, so that
-      // grouping now only costs something: it made every `;` and every comment
-      // inside a `skip` block one big clickable token. Split it like any other
-      // un-attributed stretch, and let `unlitInner` carry the directive onto the
-      // tokens that are actually worth inspecting.
       var perToken = !attributed;
       var cls = "tok" + extraCls + (attributed ? " tok-hot" : " tok-unlit unlit") + (spotlight ? " spot-" + spotlight.raw.severity : "");
 
@@ -3788,11 +2767,6 @@ async function afterpackInflateBase64Gzip(b64) {
       if (spotlight) titleParts.push((SEVERITY_LABEL[spotlight.raw.severity] || spotlight.raw.severity) + ": " + (spotlight.raw.reason || ""));
       if (directive) titleParts.push("Directive: /* @afterpack " + directive.keyword + " */");
 
-      /* NO REGION-WIDE TINT. A `skip` block can be a thousand lines; washing all
-         of it to announce one marker buried the protection overlay underneath
-         and read as "the entire file is highlighted". The marker itself is
-         styled where it is written (`.dir-kw` / `.dir-arg`), and the gutter bar
-         carries the region's extent. */
       var bgCss = bg === "transparent" ? "" : bg;
 
       var attrs = 'class="' + cls + '"' + (attributed ? ' tabindex="0" role="button"' : ' tabindex="-1"') +
@@ -3817,8 +2791,6 @@ async function afterpackInflateBase64Gzip(b64) {
               ? unlitInner(a, b, directive)
               : "<span " + attrs + ">" + pin + synInner(a, b) + "</span>"
           );
-          // The gutter bar is a LINE fact, so it is recorded as the segments are
-          // laid down rather than re-derived from the emitted HTML.
           if (directive) lineDir[lineDir.length - 1] = true;
           pin = "";
           lineWLen[lineWLen.length - 1] += seg.length;
@@ -3830,8 +2802,6 @@ async function afterpackInflateBase64Gzip(b64) {
     });
 
     var totalLines = file.source.split("\n").length;
-    // Content-box width in ch for the widest line number, so every gutter is
-    // identical and the code never shifts at 9->10 / 99->100 (see `.ln` CSS).
     var gutterWidth = String(totalLines).length + 1;
 
     var html = lineChunks.map(function (spans, i) {
@@ -3846,9 +2816,6 @@ async function afterpackInflateBase64Gzip(b64) {
     codeBody.innerHTML = html;
   }
 
-  /* ============================================================
-   * 9. Left rail: file tree, KPIs, class distribution, legends.
-   * ============================================================ */
   var treeEl = document.getElementById("file-tree");
 
   function countFilesUnder(node) {
@@ -3856,18 +2823,12 @@ async function afterpackInflateBase64Gzip(b64) {
     node.children.forEach(function (c) { n += c.type === "file" ? 1 : countFilesUnder(c); });
     return n;
   }
-  /* Gitignored / third-party paths are DIMMED in the tree (still selectable). The
-   * data's own `file.vendor` flag is the preferred signal; a `node_modules` path
-   * segment is the fallback for anything it doesn't cover (e.g. folder rows, which
-   * carry a path key rather than a file entry). */
   function isIgnoredPath(p) { return !!p && /(^|[\\/])node_modules([\\/]|$)/.test(p); }
   function isIgnoredFileIdx(idx) {
     var f = FILES[idx];
     return !!f && (isVendorFile(f) || isIgnoredPath(f.displayPath || f.displayName || ""));
   }
 
-  /* How many files under this node carry a recorded marker -- so a COLLAPSED
-     folder still admits that something inside it is marked. */
   function countMarkedUnder(node) {
     var n = 0;
     node.children.forEach(function (c) {
@@ -3876,8 +2837,6 @@ async function afterpackInflateBase64Gzip(b64) {
     return n;
   }
 
-  /* Weak spots under a node, with the LEAK subset alongside. The tree opens
-     collapsed now, so a folder has to admit what its subtree is hiding. */
   function countWeakUnder(node) {
     var acc = { weak: 0, leaks: 0 };
     node.children.forEach(function (c) {
@@ -3891,9 +2850,6 @@ async function afterpackInflateBase64Gzip(b64) {
     });
     return acc;
   }
-  /* ONE badge for both tree rows and both counts. The number is WEAK SPOTS (what
-     the dashboard tile sums); red means at least one of them is a leaked literal,
-     amber means they are all residual property names. */
   function weakBadgeHtml(weak, leaks, scope) {
     if (!weak) return "";
     var residual = weak - leaks;
@@ -3901,26 +2857,18 @@ async function afterpackInflateBase64Gzip(b64) {
       (leaks > 0 ? leaks + " leaked literal" + (leaks === 1 ? "" : "s") : "no leaked literal") +
       (residual > 0 ? ", " + residual + " residual property name" + (residual === 1 ? "" : "s") : "") +
       ". A weak spot is a readable literal this build left in the output; the right rail lists every one in the open file.";
-    // the leak subset is never signalled by colour alone: it carries the glyph too
     return '<span class="badge-weak' + (leaks > 0 ? " has-leak" : "") + '" data-tip="' +
       escapeAttr(tip) + '">' + (leaks > 0 ? "\u26a0 " : "") + weak + "</span>";
   }
 
   function renderTreeChildren(node, html) {
     node.children.forEach(function (child) {
-      // depth 1 == top level, and it starts flush with the pane (no leading gutter);
-      // only real nesting indents.
       var indent = (child.depth - 1) * 13;
       if (child.type === "folder") {
         var expanded = !!state.expandedFolders[child.key];
         var folderIgnored = isIgnoredPath(child.key) || child.name === "node_modules";
         var marked = countMarkedUnder(child);
         var weakUnder = countWeakUnder(child);
-        // STICKY ANCESTRY (#4): a folder at depth d pins d-1 rows down, so the
-        // visible files' whole chain of parents stacks above them while you
-        // scroll. A shallower ancestor has to out-stack a deeper one, hence the
-        // descending z-index; and the row must be OPAQUE, since it overlaps the
-        // rows scrolling underneath it.
         html.push(
           '<div class="tree-node">' +
           '<button type="button" class="tree-row tree-row-folder' + (folderIgnored ? " is-ignored" : "") + '" data-kind="folder" data-key="' + escapeAttr(child.key) +
@@ -3935,15 +2883,12 @@ async function afterpackInflateBase64Gzip(b64) {
           '<span class="tree-count">' + countFilesUnder(child) + "</span>" +
           "</button>"
         );
-        // Children live in their OWN element: a sticky row only sticks within its
-        // containing block, so this is what makes a folder UNPIN once its subtree
-        // has scrolled past instead of hanging over the next branch.
         if (expanded) {
           html.push('<div class="tree-branch">');
           renderTreeChildren(child, html);
           html.push("</div>");
         }
-        html.push("</div>"); // close .tree-node
+        html.push("</div>");
       } else {
         var file = FILES[child.fileIdx];
         var active = state.activeFileIdx === child.fileIdx;
@@ -3960,10 +2905,6 @@ async function afterpackInflateBase64Gzip(b64) {
             "). The build records where markers were found; whether they changed the outcome is not recorded.") + '">@</span>' : "") +
           weakBadgeHtml(file.weakSpotCount, file.leakCount, "in this file") +
           "</button>" +
-          // The bar is the average score of the spans that HAVE a region -- it says
-          // nothing about how much of the file has one, so the tooltip states both.
-          // Without that, a file with one hot region and no other coverage reads as
-          // a uniformly well-protected file.
           '<div class="tree-file-meter' + (fileIgnored ? " is-ignored" : "") + '" style="padding-left:' + (indent + 18) + 'px"' +
           ' data-tip="' + escapeAttr("Average protection score " + file.avgScore.toFixed(0) + "/100 across the spans that carry a ledger region — which is " +
             (file.coverage.total > 0 ? Math.round((file.coverage.region / file.coverage.total) * 100) : 0) +
@@ -3979,18 +2920,12 @@ async function afterpackInflateBase64Gzip(b64) {
     renderTreeChildren(TREE, html);
     treeEl.innerHTML = html.length ? html.join("") : '<p class="tree-empty">No files match.</p>';
   }
-  /* Bring the active row into the rail's viewport. `nearest`, so it is a no-op
-     when the row is already visible and never yanks a tree the reader is
-     scrolling. */
   function scrollTreeToActive() {
     if (!treeEl || !treeEl.querySelector) return;
     var row = treeEl.querySelector('.tree-row-file[data-file-idx="' + state.activeFileIdx + '"]');
     if (row && row.scrollIntoView) row.scrollIntoView({ block: "nearest" });
   }
 
-  /* Blank every per-file panel (code view, summary, engine info, weak spots,
-   * inspector, class distribution) when a filter hides EVERY file, so none of
-   * them keep painting the previously-active file's stale content. */
   function blankPanels() {
     renderTree();
     document.getElementById("code-body").textContent = "No files match this filter.";
@@ -4001,7 +2936,6 @@ async function afterpackInflateBase64Gzip(b64) {
     document.getElementById("weakspots-list").innerHTML = "";
     setWeakSpotsEmpty(true);
     document.getElementById("inspector").innerHTML = "";
-    // The collapsed/expanded state is the reader's, not the filter's.
     var inspCount = document.getElementById("inspector-count");
     if (inspCount) inspCount.textContent = "no selection";
     document.getElementById("class-dist-bar").innerHTML = "";
@@ -4011,8 +2945,6 @@ async function afterpackInflateBase64Gzip(b64) {
     if (footnote) footnote.hidden = true;
   }
 
-  /* Reflect the live facet on the segmented control. Shared, because a deep link
-     can set the facet before any button was ever clicked. */
   function syncFilterButtons() {
     FILE_FILTERS.forEach(function (k) {
       var b = document.getElementById("filter-" + k);
@@ -4020,17 +2952,11 @@ async function afterpackInflateBase64Gzip(b64) {
     });
   }
 
-  /* Rebuild the tree for a new facet: recompute TREE + folder keys, keep folders
-   * as the reader left them (only the open file's ancestry is force-opened), keep
-   * the active file selected when it is still visible, else fall back to the
-   * first visible file (or blank the panels when the filter matches nothing). */
   function setFileFilter(filter) {
     if (filter === activeFileFilter) return;
     var wasExpanded = facetExpandsAll();
     activeFileFilter = filter;
     syncFilterButtons();
-    // leaving a findings facet hands the tree back to its collapsed default
-    // rather than leaving the whole build hanging open behind you
     if (wasExpanded && !facetExpandsAll()) state.expandedFolders = ancestorExpansion(state.activeFileIdx);
     var visible = filteredFiles();
     TREE = buildTree(visible);
@@ -4038,7 +2964,6 @@ async function afterpackInflateBase64Gzip(b64) {
     collectFolderKeys(TREE, allFolderKeys);
     var stillVisible = visible.some(function (f) { return f.fileIdx === state.activeFileIdx; });
     if (stillVisible) {
-      // Active file survives the filter: just repaint the re-filtered tree.
       reapplyExpansion();
       renderTree();
       scrollTreeToActive();
@@ -4049,19 +2974,13 @@ async function afterpackInflateBase64Gzip(b64) {
     state.activeFileIdx = visible.length ? visible[0].fileIdx : -1;
     reapplyExpansion();
     if (state.activeFileIdx >= 0) {
-      // onActiveFileChanged already repaints the tree AND every panel -- no
-      // separate renderTree() (that was the redundant double call).
       onActiveFileChanged();
     } else {
-      // The filter hid EVERY file -- clear the stale panels.
       blankPanels();
       syncHash();
     }
   }
 
-  /* Live path-substring search: rebuild the tree over the newly-filtered files,
-   * keeping the active file loaded even when the query hides it (so the code
-   * pane doesn't flip away as you type); an empty result shows the tree note. */
   function applyTreeSearch(raw) {
     var had = !!state.treeQuery;
     state.treeQuery = (raw || "").trim().toLowerCase();
@@ -4069,13 +2988,7 @@ async function afterpackInflateBase64Gzip(b64) {
     TREE = buildTree(visible);
     allFolderKeys = [];
     collectFolderKeys(TREE, allFolderKeys);
-    // A live query opens every folder (a match you cannot see is not a match);
-    // clearing the query hands the tree back to its collapsed default rather than
-    // leaving the whole build hanging open behind you.
     if (had && !state.treeQuery) state.expandedFolders = ancestorExpansion(state.activeFileIdx);
-    // A query that hid EVERY file blanked the panels and left no active file; the
-    // next query that matches something has to adopt one, or the code pane stays
-    // stuck on "No files match" with a populated tree next to it.
     if (state.activeFileIdx < 0 && visible.length) {
       state.activeFileIdx = visible[0].fileIdx;
       state.selection = null;
@@ -4086,14 +2999,6 @@ async function afterpackInflateBase64Gzip(b64) {
     renderTree();
   }
 
-  /* One header line: `Files (425)`, with the build-wide WEAK SPOT total (when
-   * there is one) riding on the same row. It used to print the LEAK total under
-   * the word "leaks" while the inspector printed the open file's weak-spot count
-   * under the words "Weak spots" -- two different quantities at two different
-   * scopes, sharing neither name nor number. The header now counts the same thing
-   * the dashboard's "Weak spots" tile sums (build-wide `spotlights[]`), the
-   * inspector counts it for the open file, and the leak subset rides in both
-   * tooltips. */
   function renderWorkspaceSummary() {
     var titleEl = document.getElementById("files-title");
     if (titleEl) titleEl.textContent = "Files (" + FILES.length + ")";
@@ -4115,11 +3020,6 @@ async function afterpackInflateBase64Gzip(b64) {
     }
   }
 
-  /* The code pane's header is now just the path (+ a copy button + where this
-   * source came from). The six headline metrics moved to the inspector rail as a
-   * fixed six-row band -- they are per-FILE facts, they never react to the
-   * selection, and in the header they were eating the vertical space the code
-   * itself needed. Their tooltips came with them, verbatim. */
   function renderFileSummary(file) {
     var f = file.doc.file || {};
     var a = file.doc.aggregate || {};
@@ -4131,7 +3031,6 @@ async function afterpackInflateBase64Gzip(b64) {
     document.getElementById("file-summary-path").innerHTML =
       (dir ? '<span class="fs-dir">' + escapeHtml(dir) + "</span>" : "") +
       '<span class="fs-name">' + escapeHtml(name) + "</span>";
-    // The copy button reuses the inspector's `data-copy` + copyText() plumbing.
     var copyBtn = document.getElementById("copy-path");
     if (copyBtn) {
       copyBtn.setAttribute("data-copy", encodeURIComponent(full));
@@ -4141,15 +3040,7 @@ async function afterpackInflateBase64Gzip(b64) {
     var maxCls = cs.maxClassReached;
     var maxClsHtml = maxCls ? classChipHtml(maxCls, false) : "—";
 
-    // The "(est.)" marker stays on the ROW: `outputSize` is now this file's
-    // share of the chunk's MEASURED output, but the split WITHIN a chunk still
-    // assumes uniform inflation, so the ratio is a measured total divided by an
-    // assumed split — worth flagging wherever the number is.
     var est = f.outputSizeEstimated ? " (est.)" : "";
-    // Bundled input, not whole-file input: the ratio is over what the bundler
-    // actually kept of this file (tree-shaking bundles only part of a source),
-    // so it is comparable to the build's headline ratio. Falls back to whole
-    // inputSize for a legacy map that carried no bundled figure.
     var bundledIn = f.bundledInputSize != null ? f.bundledInputSize : f.inputSize;
     var sizeTip = "Bundled " + fmtBytes(bundledIn) + " → output " + fmtBytes(f.outputSize) + est +
       (f.outputSizeEstimated
@@ -4169,9 +3060,6 @@ async function afterpackInflateBase64Gzip(b64) {
       "), listed in full below. The file-tree header counts them across the whole build, which is why the two numbers differ.";
     var renamed = file.renamedCount || 0;
 
-    // Share of the file the map can speak for at all. Without it, the pane's
-    // large unpainted stretches read as a failure of the build rather than as
-    // syntax the ledger has (and can have) nothing to say about.
     var cov = file.coverage;
     var covPct = cov.total > 0 ? Math.round((cov.region / cov.total) * 100) : 0;
     var covShare = function (n) { return cov.total > 0 ? Math.round((n / cov.total) * 100) : 0; };
@@ -4196,7 +3084,6 @@ async function afterpackInflateBase64Gzip(b64) {
     }).join("");
   }
 
-  /* #8: the artifact's own weight, where the "DEV ONLY" badge used to be. */
   function renderMapSize() {
     var el = document.getElementById("map-size");
     if (!el) return;
@@ -4248,8 +3135,6 @@ async function afterpackInflateBase64Gzip(b64) {
       var cs = (f.doc.aggregate && f.doc.aggregate.classSummary) || {};
       CLASS_ORDER.forEach(function (cls) { totals[cls] += cs[cls] || 0; });
     });
-    // Terse rows: chip + reached/ceiling flag. The full CLASS_META note rides in
-    // a hover/focus tooltip instead of always-on prose.
     document.getElementById("class-legend").innerHTML = CLASS_ORDER.map(function (cls) {
       var reached = totals[cls] > 0;
       return '<li class="class-legend-row" tabindex="0" data-tip="' + escapeAttr(CLASS_META[cls].note) + '">' +
@@ -4259,10 +3144,6 @@ async function afterpackInflateBase64Gzip(b64) {
     }).join("");
   }
 
-  // Directive-marker legend: one row per kind actually present in the build, each
-  // swatch drawn with the SAME ring the code pane paints. Shown only when a
-  // `/* @afterpack ... */` marker was recorded somewhere (Pro); hidden on Free / a
-  // build with no markers, so the common case carries no dead legend.
   var DIRECTIVE_LEGEND_META = {
     skip: "skip — asks for the span to stay readable",
     hardened: "hardened — asks for the flattened-fused class",
@@ -4280,10 +3161,6 @@ async function afterpackInflateBase64Gzip(b64) {
     if (!kinds.length) { section.hidden = true; return; }
     section.hidden = false;
     document.getElementById("directive-legend").innerHTML = kinds.map(function (k) {
-      /* The swatch shows what the CODE PANE shows: the marker treatment, not a
-         per-kind background tint. It used to be filled with `directiveTint(k)`,
-         one hue per kind — a four-colour key to a pane that now renders every
-         kind in the same brand gradient. */
       return '<div class="directive-legend-row"><span class="swatch dir-kw" data-directive="' + k +
         '">@afterpack</span>' +
         "<code>" + escapeHtml(DIRECTIVE_LEGEND_META[k]) + "</code></div>";
@@ -4300,9 +3177,6 @@ async function afterpackInflateBase64Gzip(b64) {
   }
 
   function renderEngineInfo(file) {
-    // v3: `engine` + `schemaVersion` live at the top-level document envelope
-    // (build-wide, emitted once), not per file entry. Fall back to a per-doc copy
-    // for a legacy single-doc that still carried them.
     var e = DATA.engine || file.doc.engine || {};
     var schema = DATA.schemaVersion != null ? DATA.schemaVersion : file.doc.schemaVersion;
     var origin = sourceOriginOf(file);
@@ -4318,22 +3192,12 @@ async function afterpackInflateBase64Gzip(b64) {
     }).join("");
   }
 
-  /* ============================================================
-   * 10. Right rail: persistent "weak spots" list.
-   * ============================================================ */
-  /* Empty <-> populated is a LAYOUT switch, not just different copy: `.is-empty`
-   * folds the section into a single row (title + "none" on one line) and
-   * `syncRailFill` hands the reserved height back to the pinned inspector above,
-   * so an all-clear file doesn't burn half the pane. */
   function setWeakSpotsEmpty(empty) {
     var section = document.getElementById("weakspots-section");
     if (section) section.classList.toggle("is-empty", empty);
     syncRailFill();
   }
 
-  /* Who gets the rail's spare height. The weak-spots half is QUIET when it is
-   * empty, collapsed or hidden -- three different reasons for the same layout
-   * answer, so one class carries all three rather than a set per reason. */
   function syncRailFill() {
     var rail = document.getElementById("rail-right");
     if (!rail) return;
@@ -4350,19 +3214,10 @@ async function afterpackInflateBase64Gzip(b64) {
     var infoEl = document.getElementById("weakspots-info");
     var list = document.getElementById("weakspots-list");
     if (!titleEl || !list) return;
-    // Empty state collapses to ONE quiet line: the count reads "(0)" -- the
-    // header is always visible now, so the number has to be there whatever it
-    // is -- the size caveat goes (nothing shows sizes), and the vertical space
-    // comes back so an all-clear file doesn't reserve a big "nothing leaked"
-    // panel. Nothing to expand here, so the all-clear line sits BESIDE the
-    // header rather than inside the collapsed body (see `.is-empty` in the CSS).
     if (!file.spotlights.length) {
       titleEl.textContent = "Weak spots (0)";
       if (infoEl) infoEl.style.display = "none";
       list.style.marginTop = "0";
-      // "None HERE" and "none in this build" are different answers, and reading
-      // the first as the second is exactly how the build's weak spots went
-      // missing: say where the others are and how to list them.
       var elsewhere = 0;
       FILES.forEach(function (f) { if (f.fileIdx !== file.fileIdx) elsewhere += f.weakSpotCount; });
       list.innerHTML = '<p class="empty-note-ok"><span class="ok-check">✓</span>None recorded in this file.' +
@@ -4381,10 +3236,6 @@ async function afterpackInflateBase64Gzip(b64) {
       var mech = s.raw.mechanism || "";
       var mechHuman = mech ? humanize(mech) : "";
       var tail = s.raw.bytes != null ? s.raw.bytes + " B" : "";
-      // Compact summary; native <details> expands the full detail on demand. The
-      // "Jump to code" button keeps the existing data-jump-spotlight wiring, so the
-      // row still selects + scrolls to the leak when expanded. The sample wraps
-      // fully (no ellipsis) and the mechanism reads as a plain-English label.
       return '<details class="weakspot" data-spot-idx="' + s.idx + '">' +
         '<summary class="weakspot-summary">' +
           '<span class="weakspot-sev pill pill-' + sev + '" title="' + escapeAttr(SEVERITY_LABEL[sev] || sev) + '">' + icon + "</span>" +
@@ -4403,13 +3254,6 @@ async function afterpackInflateBase64Gzip(b64) {
     }).join("");
   }
 
-  /* ============================================================
-   * 11. Right rail: the Inspector. Leads with the reversal-class
-   *     region card (chip + tier + score + why); lineage, cost, and
-   *     the Pro-ceiling CTA are secondary sections below it.
-   *     Consecutive identical lineage steps collapse into one row
-   *     ("ScopeDeepen x19") with combined entropy/size deltas.
-   * ============================================================ */
   function collapseLineage(lineage) {
     var groups = [];
     lineage.forEach(function (step) {
@@ -4425,8 +3269,6 @@ async function afterpackInflateBase64Gzip(b64) {
     return groups;
   }
 
-  // One node of the transform-chain stepper: transform name (+ ×N when the step
-  // repeated), a category/phase caption, and the entropy/size delta.
   var CHAIN_VISIBLE_CAP = 5;
   function chainStepHtml(g) {
     var cat = CATEGORY_LABEL[g.category] || (g.category || "").toLowerCase();
@@ -4445,24 +3287,9 @@ async function afterpackInflateBase64Gzip(b64) {
       "</div>" +
     "</div>";
   }
-  // The transform chain is the PRIMARY inspector content: an oldest->newest
-  // vertical stepper so a token that went renamed -> flattened -> entangled reads
-  // as a chain. Long chains fold their tail into a native "show N more".
   function renderChainStepper(region) {
     var lineage = region.raw.lineage || [];
     if (!lineage.length) {
-      // An empty `lineage` does NOT mean "untransformed". A map encoded WITHOUT
-      // the per-step column carries a real `transformCount` on every region and
-      // an empty chain -- so read the COUNT before making any claim. (The old
-      // copy asserted "never touched by the transform pipeline" on regions the
-      // ledger says ran several transforms.)
-      //
-      // Cloud maps CARRY lineage as of Aug 2026: measured on the real 331-file
-      // map it is +87 KB gzipped, 3.1% of the stored-blob budget, so the size
-      // trade-off the column was dropped for was not worth what it cost. An
-      // empty chain now means one of two things, and this says which: a map
-      // stored BEFORE that change (the artifact is fixed; only a new build
-      // gains the chain), or a region the ledger genuinely never touched.
       var n = region.raw.transformCount || 0;
       return '<div class="inspector-section"><h3>Transform chain</h3>' +
         '<p class="inspector-empty">' + (n > 0
@@ -4487,19 +3314,6 @@ async function afterpackInflateBase64Gzip(b64) {
       (region.raw.lineageCapped ? "+" : "") + '</span></h3><div class="chain">' + visible + "</div>" + extraHtml + note + "</div>";
   }
 
-  /* ---- the stable inspector shell (#13) ---------------------------------
-   * ONE card draws every selection. Whatever is selected it gets the same five
-   * things -- an identity line, a score, a context line, exactly SIX fact rows
-   * and an action line -- so the panel's height is a constant: clicking from a
-   * leak to a comment to a renamed identifier does not move a pixel. Two rules
-   * make that hold: the grid always has six rows (a kind with less to say pads
-   * with an invisible one) and nothing inside it wraps.
-   *
-   * No sentence is printed here. Every explanation, caveat and warning the old
-   * cards spelled out lives in INSP_COPY (or in the engine's own `why` /
-   * UNLIT_VERDICT strings) and is rendered as a `data-tip` on the row, chip or
-   * flag it belongs to -- the same "(?)" rule the rest of the product follows.
-   * A row that carries one advertises it with a dotted key. */
   var INSP_FACTS = 6;
   function inspFlag(kind, glyph, tip) {
     return '<span class="insp-flag" data-kind="' + kind + '" tabindex="0" role="note" data-tip="' +
@@ -4531,11 +3345,6 @@ async function afterpackInflateBase64Gzip(b64) {
       '<div class="insp-actions">' + (o.actions || "") + "</div>" +
       "</div>";
   }
-  /* The transform chain keeps its full stepper -- it is VALUE, not prose -- but
-     it is the one block whose height genuinely tracks the data, so it rides in a
-     collapsed <details>. Closed (the default) it is exactly one line for every
-     selection; opening it is a user action, not a selection change.
-     renderChainStepper() stays the single source of the chain's own copy. */
   function inspChain(region) {
     if (!region) {
       return '<details class="insp-chain"><summary class="details-summary" data-tip="' +
@@ -4554,8 +3363,6 @@ async function afterpackInflateBase64Gzip(b64) {
     var g = collapseLineage((region && region.raw.lineage) || [])[0];
     return g ? (g.transform || "?") + (g.count > 1 ? " ×" + g.count : "") : null;
   }
-  /* The recorded directive, as tooltip text: which keyword was found over this
-     span and the posture written on it. */
   function directiveTip(d) {
     var posture = [];
     if (d.target != null) posture.push("target " + d.target);
@@ -4565,8 +3372,6 @@ async function afterpackInflateBase64Gzip(b64) {
       ". The build records the marker and its coordinates; whether it changed this span's target class is not recorded.";
   }
   function sizeDeltaText(n) { return n == null ? null : (n >= 0 ? "+" : "") + fmtNum(n) + " B"; }
-  /* The whole-file "machinery" bucket, as tooltip text: the engine reports these
-     per FILE, not per span, so they never sit in a per-token fact row. */
   function machineryTip(file) {
     var m = file.machinery ? file.machinery.raw : null;
     if (!m) return MACHINERY_BLURB;
@@ -4576,25 +3381,7 @@ async function afterpackInflateBase64Gzip(b64) {
       " (est.). " + MACHINERY_BLURB;
   }
 
-  /* ---- "not attributed" -------------------------------------------------
-   * The map is ENTROPY-FUNNEL based: only a transform that clears the funnel
-   * records a ledger region, and every span is back-mapped from the BUNDLED
-   * output through source maps. So a token with no paint is one of three very
-   * different things, and a viewer that just makes it un-clickable teaches the
-   * reader nothing:
-   *
-   *   1. genuinely nothing to do -- punctuation, a keyword, a comment (comments
-   *      never even reach the shipped output), a property key the engine
-   *      preserves on purpose;
-   *   2. renamed-only -- but that has its own baseline lane, so it never lands
-   *      here;
-   *   3. an ATTRIBUTION GAP -- a real region exists, but its back-mapped span
-   *      stopped a token short of the code it actually transformed.
-   *
-   * These helpers gather the evidence that separates (1) from (3) and the card
-   * below states which one it is, in those words. */
 
-  /** The lexical token containing `pos`, as `{start, end, type, text}`. */
   function tokenAt(file, pos) {
     var syn = lexFile(file);
     if (!syn) return { start: pos, end: Math.min(pos + 1, file.sourceLen), type: "?", text: file.source.charAt(pos) };
@@ -4602,7 +3389,6 @@ async function afterpackInflateBase64Gzip(b64) {
     var start = syn.starts[ti], end = tokenEnd(syn, ti, file.sourceLen);
     return { start: start, end: end, type: syn.types.charAt(ti), text: file.source.slice(start, end) };
   }
-  /** Closest region ending before / starting after `pos` (never one covering it). */
   function neighbourRegions(file, pos) {
     var before = null, after = null;
     file.realRegions.forEach(function (r) {
@@ -4611,10 +3397,9 @@ async function afterpackInflateBase64Gzip(b64) {
     });
     return { before: before, after: after };
   }
-  /** Does any literal token (string / number) fall inside this region's span? */
   function regionCoversLiteral(file, region) {
     var syn = lexFile(file);
-    if (!syn) return true; // unknown grammar: never accuse the region of anything
+    if (!syn) return true;
     var ti = tokenIndexAt(syn, region.startChar);
     while (ti < syn.starts.length && syn.starts[ti] < region.endChar) {
       var t = syn.types.charAt(ti);
@@ -4623,14 +3408,11 @@ async function afterpackInflateBase64Gzip(b64) {
     }
     return false;
   }
-  /** A region the engine recorded as encoding exactly ONE literal. */
   function isMaterializationRegion(region) {
     return !!region && (region.raw.annotations || []).indexOf("materializationSite") >= 0;
   }
   function pct(part, total) { return total > 0 ? Math.round((part / total) * 100) + "%" : "—"; }
 
-  // What the grammar says this token IS. Each line is a statement the data
-  // actually supports -- none of them claim the token is "protected".
   var UNLIT_VERDICT = {
     w: "Whitespace. Nothing here for any transform to act on.",
     p: "An operator or punctuation — required syntax. It has to survive verbatim for the program to parse, so no transform can touch it.",
@@ -4645,19 +3427,12 @@ async function afterpackInflateBase64Gzip(b64) {
   };
   var LITERAL_FUNNEL_NOTE = "The map records a region only where a transform cleared the entropy funnel. A literal can also be gone before the engine ever sees it — a TypeScript type-position string is erased at compile time, and a constant your bundler folded away leaves nothing to encode.";
 
-  /* ---- one builder per selection kind ------------------------------------
-   * Each returns exactly TWO blocks: the fixed card, then the collapsed chain.
-   * That is what makes "the inspector does not jump" a structural property
-   * rather than something to eyeball. */
   function cardRegion(file, region, opts) {
     var r = region.raw;
     var perf = r.perf || {};
     var flags = [];
     if (r.why) flags.push(inspFlag("info", "?", r.why));
     if (opts && opts.leakInside) flags.push(inspFlag("leak", "!", INSP_COPY.leakCap));
-    // Span-honesty check, unchanged in substance -- a materialization site
-    // encodes exactly ONE literal, so a recorded span with no literal in it is
-    // not describing what it painted. It is a flag now instead of a red banner.
     if (isMaterializationRegion(region) && !regionCoversLiteral(file, region)) {
       flags.push(inspFlag("warn", "▲", INSP_COPY.spanMismatch));
     }
@@ -4691,9 +3466,6 @@ async function afterpackInflateBase64Gzip(b64) {
   function cardPreserved(file, region) {
     var r = region.raw;
     var hasReason = !!r.preservedReason;
-    // `lineage` can be absent from the DOCUMENT (the cloud artifact drops the
-    // per-step column to stay small), so "no lineage" is not evidence that
-    // nothing ran -- `transformCount` is.
     var steps = (r.lineage || []).length;
     var count = r.transformCount || 0;
     var lowered = !hasReason && (steps > 0 || count > 0);
@@ -4743,10 +3515,6 @@ async function afterpackInflateBase64Gzip(b64) {
     }) + inspChain(null);
   }
 
-  /* The `Globals` extraction lane's detail card. Deliberately the same SHAPE as
-   * `cardRenamed` — both are compact, class-1 lanes with no per-token lineage to
-   * show — with the facts that actually differ: what kind of token was extracted,
-   * and that the name left the access site rather than merely changing. */
   function cardExtracted(file, idx) {
     var r = file.extractedRanges[idx];
     var isGlobal = !!r && r.kind === "global";
@@ -4772,12 +3540,8 @@ async function afterpackInflateBase64Gzip(b64) {
 
   function cardUnlit(file, u) {
     var tok = tokenAt(file, u.pos);
-    // No grammar => no token boundaries; the painted RUN is the honest extent.
     if (tok.type === "?" && u.end != null) tok = { start: u.pos, end: u.end, type: "?", text: file.source.slice(u.pos, u.end) };
     var type = tok.type === "?" && u.type && u.type !== "?" ? u.type : tok.type;
-    // Lexically these are keywords; semantically they are values. Reporting
-    // them as keywords made the card claim "no transform can touch it" about a
-    // token the engine rewrites -- the one thing this viewer must never do.
     if (type === "k" && VALUE_LITERAL_TEXT[tok.text] === 1) type = "v";
     var kind = TOKEN_KIND[type] || "source text";
     var nb = neighbourRegions(file, tok.start);
@@ -4819,15 +3583,6 @@ async function afterpackInflateBase64Gzip(b64) {
         { k: "Token", v: kind, tip: verdict },
         { k: "Nearest region", v: nearest, warn: abuts,
           tip: abuts ? INSP_COPY.gapAbuts : (before || nb.after) ? INSP_COPY.gapClear : INSP_COPY.gapNone },
-        // All FOUR disjoint coverage buckets `prepareFile` computes, so the
-        // group sums to 100% and the reader can check it. Printing three of
-        // four left the extracted lane's share silently folded into nothing --
-        // the rows simply didn't add up. This is also why the old "Grammar" row
-        // is gone rather than the card growing a seventh fact: `INSP_FACTS`
-        // fixes every card at six rows so the panel doesn't jump between
-        // selections, and the toolbar toggle two lines up already reads
-        // "Syntax · <grammar label>" -- the row restated a label the reader can
-        // see, while a whole coverage bucket was missing.
         { k: "Ledger region", v: pct(cov.region, cov.total), tip: INSP_COPY.coverage },
         { k: "Extracted only", v: pct(cov.extracted || 0, cov.total), tip: INSP_COPY.coverage },
         { k: "Renamed only", v: pct(cov.renamed, cov.total), tip: INSP_COPY.coverage },
@@ -4839,9 +3594,6 @@ async function afterpackInflateBase64Gzip(b64) {
     }) + inspChain(null);
   }
 
-  /* A surviving readable literal is the WEAKEST LINK: it leads the card, and the
-     score/meter (borrowed from the region around it) carries the explicit "this
-     rates the surrounding code, not the leak" caveat on its tooltip. */
   function cardSpotlight(file, spotlight, region) {
     var s = spotlight.raw;
     var sev = s.severity;
@@ -4876,8 +3628,6 @@ async function afterpackInflateBase64Gzip(b64) {
     }) + inspChain(region);
   }
 
-  /* Nothing selected: the same shell, filled with the file's own aggregate --
-     so the panel that greets you has the identical height as every selection. */
   function cardFile(file) {
     var a = file.doc.aggregate || {};
     var leaks = file.leakCount;
@@ -4902,9 +3652,6 @@ async function afterpackInflateBase64Gzip(b64) {
     }) + inspChain(null);
   }
 
-  /* What the collapsed Inspector header says it is holding. There is no honest
-     COUNT here -- every card is one card, and the fact grid is six rows by
-     construction -- so the header carries the selection's identity instead. */
   function inspectorSummary(file, sel) {
     if (!sel) return "no selection";
     if (sel.spotlightIdx != null) {
@@ -4933,9 +3680,6 @@ async function afterpackInflateBase64Gzip(b64) {
     if (countEl) countEl.textContent = file ? inspectorSummary(file, sel) : "";
     if (!file) { el.innerHTML = ""; return; }
     if (!sel) {
-      // NOT `cardFile` any more. With nothing selected it printed a file-level
-      // aggregate that the "This file" band directly above already shows, so the
-      // rail opened with the same six numbers twice. One quiet line instead.
       el.innerHTML = '<p class="inspector-empty">Select any token in the code pane to inspect it.</p>';
       return;
     }
@@ -4951,13 +3695,6 @@ async function afterpackInflateBase64Gzip(b64) {
     el.innerHTML = '<div class="insp">' + html + "</div>";
   }
 
-  /* ============================================================
-   * 12. Selection + "highlight same class" mode.
-   *     A click always resolves to the deepest/smallest region
-   *     covering that exact token (baked into `mergedRuns` by the
-   *     sweep-line fill rule above) -- so selection never lights up
-   *     more than the one specific region a token belongs to.
-   * ============================================================ */
   function highlightSelectionRing() {
     codeBody.querySelectorAll(".tok.is-selected").forEach(function (t) { t.classList.remove("is-selected"); });
     var sel = state.selection;
@@ -4979,9 +3716,6 @@ async function afterpackInflateBase64Gzip(b64) {
   var highlightStatus = document.getElementById("highlight-class-status");
   var syntaxToggle = document.getElementById("syntax-toggle");
   var syntaxToggleText = document.getElementById("syntax-toggle-text");
-  /* The toggle names the grammar that actually claimed this file, and goes dead
-   * for a file type no grammar covers -- rather than offering a switch that
-   * silently does nothing. */
   function updateSyntaxToggle(file) {
     if (!syntaxToggle) return;
     var g = file && file.grammar;
@@ -5004,9 +3738,6 @@ async function afterpackInflateBase64Gzip(b64) {
       var file = activeFile();
       var count = file ? file.realRegions.filter(function (r) { return r.raw.reversalClass === cls; }).length : 0;
       var label = CLASS_META[cls] ? CLASS_META[cls].label : cls;
-      // The slot is ALWAYS in the layout (see `#highlight-class-status`), so
-      // turning this on only makes it visible -- it can no longer push the
-      // toggles sideways. The sentence it used to spell out is the tooltip.
       highlightStatus.textContent = "· " + count + " region" + (count === 1 ? "" : "s");
       highlightStatus.setAttribute("data-tip", "Highlighting " + label + " — " + count + " region" +
         (count === 1 ? "" : "s") + " in this file share the selected token's reversal class.");
@@ -5031,9 +3762,6 @@ async function afterpackInflateBase64Gzip(b64) {
     applyHighlightClass();
     renderInspector();
   }
-  /* An UN-attributed token is a first-class selection now: it has no region, but
-   * it does have a lexical identity and a neighbourhood, and that is exactly what
-   * the reader needs to tell "nothing to do here" from "the span missed it". */
   function selectUnlit(pos, type, end) {
     state.selection = { regionIdx: null, spotlightIdx: null, renamedIdx: null, extractedIdx: null, unlit: { pos: pos, type: type, end: end } };
     revealInspectorSection();
@@ -5041,9 +3769,6 @@ async function afterpackInflateBase64Gzip(b64) {
     applyHighlightClass();
     renderInspector();
   }
-  /* Deselect: back to the file-aggregate default (no ring, no class highlight).
-   * Cheap no-op when nothing is selected, so it is safe to call from a broad
-   * document-level click handler. */
   function clearSelection() {
     if (!state.selection) return;
     state.selection = null;
@@ -5051,10 +3776,6 @@ async function afterpackInflateBase64Gzip(b64) {
     applyHighlightClass();
     renderInspector();
   }
-  // `.tok-hot` = attributed (a region, a weak spot, or the rename baseline).
-  // `.tok-unlit` = a real token with no attribution -- still inspectable, because
-  // "why is there nothing here" is an answer worth giving. Only whitespace and
-  // the pane's empty area are inert, and clicking those still CLEARS.
   function isAttributedTok(el) { return !!el && el.classList.contains("tok-hot"); }
   function isPickableTok(el) { return !!el && (el.classList.contains("tok-hot") || el.classList.contains("tok-unlit")); }
   function handleTokActivate(tokEl) {
@@ -5079,12 +3800,7 @@ async function afterpackInflateBase64Gzip(b64) {
     selectFromRun(run ? run.regionIdx : null, idx);
   }
 
-  /* ============================================================
-   * 13. Copy-to-clipboard for Pro CTAs (ceiling directive / proHint).
-   * ============================================================ */
   function copyText(text, btn) {
-    // An icon-sized button cannot hold the word "Copied" -- it names its own
-    // confirmation with `data-copied-label` instead.
     function ok() {
       var prev = btn.textContent;
       btn.textContent = btn.getAttribute("data-copied-label") || "Copied";
@@ -5104,21 +3820,13 @@ async function afterpackInflateBase64Gzip(b64) {
     ta.style.opacity = "0";
     document.body.appendChild(ta);
     ta.select();
-    try { document.execCommand("copy"); } catch (e) { /* best effort */ }
+    try { document.execCommand("copy"); } catch (e) {}
     document.body.removeChild(ta);
   }
 
-  /* ============================================================
-   * 14. File switching, theme, rail collapse, popover + tooltips, init.
-   * ============================================================ */
   function updateSourceOriginNote(file) {
     var noteEl = document.getElementById("source-origin-note");
     var origin = sourceOriginOf(file);
-    // Three origins, not two. The `machinery` entry is the engine's own
-    // accounting bucket, and what the pane shows for it is a fixed note the
-    // engine wrote -- calling that "your original source" is the one claim this
-    // viewer must never make, and it contradicted the `source origin: machinery`
-    // row the engine-info block prints for the same file.
     noteEl.textContent = origin === "machinery" ? "engine note (not your source)"
       : origin === "engineInput" ? "source: engine-input"
       : "source: original (via source map)";
@@ -5148,23 +3856,16 @@ async function afterpackInflateBase64Gzip(b64) {
     renderInspector();
   }
 
-  /* rail collapse: single-file builds auto-collapse (code pane gets the width);
-   * the topbar toggle flips it and marks the choice manual so it sticks. */
   var appShell = document.getElementById("app");
   var railToggleBtn = document.getElementById("rail-toggle");
   function setRailCollapsed(collapsed, remember) {
     state.railCollapsed = collapsed;
-    /* Only a DELIBERATE toggle is stored. A single-file build auto-collapses
-       the tree, and remembering that would silently hide the tree on the next
-       multi-file map the reader opens. */
     if (remember) setPref("railCollapsed", collapsed);
     appShell.classList.toggle("rail-collapsed", collapsed);
     railToggleBtn.setAttribute("aria-pressed", String(collapsed));
     railToggleBtn.setAttribute("title", collapsed ? "Show the file tree" : "Hide the file tree");
   }
 
-  /* inspector (right rail) collapse -- same contract as the tree rail: the grid
-   * drops the column and the code pane takes the width back. */
   var inspectorToggleBtn = document.getElementById("inspector-toggle");
   function setInspectorCollapsed(collapsed, remember) {
     state.inspectorCollapsed = collapsed;
@@ -5177,10 +3878,6 @@ async function afterpackInflateBase64Gzip(b64) {
     inspectorToggleBtn.setAttribute("aria-label", label);
   }
 
-  /* IN-RAIL section collapse -- the Inspector block and the weak-spots list.
-   * NOTE the name: `setInspectorCollapsed` above hides the WHOLE right rail;
-   * this hides one section INSIDE it, and the two are stored under different
-   * preference keys for exactly that reason. */
   function isSectionCollapsed(sectionId) {
     var sec = document.getElementById(sectionId);
     return !!(sec && sec.classList.contains("is-collapsed"));
@@ -5201,36 +3898,12 @@ async function afterpackInflateBase64Gzip(b64) {
     setSectionCollapsed("weakspots-section", "weakspots-head",
       !isSectionCollapsed("weakspots-section"), true, "weakspotsCollapsed");
   }
-  /* A click on a token is a request to inspect, so it opens the section -- but
-   * `remember` stays off: only a deliberate collapse is what gets stored. */
   function revealInspectorSection() {
     if (isSectionCollapsed("inspector-section")) {
       setSectionCollapsed("inspector-section", "inspector-head", false, false);
     }
   }
 
-  /* ---- pane resizing ------------------------------------------------------
-   * Both rails are sized by a custom property on the shell, so a drag is just a
-   * clamped number written back to `--rail-left-w` / `--rail-right-w`. Clamp
-   * rules: never below MIN_RAIL, never past 42% of the viewport, and never so
-   * wide that the code pane drops under MIN_CODE. Persisted -- see PREFS. */
-  /* ---- reader preferences --------------------------------------------------
-   * Everything the reader can adjust about the CHROME -- theme, whether the
-   * grammar is coloured, which rails are open, how wide they are -- kept in one
-   * key so a map opened tomorrow looks like the one they arranged today.
-   *
-   * NOT the reading position: the active file, the selection and the facet are
-   * per-artifact and belong in the deep link, which already carries them.
-   *
-   * Storage may be unavailable (a `file://` map in a browser that refuses site
-   * data for local files, a private window, a viewer with storage blocked), so
-   * every read and write is guarded and the viewer renders identically with
-   * nothing stored. That was already true of the theme; it now covers the rest.
-   *
-   * Note `localStorage` is ORIGIN-scoped: a map opened from disk and the same
-   * map served from the API keep separate preferences. Unavoidable, and
-   * arguably right -- they are different contexts.
-   */
   var PREFS_KEY = "afterpack-protmap-prefs";
   var THEME_KEY = "afterpack-protmap-theme";
   var prefs = {};
@@ -5240,17 +3913,16 @@ async function afterpackInflateBase64Gzip(b64) {
       prefs = raw ? JSON.parse(raw) : {};
     } catch (e) { prefs = {}; }
     if (!prefs || typeof prefs !== "object") prefs = {};
-    /* Carry over a theme chosen before this key existed. */
     if (prefs.theme !== "light" && prefs.theme !== "dark") {
       try {
         var legacy = localStorage.getItem(THEME_KEY);
         if (legacy === "light" || legacy === "dark") prefs.theme = legacy;
-      } catch (e) { /* ignore */ }
+      } catch (e) {}
     }
   }
   function setPref(k, v) {
     prefs[k] = v;
-    try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) { /* unavailable */ }
+    try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) {}
   }
   loadPrefs();
 
@@ -5265,27 +3937,18 @@ async function afterpackInflateBase64Gzip(b64) {
     var v = parseFloat(getComputedStyle(appShell).getPropertyValue(which === "left" ? "--rail-left-w" : "--rail-right-w"));
     return isNaN(v) ? (which === "left" ? 262 : 340) : v;
   }
-  /** Widest this rail may get: never past 42% of the shell, never so wide that
-   *  the code pane drops under MIN_CODE, never below MIN_RAIL. */
   function railMax(which) {
-    // the OTHER rail only competes for space while it is actually shown
     var otherShown = which === "left" ? !state.inspectorCollapsed : !state.railCollapsed;
     var other = otherShown ? railWidth(which === "left" ? "right" : "left") : 0;
     var shellW = appShell.getBoundingClientRect().width || window.innerWidth;
     return Math.max(MIN_RAIL, Math.min(shellW * 0.42, shellW - other - MIN_CODE));
   }
-  /* The handle is a focusable `role="separator"`, i.e. a window splitter, so it
-   * has to carry the width it controls -- a splitter with a name but no value
-   * announces nothing to explain the focus ring sitting on it. */
   function syncRailAria(which, w) {
     var handle = resizerEl(which);
     if (!handle) return;
     handle.setAttribute("aria-valuenow", String(Math.round(w == null ? railWidth(which) : w)));
     handle.setAttribute("aria-valuemax", String(Math.round(railMax(which))));
   }
-  /** Re-apply stored rail widths. Runs AFTER the shell exists, and through
-   *  `setRailWidth` so a width stored on a wide screen is re-clamped on a
-   *  narrow one rather than squeezing the code pane to nothing. */
   function restoreRailWidths() {
     if (typeof prefs.railLeftW === "number") setRailWidth("left", prefs.railLeftW, false);
     else syncRailAria("left", null);
@@ -5312,7 +3975,7 @@ async function afterpackInflateBase64Gzip(b64) {
       dragging = true;
       el.classList.add("is-dragging");
       document.body.classList.add("is-resizing");
-      try { el.setPointerCapture(e.pointerId); } catch (err) { /* capture is best-effort */ }
+      try { el.setPointerCapture(e.pointerId); } catch (err) {  }
       e.preventDefault();
     });
     el.addEventListener("pointermove", function (e) {
@@ -5325,14 +3988,13 @@ async function afterpackInflateBase64Gzip(b64) {
       dragging = false;
       el.classList.remove("is-dragging");
       document.body.classList.remove("is-resizing");
-      try { if (e && e.pointerId != null) el.releasePointerCapture(e.pointerId); } catch (err) { /* already released */ }
+      try { if (e && e.pointerId != null) el.releasePointerCapture(e.pointerId); } catch (err) {  }
       if (dragWidth != null) setPref(which === "left" ? "railLeftW" : "railRightW", dragWidth);
       dragWidth = null;
     }
     el.addEventListener("pointerup", endDrag);
     el.addEventListener("pointercancel", endDrag);
     el.addEventListener("lostpointercapture", endDrag);
-    // keyboard parity for the role="separator" (16px per press, 48px with shift)
     el.addEventListener("keydown", function (e) {
       if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
       var step = (e.shiftKey ? 48 : 16) * (e.key === "ArrowLeft" ? -1 : 1) * (which === "left" ? 1 : -1);
@@ -5341,7 +4003,6 @@ async function afterpackInflateBase64Gzip(b64) {
     });
   }
 
-  /* legend / "about this build" popover */
   var popoverEl = document.getElementById("build-popover");
   var legendBtn = document.getElementById("legend-toggle");
   function setPopover(open) {
@@ -5349,7 +4010,6 @@ async function afterpackInflateBase64Gzip(b64) {
     legendBtn.setAttribute("aria-expanded", String(open));
   }
 
-  /* one shared tooltip node, positioned above (or below, if clipped) its target */
   var tooltipEl = document.getElementById("tooltip");
   var tipTarget = null;
   function positionTip(el) {
@@ -5376,11 +4036,6 @@ async function afterpackInflateBase64Gzip(b64) {
     tooltipEl.removeAttribute("data-show");
   }
 
-  /* Theme: two EXPLICIT choices only. There is no "Auto" button because the page
-   * already follows the OS whenever no choice has been made -- `data-theme` simply
-   * stays off the root and `prefers-color-scheme` decides (and keeps deciding, live:
-   * see the media-query listener in wireEvents). The button always shows the theme
-   * currently in effect and flips to the other one. */
   var THEME_LABEL = { light: "☀ Light", dark: "🌙 Dark" };
   var themeBtn = document.getElementById("theme-toggle");
   function systemTheme() {
@@ -5388,7 +4043,6 @@ async function afterpackInflateBase64Gzip(b64) {
   }
   function repaintForTheme() {
     var file = activeFile();
-    // the directive legend's swatch fill is baked from the theme's own vars too
     renderDirectiveLegend();
     if (file) { paintCode(file); renderTree(); renderLegend(); highlightSelectionRing(); }
   }
@@ -5397,18 +4051,13 @@ async function afterpackInflateBase64Gzip(b64) {
     themeBtn.textContent = THEME_LABEL[mode] || THEME_LABEL.dark;
     themeBtn.setAttribute("aria-label", "Color theme: " + mode + ". Activate to switch to " + (mode === "dark" ? "light" : "dark") + ".");
   }
-  /* `forced` = a theme the LINK asked for, not one the reader picked: applied to
-     the page, never written to storage. Without that split, framing this viewer
-     to match a host page would silently re-theme every other map on the origin. */
   function applyTheme(mode, quiet, forced) {
     if (mode !== "light" && mode !== "dark") mode = systemTheme();
     document.documentElement.setAttribute("data-theme", mode);
     labelTheme(mode);
     if (forced) { if (!quiet) repaintForTheme(); return; }
     setPref("theme", mode);
-    /* Also under the old key, so a map generated by an earlier AfterPack that
-       the reader still has on disk keeps following the same choice. */
-    try { localStorage.setItem(THEME_KEY, mode); } catch (e) { /* file:// storage may be unavailable */ }
+    try { localStorage.setItem(THEME_KEY, mode); } catch (e) {}
     if (!quiet) repaintForTheme();
   }
 
@@ -5420,7 +4069,6 @@ async function afterpackInflateBase64Gzip(b64) {
     if (inspectorToggleBtn) {
       inspectorToggleBtn.addEventListener("click", function () { setInspectorCollapsed(!state.inspectorCollapsed, true); });
     }
-    // `<button>` carries keyboard activation on its own -- no key handlers here.
     var inspectorHead = document.getElementById("inspector-head");
     if (inspectorHead) inspectorHead.addEventListener("click", toggleInspectorSection);
     var weakspotsHead = document.getElementById("weakspots-head");
@@ -5438,8 +4086,6 @@ async function afterpackInflateBase64Gzip(b64) {
     var searchEl = document.getElementById("tree-search");
     if (searchEl) searchEl.addEventListener("input", function () { applyTreeSearch(searchEl.value); });
 
-    // shared hover/focus tooltip, delegated so dynamically-rendered [data-tip]
-    // elements need no per-element wiring.
     document.addEventListener("mouseover", function (e) {
       var el = e.target.closest ? e.target.closest("[data-tip]") : null;
       if (el && el !== tipTarget) showTip(el);
@@ -5457,8 +4103,6 @@ async function afterpackInflateBase64Gzip(b64) {
     themeBtn.addEventListener("click", function () {
       applyTheme((themeBtn.dataset.theme || systemTheme()) === "dark" ? "light" : "dark");
     });
-    // No explicit choice yet => keep tracking the OS live (the painted heat colors
-    // are baked from CSS vars at paint time, so a system flip needs a repaint).
     var darkQuery = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
     if (darkQuery) {
       var onSystemThemeChange = function () {
@@ -5469,9 +4113,6 @@ async function afterpackInflateBase64Gzip(b64) {
       if (darkQuery.addEventListener) darkQuery.addEventListener("change", onSystemThemeChange);
       else if (darkQuery.addListener) darkQuery.addListener(onSystemThemeChange);
     }
-    // A click inside the code pane either INSPECTS an attributed span or CLEARS the
-    // selection -- the gutter, whitespace, un-attributed scaffolding and the empty
-    // area below the last line all count as "clicked nothing".
     codeBody.addEventListener("click", function (e) {
       var t = e.target.closest(".tok");
       if (isPickableTok(t)) handleTokActivate(t);
@@ -5484,10 +4125,6 @@ async function afterpackInflateBase64Gzip(b64) {
       e.preventDefault();
       handleTokActivate(t);
     });
-    // Whole-region hover: the syntax pass splits a region into several spans, so a
-    // ring on the hovered span alone would outline a fragment. Tint every span of
-    // the same region (flat colour, so they read as one band) and let CSS keep the
-    // ring on the span actually under the pointer.
     var peerRegion = null;
     function setPeers(idx) {
       if (peerRegion === idx) return;
@@ -5502,9 +4139,6 @@ async function afterpackInflateBase64Gzip(b64) {
       setPeers(idx);
     });
     codeBody.addEventListener("mouseleave", function () { setPeers(null); });
-    // ...and a click OUTSIDE the code pane clears too, except in the chrome that
-    // acts on the current selection (rails, topbar, popover, drag handles) -- those
-    // must not yank the panel out from under their own click.
     document.addEventListener("click", function (e) {
       if (!state.selection) return;
       var t = e.target;
@@ -5512,7 +4146,6 @@ async function afterpackInflateBase64Gzip(b64) {
       if (t.closest(".tok") || t.closest(".rail-left, .rail-right, .topbar, .popover, .tooltip, .pane-resizer, .file-summary, .code-toolbar")) return;
       clearSelection();
     });
-    // #5: the path copy button, on the same `data-copy` contract as the Pro CTAs.
     var headEl = document.getElementById("file-summary");
     if (headEl) {
       headEl.addEventListener("click", function (e) {
@@ -5527,8 +4160,6 @@ async function afterpackInflateBase64Gzip(b64) {
     document.getElementById("inspector").addEventListener("click", function (e) {
       var btn = e.target.closest("[data-copy]");
       if (btn) { copyText(decodeURIComponent(btn.dataset.copy), btn); return; }
-      // "Inspect that region" on the not-attributed card: jump the selection to the
-      // neighbouring region the card just cited, and scroll it into view.
       var jump = e.target.closest("[data-select-region]");
       if (jump) {
         var idx = Number(jump.dataset.selectRegion);
@@ -5571,17 +4202,11 @@ async function afterpackInflateBase64Gzip(b64) {
         if (b) setFileFilter(b.dataset.filter);
       });
     }
-    // A second deep link into an ALREADY-OPEN artifact (the dashboard reusing its
-    // tab). syncHash() uses replaceState, which fires no hashchange, so this only
-    // ever runs for a navigation the reader/dashboard actually made.
     if (window.addEventListener) {
       window.addEventListener("hashchange", function () { applyDeepLink(readHashParams()); });
     }
   }
 
-  /* Re-point the view at a fragment. Same fallbacks as the load-time pass: an
-     unknown facet, an empty facet, or a path this map does not carry leaves the
-     view where it is and prints why. */
   function applyDeepLink(h) {
     var note = "";
     if (typeof h.rail === "boolean") setRailCollapsed(h.rail);
@@ -5611,19 +4236,12 @@ async function afterpackInflateBase64Gzip(b64) {
   }
 
   function init() {
-    // No stored choice (or a stale "auto" from an older build) => leave `data-theme`
-    // OFF and follow the OS; only a real light/dark preference is stamped on the root.
-    // `#theme=` outranks both, for the same reason `#rail=` does (see 6b).
     if (HASH0.theme) applyTheme(HASH0.theme, true, true);
     else if (prefs.theme === "light" || prefs.theme === "dark") applyTheme(prefs.theme, true);
     else labelTheme(systemTheme());
 
-    // Before the first paint, so the grammar is not drawn and then redrawn.
     if (typeof prefs.syntaxOn === "boolean") state.syntaxOn = prefs.syntaxOn;
 
-    // The product link is assembled at runtime on purpose: the render test greps the
-    // emitted HTML for an external scheme to prove the page pulls no subresources,
-    // and an outbound navigation link is not a subresource.
     var brandLink = document.getElementById("brand-logo");
     if (brandLink) brandLink.setAttribute("href", ["https", "//www.afterpack.dev"].join(":"));
 
@@ -5631,10 +4249,6 @@ async function afterpackInflateBase64Gzip(b64) {
     renderDirectiveLegend();
     renderWorkspaceSummary();
     renderMapSize();
-    // A facet that can only ever return nothing is worse than no facet: on Free
-    // (and on any build with no recorded marker) the Marked filter is removed
-    // rather than left as a dead button, and a build with no weak spot at all
-    // drops the Weak one for the same reason.
     var markedBtn = document.getElementById("filter-marked");
     if (markedBtn && !FILES.some(isMarkedFile)) markedBtn.remove();
     var weakBtn = document.getElementById("filter-weak");
@@ -5643,10 +4257,6 @@ async function afterpackInflateBase64Gzip(b64) {
     setDeeplinkNote(deeplinkNote);
     wireEvents();
 
-    // Single-file builds auto-collapse the rail so the code pane gets full
-    // width; a REMEMBERED choice outranks that, because it was deliberate.
-    // `#rail=` outranks BOTH -- an embedder asking for one layout must get it
-    // whatever this origin happens to remember (see 6b). Never remembered.
     setRailCollapsed(
       typeof HASH0.rail === "boolean" ? HASH0.rail
         : typeof prefs.railCollapsed === "boolean" ? prefs.railCollapsed
@@ -5654,12 +4264,6 @@ async function afterpackInflateBase64Gzip(b64) {
     );
     if (prefs.inspectorCollapsed === true) setInspectorCollapsed(true);
 
-    // BOTH in-rail sections default to COLLAPSED, so the restore test is
-    // `!== false` -- the inverse of the `=== true` one line above, whose default
-    // is open. Keep the asymmetry: it is the difference between "the rail is
-    // shown unless you hid it" and "these sections are shut until you open one".
-    // `#weakspots=` outranks the stored preference and is never written back,
-    // same contract as `#rail=` / `#theme=` (see 6b).
     if (HASH0.weakspots === "hidden") {
       var railRight = document.getElementById("rail-right");
       if (railRight) railRight.classList.add("weakspots-hidden");

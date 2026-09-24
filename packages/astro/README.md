@@ -1,11 +1,15 @@
 # @afterpack/astro
 
-AfterPack for **Astro** — obfuscates your production build output automatically. Astro compiles every
-island/client bundle through its own Vite pipeline, so this package is a real (thin) **Astro
-integration**: drop it into `integrations` and it wires [`@afterpack/vite`](../vite) into Astro's Vite
-config for you via the `astro:config:setup` hook. Every client chunk is then obfuscated **inside the
-bundler's own pipeline**, before a byte of it reaches disk, with a Protection Map dropped beside your
-project.
+An Astro integration (Astro 4, 5 and 6) that obfuscates your production JavaScript, using the
+[AfterPack](https://www.afterpack.dev) JavaScript obfuscator.
+
+## Install
+
+```sh
+npm install --save-dev @afterpack/astro
+```
+
+## Usage
 
 ```js
 // astro.config.mjs
@@ -17,45 +21,44 @@ export default defineConfig({
 });
 ```
 
-The default export and the named `afterpackAstro` export are the same function. Every
-**configuration** option is forwarded verbatim to `@afterpack/vite`; its own
-`leg`/`projectRoot` are Vite/Electron plumbing and are not part of this integration's API:
+The default export and the named `afterpackAstro` export are the same function.
+
+The integration adds AfterPack to Astro's Vite build. It obfuscates the JavaScript Astro ships to
+the browser (islands and client scripts) and the server and prerender build of an `output: "server"`
+or hybrid app. Every chunk is obfuscated before it is written, and a failed run fails the build.
+
+## Options
 
 ```js
-integrations: [afterpack({ seed: "git", preset: "medium" })],
+integrations: [afterpack({ preset: "medium", seed: "git" })],
 ```
 
-See [`@afterpack/vite`](../vite) for the full option reference and the opt-out / production-flip policy.
+Options are the same as [`@afterpack/vite`](https://www.npmjs.com/package/@afterpack/vite), except
+`leg` and `projectRoot`, which Astro does not need. See the
+[configuration reference](https://www.afterpack.dev/docs/config) for every key. Options can also
+live in `afterpack.json` or in `AFTERPACK_*` environment variables. The options object wins over
+the environment, which wins over the file.
 
-## How it works
+## Pro
 
-Instead of asking you to hand-wire `vite: { plugins: [afterpackVite()] }` in your Astro config, the
-integration calls `updateConfig({ vite: { plugins: [afterpackVite(options)] } })` inside
-`astro:config:setup`, scoped to Astro's **client** environment. That is the whole package — zero
-obfuscation logic of its own. This mirrors the manual approach the [`@afterpack/vite`](../vite) README
-documents for Astro, just packaged as a one-line integration.
+Without a key, AfterPack runs on your machine and applies basic protection. Set `AFTERPACK_KEY` in
+your environment and the same integration sends the build to AfterPack's cloud, which applies much
+stronger protection. Keep the key out of `astro.config.mjs`. See
+[AfterPack Pro](https://www.afterpack.dev/docs/pro).
 
-## Scope
+## Links
 
-The obfuscated surface is the JS Astro ships to a browser: island bundles and client scripts.
-Server-rendered `.astro` template logic that never reaches a browser is out of scope.
+- [Astro setup guide](https://www.afterpack.dev/docs/frameworks/astro)
+- [Presets and protection levels](https://www.afterpack.dev/docs/presets)
+- [How AfterPack compares to other obfuscators](https://www.afterpack.dev/docs/comparison)
+- [Keeping API keys shipped in a bundle out of plain sight](https://www.afterpack.dev/docs/use-cases/shipped-api-keys)
 
-Astro's SSR/prerender build is out of scope for a second, concrete reason. Astro finishes that build
-with a post-build pass of its own: it captures each chunk, substitutes `@@ASTRO_MANIFEST_REPLACE@@`
-in the captured text by raw string replacement, and writes the result back over whatever is on disk.
-No obfuscator survives that — obfuscate before it and the placeholder is encoded away, so the
-manifest is never injected; obfuscate after it and Astro has already overwritten the file with its
-own cleartext copy. Rather than report a protected server build it did not deliver, this integration
-does not claim that surface. If your Astro app runs `output: "server"` and you need the server bundle
-protected too, say so — it needs engine-side literal preservation, which is tracked.
+## License
 
-## Configuration
-
-Options can also be set in `afterpack.json` — the one config file every AfterPack integration reads,
-at the nearest ancestor of your working directory — or in an `AFTERPACK_<key>` environment variable.
-Most specific wins: the options object here, then the environment, then the file. See
-[`@afterpack/vite`](../vite#configuration) for the canonical names and the validation rules.
+Apache-2.0. The engine it runs, `@afterpack/core`, has its own
+[license](https://www.afterpack.dev/license).
 
 ## Feedback
 
-Questions and proposals: https://github.com/afterpack-dev/afterpack/discussions · Bugs: https://github.com/afterpack-dev/afterpack/issues
+Questions and ideas: [GitHub Discussions](https://github.com/afterpack-dev/afterpack/discussions).
+Bugs: [GitHub Issues](https://github.com/afterpack-dev/afterpack/issues).

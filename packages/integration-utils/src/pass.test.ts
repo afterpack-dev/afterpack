@@ -12,8 +12,9 @@ import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { EngineDiagnostic } from "./diagnostics.js";
 import { DIAG_ALREADY_OBFUSCATED } from "./diagnostics.js";
-import type { EngineFileInput, ObfuscationEngine } from "./pass.js";
+import type { EngineFileInput, EngineFileResult, ObfuscationEngine } from "./pass.js";
 import { runObfuscationPass } from "./pass.js";
+import type { BuildContext, CoreConfig } from "./policy.js";
 import {
   PROTECTION_RECEIPT_FILE,
   type ProtectionReceipt,
@@ -49,16 +50,20 @@ interface FakeResult {
 
 function makeEngine(
   impl: (source: string) => FakeResult,
-  source = "local",
+  source: "local" | "cloud" | "wasm" = "local",
 ): {
   engine: ObfuscationEngine;
-  calls: { inputs: EngineFileInput[]; configJson: string; buildContextJson?: string }[];
+  calls: { inputs: EngineFileInput[]; config: CoreConfig; buildContext?: BuildContext }[];
 } {
-  const calls: { inputs: EngineFileInput[]; configJson: string; buildContextJson?: string }[] = [];
+  const calls: {
+    inputs: EngineFileInput[];
+    config: CoreConfig;
+    buildContext?: BuildContext;
+  }[] = [];
   const engine: ObfuscationEngine = {
-    async processBatch(inputs, configJson, buildContextJson) {
-      calls.push({ inputs, configJson, buildContextJson });
-      const files = inputs.map((f) => {
+    async processBatch(inputs, config, buildContext) {
+      calls.push({ inputs, config, buildContext: buildContext ?? undefined });
+      const files: EngineFileResult[] = inputs.map((f) => {
         const r = impl(f.source);
         if (r.fail) {
           return {
@@ -66,17 +71,18 @@ function makeEngine(
             code: "",
             status: "failure",
             error: r.fail,
-            diagnostics: r.diagnostics && JSON.stringify(r.diagnostics),
+            unobfuscated: false,
+            diagnostics: r.diagnostics,
           };
         }
         return {
           filePath: f.filePath,
           code: r.code ?? `OBF:${f.source}`,
           sourceMap: r.sourceMap ?? undefined,
-          protectionMap: r.protectionMap != null ? JSON.stringify(r.protectionMap) : undefined,
+          protectionMap: r.protectionMap ?? undefined,
           status: "success",
           unobfuscated: r.unobfuscated ?? false,
-          diagnostics: JSON.stringify(r.diagnostics ?? []),
+          diagnostics: r.diagnostics ?? [],
         };
       });
       return {
@@ -84,7 +90,7 @@ function makeEngine(
         totalFiles: files.length,
         successCount: files.filter((f) => f.status === "success").length,
         failureCount: files.filter((f) => f.status === "failure").length,
-        source,
+        source: source as "local" | "cloud",
       };
     },
   };
@@ -151,9 +157,7 @@ describe("runObfuscationPass (dev policy)", () => {
     expect(result.fileCount).toBe(2);
     expect(result.protectionMapPath).toContain("protectionMap.html");
     expect(result.policy.protectionMap).toBe(true);
-    expect((JSON.parse(calls[0].configJson).protectionMap as { enabled: boolean }).enabled).toBe(
-      true,
-    );
+    expect((calls[0].config.protectionMap as { enabled: boolean }).enabled).toBe(true);
   });
 
   it("writes the original-source backup only when the caller opts in with backup:true", async () => {
@@ -181,9 +185,7 @@ describe("runObfuscationPass (dev policy)", () => {
     await runObfuscationPass({ ...baseOptions([a], engine), logger: silentLogger().logger });
 
     expect(calls[0].inputs[0].inputSourceMap).toBe(upstream);
-    expect(
-      (JSON.parse(calls[0].configJson).sourceMap as { enabled?: boolean }).enabled,
-    ).toBeUndefined();
+    expect((calls[0].config.sourceMap as { enabled?: boolean }).enabled).toBeUndefined();
   });
 
   it("passes the resolved seed into the shared config", async () => {
@@ -195,7 +197,7 @@ describe("runObfuscationPass (dev policy)", () => {
       seed: 12345,
       logger: silentLogger().logger,
     });
-    expect(JSON.parse(calls[0].configJson).seed).toBe(12345);
+    expect(calls[0].config.seed).toBe(12345);
   });
 });
 
@@ -217,9 +219,7 @@ describe("runObfuscationPass (production policy)", () => {
     expect(existsSync(`${a}.map`)).toBe(false);
     expect(readFileSync(a, "utf8")).not.toContain("sourceMappingURL");
     expect(result.protectionMapPath).toBeNull();
-    expect((JSON.parse(calls[0].configJson).protectionMap as { enabled: boolean }).enabled).toBe(
-      false,
-    );
+    expect((calls[0].config.protectionMap as { enabled: boolean }).enabled).toBe(false);
   });
 });
 
@@ -239,7 +239,7 @@ describe("runObfuscationPass fail-closed", () => {
     const engine: ObfuscationEngine = {
       async processBatch() {
         return {
-          files: [{ filePath: "/ghost.js", code: "x", status: "success" }],
+          files: [{ filePath: "/ghost.js", code: "x", status: "success", unobfuscated: false }],
           totalFiles: 1,
           successCount: 1,
           failureCount: 0,
@@ -364,7 +364,7 @@ describe("runObfuscationPass directive capture", () => {
       directives: true,
       logger: silentLogger().logger,
     });
-    const regions = JSON.parse(calls[0].configJson).regions as Array<{ floor?: boolean }>;
+    const regions = calls[0].config.regions as Array<{ floor?: boolean }>;
     expect(regions).toHaveLength(1);
     expect(regions[0].floor).toBe(false);
   });
@@ -374,7 +374,7 @@ describe("runObfuscationPass directive capture", () => {
     writeFileSync(a, 'const s = /* @afterpack strings.encode=off */ "KEEP";\n');
     const { engine, calls } = makeEngine(() => ({}));
     await runObfuscationPass({ ...baseOptions([a], engine), logger: silentLogger().logger });
-    expect("regions" in JSON.parse(calls[0].configJson)).toBe(false);
+    expect("regions" in calls[0].config).toBe(false);
   });
 });
 
@@ -387,7 +387,7 @@ describe("runObfuscationPass identifiers.globals.rename scope", () => {
     const { engine, calls } = makeEngine(() => ({}));
     const cap = silentLogger();
     await runObfuscationPass({ ...baseOptions([a], engine), directives: true, logger: cap.logger });
-    expect(JSON.parse(calls[0].configJson).identifiers?.globals?.rename).toBe(true);
+    expect(calls[0].config.identifiers?.globals?.rename).toBe(true);
     expect(cap.warnings.some((w) => w.includes("REFUSED"))).toBe(false);
   });
 
@@ -405,8 +405,10 @@ describe("runObfuscationPass identifiers.globals.rename scope", () => {
       logger: cap.logger,
     });
 
-    const config = JSON.parse(calls[0].configJson);
-    expect(config.identifiers?.renameGlobals).toBeUndefined();
+    const config = calls[0].config;
+    expect(
+      (config.identifiers as Record<string, unknown> | undefined)?.renameGlobals,
+    ).toBeUndefined();
     const refusal = cap.warnings.find((w) => w.includes("REFUSED"));
     expect(refusal).toBeDefined();
     expect(refusal).toContain(b);
@@ -430,7 +432,9 @@ describe("runObfuscationPass identifiers.globals.rename scope", () => {
       logger: cap.logger,
     });
 
-    expect(JSON.parse(calls[0].configJson).identifiers?.renameGlobals).toBeUndefined();
+    expect(
+      (calls[0].config.identifiers as Record<string, unknown> | undefined)?.renameGlobals,
+    ).toBeUndefined();
     const refusal = cap.warnings.find((w) => w.includes("REFUSED"));
     expect(refusal).toBeDefined();
     expect(refusal).toContain("app.tsx");
@@ -452,7 +456,9 @@ describe("runObfuscationPass identifiers.globals.rename scope", () => {
       logger: cap.logger,
     });
 
-    expect(JSON.parse(calls[0].configJson).identifiers?.renameGlobals).toBeUndefined();
+    expect(
+      (calls[0].config.identifiers as Record<string, unknown> | undefined)?.renameGlobals,
+    ).toBeUndefined();
     const refusal = cap.warnings.find((w) => w.includes("REFUSED"));
     expect(refusal).toBeDefined();
     expect(refusal).toContain("./src/legacy.js");
@@ -485,15 +491,9 @@ describe("runObfuscationPass post-minify (sourcesContent) directive capture", ()
       logger: silentLogger().logger,
     });
 
-    const regions = JSON.parse(calls[0].inputs[0].regions ?? "[]") as Array<{
-      start: number;
-      end: number;
-      target?: number;
-      floor?: boolean;
-      label?: string;
-    }>;
+    const regions = calls[0].inputs[0].regions ?? [];
     expect(regions).toEqual([{ start: 6, end: 19, target: 0, floor: false, label: "skip" }]);
-    expect("regions" in JSON.parse(calls[0].configJson)).toBe(false);
+    expect("regions" in calls[0].config).toBe(false);
   });
 
   it("discovers a Turbopack-style NON-adjacent map via the //# sourceMappingURL comment", async () => {
@@ -513,7 +513,7 @@ describe("runObfuscationPass post-minify (sourcesContent) directive capture", ()
       logger: silentLogger().logger,
     });
 
-    const regions = JSON.parse(calls[0].inputs[0].regions ?? "[]") as Array<{ start: number }>;
+    const regions = calls[0].inputs[0].regions ?? [];
     expect(regions).toHaveLength(1);
     expect(regions[0].start).toBe(6);
   });
@@ -1011,14 +1011,11 @@ describe("runObfuscationPass telemetry", () => {
 describe("runObfuscationPass (git context)", () => {
   const SHA = "3c332a94b80dce02cbefe6dcb641d6763e7a7aed";
 
-  type Call = { configJson: string; buildContextJson?: string };
-  const contextOf = (calls: Call[]) =>
-    calls[0].buildContextJson === undefined
-      ? undefined
-      : (JSON.parse(calls[0].buildContextJson) as { commitSha?: string; ref?: string });
+  type Call = { config: CoreConfig; buildContext?: BuildContext };
+  const contextOf = (calls: Call[]) => calls[0].buildContext;
   const noContextOnConfig = (calls: Call[]) => {
-    expect("git" in (JSON.parse(calls[0].configJson) as Record<string, unknown>)).toBe(false);
-    expect(calls[0].configJson).not.toContain("git");
+    expect("git" in calls[0].config).toBe(false);
+    expect(JSON.stringify(calls[0].config)).not.toContain("git");
   };
 
   it("puts an explicitly declared commit on the build-context lane", async () => {
@@ -1059,7 +1056,7 @@ describe("runObfuscationPass (git context)", () => {
     });
     expect(contextOf(calls)).toBeUndefined();
     noContextOnConfig(calls);
-    expect(calls[0].configJson).not.toContain("not-a-sha");
+    expect(JSON.stringify(calls[0].config)).not.toContain("not-a-sha");
   });
 
   it("sends NOTHING — absent, not empty — when no git context exists", async () => {
@@ -1140,7 +1137,7 @@ describe("runObfuscationPass — the cross-bundle build seed", () => {
       combinedProtectionMap: { buildDir: dir, afterpackDir: join(root, ".afterpack", name) },
       logger: captured.logger,
     });
-    return { result, config: JSON.parse(calls[0].configJson), ...captured };
+    return { result, config: calls[0].config, ...captured };
   }
 
   it("gives every leg of one build the SAME seed, and says where it came from", async () => {

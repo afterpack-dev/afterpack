@@ -198,9 +198,7 @@ describe("afterpack parcel optimizer", () => {
   it("forwards a hand-authored regions array into the shared engine config", async () => {
     await run({ config: { regions: [{ start: 0, end: 5, target: 9, floor: false }] } });
 
-    expect(JSON.parse(engineCalls[0].configJson).regions).toEqual([
-      { start: 0, end: 5, target: 9, floor: false },
-    ]);
+    expect(engineCalls[0].config.regions).toEqual([{ start: 0, end: 5, target: 9, floor: false }]);
   });
 });
 
@@ -230,7 +228,7 @@ describe("Parcel content-hash placeholders", () => {
 });
 
 describe("build seed across a target's bundles", () => {
-  const seedsSoFar = (): unknown[] => engineCalls.map((c) => JSON.parse(c.configJson).seed);
+  const seedsSoFar = (): unknown[] => engineCalls.map((c) => c.config.seed);
 
   it("gives every bundle of ONE build the SAME freshly-drawn seed", async () => {
     await run({ bundle: fakeBundle({ displayName: "app.[hash].js", publicId: "aaa" }) });
@@ -279,7 +277,7 @@ describe("build seed across a target's bundles", () => {
     await run({ bundle: fakeBundle({ publicId: "aaa" }), env });
     await run({ bundle: fakeBundle({ publicId: "bbb" }), env });
 
-    expect(engineCalls.map((c) => JSON.parse(c.configJson).seed)).toEqual([5150, 5150]);
+    expect(engineCalls.map((c) => c.config.seed)).toEqual([5150, 5150]);
   });
 });
 
@@ -359,7 +357,7 @@ describe("directives", () => {
     });
 
     expect(engineCalls[0].regions).toBeDefined();
-    const regions = JSON.parse(engineCalls[0].regions as string) as Array<{
+    const regions = engineCalls[0].regions as Array<{
       start: number;
       end: number;
     }>;

@@ -60,9 +60,9 @@ import {
   type JsonDocument,
   type OutputMode,
   outputModeOf,
-  parseEngineDiagnostics,
   reportingLogger,
   resolveOutputMode,
+  sanitizeEngineDiagnostics,
   sortDiagnostics,
   sortedRecord,
   toJsonDiagnostic,
@@ -134,13 +134,9 @@ interface CapturedFile {
 
 function observeEngine(engine: ObfuscationEngine, into: CapturedFile[]): ObfuscationEngine {
   return {
-    processBatch: async (inputs, configJson, buildContextJson) => {
+    processBatch: async (inputs, config, buildContext) => {
       const bytesIn = new Map(inputs.map((i) => [i.filePath, Buffer.byteLength(i.source)]));
-      const batch: EngineBatchResult = await engine.processBatch(
-        inputs,
-        configJson,
-        buildContextJson,
-      );
+      const batch: EngineBatchResult = await engine.processBatch(inputs, config, buildContext);
       for (const file of batch.files) into.push(captureFile(file, bytesIn.get(file.filePath) ?? 0));
       return batch;
     },
@@ -155,7 +151,7 @@ function captureFile(file: EngineFileResult, bytesIn: number): CapturedFile {
     bytesOut: Buffer.byteLength(file.code),
     status: file.status,
     unobfuscated: file.unobfuscated === true,
-    diagnostics: parseEngineDiagnostics(file.diagnostics).map((d) => ({
+    diagnostics: sanitizeEngineDiagnostics(file.diagnostics).map((d) => ({
       ...d,
       file: d.file ?? file.filePath,
     })),

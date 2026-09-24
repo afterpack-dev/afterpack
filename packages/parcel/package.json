@@ -1,7 +1,7 @@
 {
   "name": "@afterpack/parcel-optimizer",
   "version": "0.1.0",
-  "description": "AfterPack Parcel 2 optimizer - obfuscate your build output automatically",
+  "description": "Parcel 2 optimizer for AfterPack: obfuscate each JavaScript bundle in memory during parcel build",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -56,9 +56,22 @@
     "url": "https://github.com/afterpack-dev/afterpack.git",
     "directory": "packages/parcel"
   },
+  "keywords": [
+    "obfuscator",
+    "javascript-obfuscator",
+    "obfuscation",
+    "code-protection",
+    "source-code-protection",
+    "javascript-security",
+    "anti-reverse-engineering",
+    "parcel",
+    "parcel-plugin",
+    "parcel-optimizer",
+    "afterpack"
+  ],
   "author": "AfterPack (https://www.afterpack.dev)",
   "license": "Apache-2.0",
-  "homepage": "https://www.afterpack.dev",
+  "homepage": "https://www.afterpack.dev/docs/frameworks/parcel",
   "bugs": {
     "url": "https://github.com/afterpack-dev/afterpack/issues"
   }

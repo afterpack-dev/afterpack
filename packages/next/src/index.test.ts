@@ -68,7 +68,7 @@ describe("withAfterpack", () => {
     });
 
     const { engineCalls } = await import("../../../test/core-fake.js");
-    const config = JSON.parse(engineCalls[0].configJson) as {
+    const config = engineCalls[0].config as {
       strings?: { encode?: boolean };
       preset?: string;
     };

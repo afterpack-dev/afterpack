@@ -112,7 +112,7 @@ describe("directive capture through a real production webpack build (terser stri
     expect(main.input).toContain("REGION_OUTSIDE_MARKER");
     expect(main.input).toContain("PRELUDE_MARKER");
 
-    const regions = JSON.parse(main.regions as string) as Array<{
+    const regions = main.regions as Array<{
       start: number;
       end: number;
       target?: number;
@@ -172,6 +172,6 @@ describe("directive capture through a real production webpack build (terser stri
     built.n = 0;
     await build("source-map", { cacheDirectory, out: "warm", extra: entryLoaderRunCounter(built) });
     expect(built.n, "the warm build restored the module past every build hook").toBe(0);
-    expect(callWith("REGION_INSIDE_MARKER").regions).toBe(cold);
+    expect(callWith("REGION_INSIDE_MARKER").regions).toEqual(cold);
   }, 120_000);
 });

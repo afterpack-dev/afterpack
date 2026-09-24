@@ -15,6 +15,7 @@ const includePatterns = [
   "packages/*/test/**/*.{ts,mts,cts,js,mjs,cjs}",
   "packages/*/vitest.config.ts",
   "packages/protection-map/*.{mjs,js}",
+  "packages/protection-map/*.html",
   "packages/*/e2e/**/*.spec.ts",
   "packages/*/e2e/**/*.mjs",
   "e2e/**/*.{ts,mjs}",
@@ -131,6 +132,93 @@ function scriptKindFor(relPath) {
   return ts.ScriptKind.JS;
 }
 
+function findCssCommentRanges(text, offset) {
+  const ranges = [];
+  let i = 0;
+  const n = text.length;
+  while (i < n) {
+    const c = text[i];
+    if (c === '"' || c === "'") {
+      const quote = c;
+      i += 1;
+      while (i < n && text[i] !== quote) i += text[i] === "\\" ? 2 : 1;
+      i += 1;
+      continue;
+    }
+    if (c === "/" && text[i + 1] === "*") {
+      const start = i;
+      i += 2;
+      while (i < n && !(text[i] === "*" && text[i + 1] === "/")) i += 1;
+      const end = Math.min(i + 2, n);
+      ranges.push({
+        pos: offset + start,
+        end: offset + end,
+        kind: ts.SyntaxKind.MultiLineCommentTrivia,
+      });
+      i = end;
+      continue;
+    }
+    i += 1;
+  }
+  return ranges;
+}
+
+function findHtmlCommentRanges(text, offset) {
+  const ranges = [];
+  let i = 0;
+  while (true) {
+    const start = text.indexOf("<!--", i);
+    if (start === -1) break;
+    const end = text.indexOf("-->", start + 4);
+    if (end === -1) break;
+    ranges.push({
+      pos: offset + start,
+      end: offset + end + 3,
+      kind: ts.SyntaxKind.MultiLineCommentTrivia,
+    });
+    i = end + 3;
+  }
+  return ranges;
+}
+
+function findJsCommentRanges(text, offset) {
+  const sourceFile = ts.createSourceFile(
+    "inline.js",
+    text,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.JS,
+  );
+  return collectCommentRanges(sourceFile, text).map((range) => ({
+    pos: offset + range.pos,
+    end: offset + range.end,
+    kind: range.kind,
+  }));
+}
+
+const HTML_BLOCK_RE = /<style\b[^>]*>([\s\S]*?)<\/style>|<script\b[^>]*>([\s\S]*?)<\/script>/gi;
+
+function collectHtmlFileRanges(text) {
+  const ranges = [];
+  let cursor = 0;
+  let match = HTML_BLOCK_RE.exec(text);
+  while (match !== null) {
+    ranges.push(...findHtmlCommentRanges(text.slice(cursor, match.index), cursor));
+    const isStyle = match[1] !== undefined;
+    const inner = isStyle ? match[1] : match[2];
+    const innerStart = match.index + match[0].indexOf(">") + 1;
+    ranges.push(
+      ...(isStyle
+        ? findCssCommentRanges(inner, innerStart)
+        : findJsCommentRanges(inner, innerStart)),
+    );
+    cursor = match.index + match[0].length;
+    match = HTML_BLOCK_RE.exec(text);
+  }
+  ranges.push(...findHtmlCommentRanges(text.slice(cursor), cursor));
+  return ranges.sort((a, b) => a.pos - b.pos);
+}
+
 function snippetFor(raw) {
   return raw.replace(/\s+/g, " ").trim().slice(0, 80);
 }
@@ -148,14 +236,19 @@ for (const relPath of targetFiles) {
   if (!fs.existsSync(absPath)) continue;
   const text = fs.readFileSync(absPath, "utf8");
   const lineStarts = buildLineStarts(text);
-  const sourceFile = ts.createSourceFile(
-    relPath,
-    text,
-    ts.ScriptTarget.Latest,
-    true,
-    scriptKindFor(relPath),
-  );
-  const ranges = collectCommentRanges(sourceFile, text);
+  let ranges;
+  if (relPath.endsWith(".html")) {
+    ranges = collectHtmlFileRanges(text);
+  } else {
+    const sourceFile = ts.createSourceFile(
+      relPath,
+      text,
+      ts.ScriptTarget.Latest,
+      true,
+      scriptKindFor(relPath),
+    );
+    ranges = collectCommentRanges(sourceFile, text);
+  }
   for (const range of ranges) {
     commentTotal += 1;
     const raw = text.slice(range.pos, range.end);

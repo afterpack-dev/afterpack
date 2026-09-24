@@ -5,9 +5,9 @@ import {
   type EngineDiagnostic,
   formatAlreadyObfuscatedMessage,
   formatDiagnostic,
-  parseDiagnosticsJson,
   reportDiagnostics,
   resolveDiagnosticsVerbosity,
+  sanitizeEngineDiagnostics,
   summarizeDiagnostics,
 } from "./diagnostics.js";
 
@@ -74,21 +74,19 @@ describe("formatDiagnostic", () => {
   });
 });
 
-describe("parseDiagnosticsJson", () => {
+describe("sanitizeEngineDiagnostics", () => {
   it("strips escape sequences and control characters from every printed field", () => {
     const ESC = String.fromCharCode(0x1b);
-    const parsed = parseDiagnosticsJson(
-      JSON.stringify([
-        {
-          severity: `error${ESC}[2J`,
-          code: `DIAG_${ESC}]8;;https://evil.example${String.fromCharCode(0x07)}X`,
-          message: "m",
-          file: `/src/a${ESC}[1A.ts`,
-          span: { startByte: `1${ESC}[2J`, endByte: 2 },
-          data: { kind: "parse", note: `n${ESC}[5mote`, count: 2, list: [`${ESC}[2J`] },
-        },
-      ]),
-    );
+    const parsed = sanitizeEngineDiagnostics([
+      {
+        severity: `error${ESC}[2J`,
+        code: `DIAG_${ESC}]8;;https://evil.example${String.fromCharCode(0x07)}X`,
+        message: "m",
+        file: `/src/a${ESC}[1A.ts`,
+        span: { startByte: `1${ESC}[2J`, endByte: 2 },
+        data: { kind: "parse", note: `n${ESC}[5mote`, count: 2, list: [`${ESC}[2J`] },
+      },
+    ]);
     const d = parsed?.diagnostics[0];
     expect(d).toMatchObject({
       severity: "error",
@@ -103,12 +101,12 @@ describe("parseDiagnosticsJson", () => {
   });
 
   it("distinguishes a genuinely clean file from an absent lane", () => {
-    expect(parseDiagnosticsJson("[]")).toEqual({ diagnostics: [], malformed: 0 });
-    expect(parseDiagnosticsJson(undefined)).toBeNull();
-    expect(parseDiagnosticsJson(null)).toBeNull();
+    expect(sanitizeEngineDiagnostics([])).toEqual({ diagnostics: [], malformed: 0 });
+    expect(sanitizeEngineDiagnostics(undefined)).toBeNull();
+    expect(sanitizeEngineDiagnostics(null)).toBeNull();
   });
 
-  it("round-trips a diagnostic with its span, file and tagged data intact", () => {
+  it("passes a diagnostic with its span, file and tagged data through intact", () => {
     const d = diag({
       severity: "error",
       code: "DIAG_PARSE_ERROR",
@@ -116,28 +114,28 @@ describe("parseDiagnosticsJson", () => {
       span: { startByte: 1, endByte: 2 },
       data: { kind: "parseError", parserErrorKind: "Expected" },
     });
-    expect(parseDiagnosticsJson(JSON.stringify([d]))).toEqual({
+    expect(sanitizeEngineDiagnostics([d])).toEqual({
       diagnostics: [d],
       malformed: 0,
     });
   });
 
-  it("reports UNKNOWN rather than throwing on a malformed or non-array payload", () => {
-    expect(parseDiagnosticsJson("{oops")).toBeNull();
-    expect(parseDiagnosticsJson('{"severity":"info"}')).toBeNull();
+  it("reports UNKNOWN rather than throwing on a non-array payload", () => {
+    expect(sanitizeEngineDiagnostics({ severity: "info" })).toBeNull();
+    expect(sanitizeEngineDiagnostics("not an array")).toBeNull();
   });
 
   it("counts entries the contract guard dropped instead of passing them off as clean", () => {
-    const payload = JSON.stringify([diag({}), { severity: "info" }, null, 7]);
-    expect(parseDiagnosticsJson(payload)).toEqual({ diagnostics: [diag({})], malformed: 3 });
+    const payload = [diag({}), { severity: "info" }, null, 7];
+    expect(sanitizeEngineDiagnostics(payload)).toEqual({ diagnostics: [diag({})], malformed: 3 });
   });
 });
 
 describe("collectDiagnostics", () => {
   it("attributes a file-less diagnostic to the carrier, and leaves an owned file alone", () => {
     const collected = collectDiagnostics([
-      { filePath: "/d/a.js", diagnostics: JSON.stringify([diag({})]) },
-      { filePath: "/d/b.js", diagnostics: JSON.stringify([diag({ file: "/src/real.ts" })]) },
+      { filePath: "/d/a.js", diagnostics: [diag({})] },
+      { filePath: "/d/b.js", diagnostics: [diag({ file: "/src/real.ts" })] },
     ]);
     expect(collected.diagnostics.map((d) => d.file)).toEqual(["/d/a.js", "/src/real.ts"]);
     expect(collected).toMatchObject({ unknownFiles: 0, malformedEntries: 0 });
@@ -146,8 +144,8 @@ describe("collectDiagnostics", () => {
   it("counts an absent lane and a dropped entry apart — they are different facts", () => {
     const collected = collectDiagnostics([
       { filePath: "/d/a.js" },
-      { filePath: "/d/b.js", diagnostics: JSON.stringify([{ severity: "info" }]) },
-      { filePath: "/d/c.js", diagnostics: "[]" },
+      { filePath: "/d/b.js", diagnostics: [{ severity: "info" }] },
+      { filePath: "/d/c.js", diagnostics: [] },
     ]);
     expect(collected).toEqual({ diagnostics: [], unknownFiles: 1, malformedEntries: 1 });
   });

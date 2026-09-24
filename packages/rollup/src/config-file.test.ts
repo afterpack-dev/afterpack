@@ -31,7 +31,7 @@ async function run(options: AfterpackRollupOptions = {}): Promise<Record<string,
   };
   // biome-ignore lint/suspicious/noExplicitAny: exercising the Rollup hook directly in a test.
   await (plugin.generateBundle as any).handler.call({}, { dir: outDir }, bundle);
-  return JSON.parse(engineCalls[engineCalls.length - 1].configJson) as Record<string, unknown>;
+  return engineCalls[engineCalls.length - 1].config as Record<string, unknown>;
 }
 
 describe("afterpackRollup reads afterpack.json", () => {

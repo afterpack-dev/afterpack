@@ -21,6 +21,7 @@ import {
   collectDiagnostics,
   type DiagnosticsSummary,
   type DiagnosticsVerbosity,
+  type EngineDiagnostic,
   formatAlreadyObfuscatedMessage,
   reportDiagnostics,
   resolveDiagnosticsVerbosity,
@@ -36,8 +37,10 @@ import { type CapturedModule, colorRegions, type DecodedSourceMap } from "./map-
 import { type CloudNotice, reportNotices, sanitizeServerText } from "./notices.js";
 import {
   type AfterpackArtifactOptions,
-  buildContextJson,
-  buildEngineConfigJson,
+  type BuildContext,
+  buildContext,
+  buildEngineConfig,
+  type CoreConfig,
   DEFAULT_PRESET,
   type EnvLike,
   type Preset,
@@ -51,7 +54,7 @@ import {
   type WriteProtectionReceiptInput,
   writeProtectionReceipt,
 } from "./receipt.js";
-import type { EngineConfigSubset } from "./registry.js";
+import type { CoreConfigSubset } from "./registry.js";
 import { resolveBuildSeed, type SeedOption, type SeedOrigin } from "./seed.js";
 import { discoverInputSourceMap } from "./source-map.js";
 import { formatPassSummary, type PassSummaryStyle } from "./summary.js";
@@ -65,18 +68,18 @@ export interface EngineFileInput {
   filePath: string;
   source: string;
   inputSourceMap?: string;
-  regions?: string;
+  regions?: RegionConfig[];
 }
 
 export interface EngineFileResult {
   filePath: string;
   code: string;
   sourceMap?: string;
-  protectionMap?: string;
-  status: string;
+  protectionMap?: unknown;
+  status: "success" | "failure";
   error?: string;
-  unobfuscated?: boolean;
-  diagnostics?: string;
+  unobfuscated: boolean;
+  diagnostics?: EngineDiagnostic[];
 }
 
 export interface EngineBatchResult {
@@ -84,7 +87,7 @@ export interface EngineBatchResult {
   totalFiles: number;
   successCount: number;
   failureCount: number;
-  source: string;
+  source: "local" | "cloud";
   notices?: CloudNotice[];
   engineVersion?: string;
 }
@@ -92,8 +95,8 @@ export interface EngineBatchResult {
 export interface ObfuscationEngine {
   processBatch(
     inputs: EngineFileInput[],
-    configJson: string,
-    buildContextJson?: string,
+    config: CoreConfig,
+    buildContext?: BuildContext | null,
   ): Promise<EngineBatchResult>;
   version?(): Promise<string>;
 }
@@ -140,7 +143,7 @@ export interface ObfuscationPassOptions {
   preset?: Preset;
   complexity?: number;
   regions?: RegionConfig[];
-  engineConfig?: EngineConfigSubset;
+  engineConfig?: CoreConfigSubset;
   directives?: boolean;
   postMinify?: boolean;
   directivesExplicit?: boolean;
@@ -320,7 +323,7 @@ export async function runObfuscationPass(
     const inputSourceMap = provided
       ? (provided.inputSourceMap ?? null)
       : discoverInputSourceMap(filePath, source);
-    let regions: string | undefined;
+    let regions: RegionConfig[] | undefined;
     const modules = options.capturedByFile?.get(filePath);
     if (modules?.some((m) => m.directives.length > 0)) {
       const map = parseSourceMap(inputSourceMap);
@@ -329,7 +332,7 @@ export async function runObfuscationPass(
       } else {
         const colored = colorRegions(source, map, modules, (m) => logger.warn(prefix(m)));
         if (colored.length > 0) {
-          regions = JSON.stringify(colored);
+          regions = colored;
           coloredRegionCount += colored.length;
         }
       }
@@ -354,7 +357,7 @@ export async function runObfuscationPass(
         if (mods.length > 0) {
           const colored = colorRegions(source, map, mods, (m) => logger.warn(prefix(m)));
           if (colored.length > 0) {
-            regions = JSON.stringify(colored);
+            regions = colored;
             coloredRegionCount += colored.length;
           }
         }
@@ -454,7 +457,7 @@ export async function runObfuscationPass(
       ? null
       : detectGitContext(artifactOptions.git ?? null, { env, cwd: gitignoreDir });
 
-  const configJson = buildEngineConfigJson({
+  const engineConfig = buildEngineConfig({
     policy,
     seed,
     preset: options.preset,
@@ -472,13 +475,13 @@ export async function runObfuscationPass(
   }
   const engineStartedAt = Date.now();
   const prepMs = engineStartedAt - passStartedAt;
-  const contextJson = buildContextJson(git, {
+  const context = buildContext(git, {
     clientVersion: options.client?.coreVersion,
     client: clientString(options.client),
   });
   let batch: EngineBatchResult;
   try {
-    batch = await engine.processBatch(inputs, configJson, contextJson);
+    batch = await engine.processBatch(inputs, engineConfig, context);
   } catch (error) {
     const cloud = toCloudApiError(error, { identity: options.client, prefix });
     if (!cloud) throw error;
@@ -553,7 +556,7 @@ export async function runObfuscationPass(
     else transformedFiles.push(f.filePath);
 
     if (policy.protectionMap && f.protectionMap != null) {
-      protectionMapDocs.push(JSON.parse(f.protectionMap));
+      protectionMapDocs.push(f.protectionMap);
     }
     verified.push({ result: f, source });
   }

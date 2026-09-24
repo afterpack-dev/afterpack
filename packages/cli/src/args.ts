@@ -2,7 +2,7 @@ import {
   type AfterpackConfig,
   CONFIG_KEYS,
   type ConfigKeyDef,
-  type EngineConfigSubset,
+  type CoreConfigSubset,
   type PluginOptionsView,
   toEngineConfig,
   toPluginOptions,
@@ -13,7 +13,7 @@ import { dim } from "./format.js";
 
 export interface CliRunOptions extends PluginOptionsView {
   pathsInclude: string[];
-  engineConfig: EngineConfigSubset;
+  engineConfig: CoreConfigSubset;
 }
 
 export function toRunOptions(config: AfterpackConfig): CliRunOptions {

@@ -1,7 +1,7 @@
 {
   "name": "@afterpack/esbuild",
   "version": "0.1.0",
-  "description": "AfterPack esbuild plugin - obfuscate your build output automatically",
+  "description": "esbuild plugin for AfterPack: obfuscate your JavaScript output when the esbuild build finishes",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -51,9 +51,21 @@
     "url": "https://github.com/afterpack-dev/afterpack.git",
     "directory": "packages/esbuild"
   },
+  "keywords": [
+    "obfuscator",
+    "javascript-obfuscator",
+    "obfuscation",
+    "code-protection",
+    "source-code-protection",
+    "javascript-security",
+    "anti-reverse-engineering",
+    "esbuild",
+    "esbuild-plugin",
+    "afterpack"
+  ],
   "author": "AfterPack (https://www.afterpack.dev)",
   "license": "Apache-2.0",
-  "homepage": "https://www.afterpack.dev",
+  "homepage": "https://www.afterpack.dev/docs/frameworks/esbuild",
   "bugs": {
     "url": "https://github.com/afterpack-dev/afterpack/issues"
   }

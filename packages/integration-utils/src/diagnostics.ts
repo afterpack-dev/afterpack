@@ -32,7 +32,7 @@ export interface DiagnosticsSummary {
 
 interface DiagnosticCarrier {
   filePath?: string;
-  diagnostics?: string;
+  diagnostics?: unknown;
 }
 
 interface ParsedDiagnostics {
@@ -100,17 +100,11 @@ function sanitizeDiagnostic(d: EngineDiagnostic): EngineDiagnostic {
   return out;
 }
 
-export function parseDiagnosticsJson(json: string | null | undefined): ParsedDiagnostics | null {
-  if (json == null) return null;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(json);
-  } catch {
-    return null;
-  }
-  if (!Array.isArray(parsed)) return null;
-  const diagnostics = parsed.filter(isEngineDiagnostic).map(sanitizeDiagnostic);
-  return { diagnostics, malformed: parsed.length - diagnostics.length };
+export function sanitizeEngineDiagnostics(value: unknown): ParsedDiagnostics | null {
+  if (value == null) return null;
+  if (!Array.isArray(value)) return null;
+  const diagnostics = value.filter(isEngineDiagnostic).map(sanitizeDiagnostic);
+  return { diagnostics, malformed: value.length - diagnostics.length };
 }
 
 export function collectDiagnostics(files: readonly DiagnosticCarrier[]): CollectedDiagnostics {
@@ -118,7 +112,7 @@ export function collectDiagnostics(files: readonly DiagnosticCarrier[]): Collect
   let unknownFiles = 0;
   let malformedEntries = 0;
   for (const file of files) {
-    const parsed = parseDiagnosticsJson(file.diagnostics);
+    const parsed = sanitizeEngineDiagnostics(file.diagnostics);
     if (parsed === null) {
       unknownFiles += 1;
       continue;

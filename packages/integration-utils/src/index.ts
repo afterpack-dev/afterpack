@@ -83,9 +83,9 @@ export {
 } from "./plugin-config.js";
 export {
   type AfterpackArtifactOptions,
+  type BuildContext,
   type BuildEngineConfigOptions,
-  buildEngineConfigJson,
-  type EngineConfig,
+  type CoreConfig,
   type EnvLike,
   type Preset,
   type RegionConfig,
@@ -115,7 +115,7 @@ export {
   type ConfigScope,
   type ConfigSurface,
   type ConfigTier,
-  type EngineConfigSubset,
+  type CoreConfigSubset,
   type GlobReserved,
   getPath,
   mergeConfig,

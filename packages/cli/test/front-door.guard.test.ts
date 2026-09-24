@@ -70,7 +70,7 @@ async function crossedFrom(layer: Layer): Promise<Record<string, unknown>> {
   });
   expect(errors.join("\n")).toBe("");
   expect(code).toBe(0);
-  return JSON.parse(engineCalls[0].configJson) as Record<string, unknown>;
+  return engineCalls[0].config as Record<string, unknown>;
 }
 
 const crossed: Partial<Record<Layer, Record<string, unknown>>> = {};

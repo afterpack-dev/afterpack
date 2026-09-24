@@ -69,7 +69,7 @@ async function runPlugin(
 
 function sharedConfig(): Record<string, unknown> {
   if (engineCalls.length === 0) throw new Error("no engine calls recorded");
-  return JSON.parse(engineCalls[0].configJson);
+  return engineCalls[0].config;
 }
 
 function callForInput(source: string): EngineCall {
@@ -440,7 +440,7 @@ describe("afterpackVite leg (multi-config builds)", () => {
     await runPlugin({ leg: "main" }, bundleOf(chunk("main.js", "const m = 1;")));
     await runPlugin({ leg: "preload" }, bundleOf(chunk("preload.js", "const p = 1;")));
     expect(engineCalls).toHaveLength(2);
-    const seeds = engineCalls.map((c) => JSON.parse(c.configJson).seed);
+    const seeds = engineCalls.map((c) => c.config.seed);
     expect(seeds[0]).toBe(seeds[1]);
     expect(engineCalls.map((c) => c.input)).toEqual(["const m = 1;", "const p = 1;"]);
   });

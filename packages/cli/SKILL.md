@@ -1,16 +1,36 @@
 ---
 name: afterpack
-description: Obfuscate a project's build output with the AfterPack CLI — when to run it, how to configure it, how to read its JSON output, and how to verify the result at deploy time.
+description: Obfuscate a project's build output with the AfterPack CLI. When to run it, how to configure it, how to read its JSON output, and how to verify the result before deploying.
 ---
 
 # Using the AfterPack CLI
 
-AfterPack obfuscates JavaScript that a build **has already emitted**. It is a post-build step, not a
-compiler, not a bundler plugin, and not something you run on source.
+AfterPack obfuscates JavaScript that a build has already emitted. Run it on build output, after
+the bundler. Never run it on source.
 
-## When to run it
+## Pick the right tool first
 
-Run it **after** the bundler, over the build output:
+If the project uses a framework or bundler with an AfterPack plugin, install the plugin instead of
+adding a CLI step. The plugin obfuscates inside the build, so the readable bundle never reaches
+disk:
+
+| Project uses | Install |
+| --- | --- |
+| Vite | `@afterpack/vite` |
+| Next.js 15.4+ | `@afterpack/next` |
+| webpack 5 | `@afterpack/webpack` |
+| Rollup | `@afterpack/rollup` |
+| esbuild | `@afterpack/esbuild` |
+| Parcel 2 | `@afterpack/parcel-optimizer` |
+| Astro, Nuxt, SvelteKit, Svelte, Vue | `@afterpack/astro`, `nuxt`, `sveltekit`, `svelte`, `vue` |
+| Angular 17+ | `@afterpack/angular`, or the CLI after `ng build` |
+| Electron | `@afterpack/electron` |
+
+Running `npx afterpack@latest` with no path in the project root prints the right package and exits
+`1`. Use the CLI when no plugin fits, for a plain script, or when the build is not JavaScript
+tooling. Setup guides: https://www.afterpack.dev/docs/frameworks
+
+## Running it
 
 ```jsonc
 // package.json
@@ -21,111 +41,74 @@ Run it **after** the bundler, over the build output:
 }
 ```
 
-- **Point it at build output**, never at `src/`. Obfuscating source breaks the build that follows.
-- **Run it once** per build. Output is written **in place** and no copy is kept, so a second run
-  re-obfuscates already-obfuscated code: slower, larger, and worth nothing.
-- **A bundler plugin is better where one exists.** `@afterpack/vite`, `@afterpack/next`,
-  `@afterpack/webpack`, `@afterpack/rollup`, `@afterpack/esbuild`, `@afterpack/parcel-optimizer` and
-  the framework wrappers hook the build itself, so the cleartext bundle is never written to disk.
-  Reach for the CLI when no plugin fits, or when the build system is not JavaScript.
-
-## Invocations
-
 ```bash
-npx afterpack@latest                             # detects the build output, then runs
 npx afterpack@latest dist                        # a directory, walked recursively
-npx afterpack@latest dist/bundle.js              # or one .js / .mjs / .cjs file
+npx afterpack@latest dist/bundle.js              # or one .js, .mjs or .cjs file
 npx afterpack@latest dist --preset=hard --seed=git
 npx afterpack@latest dist --diagnostics.format=json
-npx afterpack@latest verify .                    # the deploy gate
-npx afterpack@latest restore                     # undo the last backed-up run
-npx afterpack@latest audit https://example.com   # scan a DEPLOYED site
-npx afterpack@latest --help                      # every key, its type and its default
-npx afterpack@latest verify --help
-npx afterpack@latest restore --help
-npx afterpack@latest audit --help
-npx afterpack@latest --version
+npx afterpack@latest verify .                    # check before deploying
+npx afterpack@latest restore                     # undo the last run
+npx afterpack@latest audit https://example.com   # scan a live site
+npx afterpack@latest --help                      # common options
+npx afterpack@latest --help --all                # every option, its type and default
 ```
 
-Always pin `afterpack@latest` rather than bare `npx afterpack`, which can resolve to a stale cached
-copy.
+Always write `afterpack@latest`. Bare `npx afterpack` can run a stale cached copy.
 
-`[path]` is optional and framework-first: with no path, AfterPack checks `package.json` before it
-ever touches a file. An `@afterpack/*` integration already installed, or a framework detected with
-no integration for it, both refuse to obfuscate (exit `1`) and print the one-line fix instead —
-obfuscating twice, once through the plugin and once through the CLI, is exactly the double-run this
-tool now refuses. Only when no framework is detected does it fall back to the directory the bundler
-in your `package.json` writes (Next → `.next/`, Nuxt → `.output/`, everything else → `dist/`), else
-the newest of `dist/`, `build/`, `out/`, `.output/`, `.next/`. It prints what it found and what it
-will do, then runs — it never prompts, in a terminal or in CI. It exits `1` with the quickstart when
-it finds neither a framework nor a build. **A path argument always obfuscates**, framework or not —
-`afterpack dist/` is the deliberate escape hatch and skips this dispatch entirely.
+Rules:
 
-Nested `node_modules/` are skipped; pass `--paths.include='**/node_modules/**'` (quoted — an
-unquoted glob is expanded by the shell first) to walk them too. AfterPack's own `.backup.<hash>`
-copies are never re-obfuscated.
+- Point it at build output, never at `src/`.
+- Run it once per build. Files are rewritten in place, and a second run over the same output is
+  refused (exit `1`). Rebuild first.
+- A path argument always obfuscates. With no path, the CLI checks the project for a framework
+  first; if it finds none, it picks the newest of `dist/`, `build/`, `out/`, `.output/`, `.next/`.
+  It never prompts.
+- Nested `node_modules/` are skipped. `--paths.include='**/node_modules/**'` (quoted) adds them.
 
-## Output is written in place
+## What a run writes
 
-The files under `[path]` are **replaced** with their obfuscated form. **Build, then run it once**: a
-second run over the same, unrebuilt tree is **refused**, because the run recorded a sha256 per
-shipped file both in the protection receipt it left in the tree and in the backup manifest it left
-outside it — either recognizing the current bytes fails the run closed. Every run writes
-`.afterpack-protection.json` into the directory it walked. Alongside it AfterPack may also write:
+- `.afterpack-protection.json` in the output directory: the receipt `afterpack verify` checks.
+- `.afterpack/backup/`: the original files, on by default for the CLI, so `afterpack restore` can
+  undo the run. `--build.backup=false` turns it off.
+- `.afterpack/protectionMap.html`: the Protection Map report, when the build has source maps.
+- `.map` files beside the output, when an input map exists and the run is not a production build.
 
-- `foo.js.map` — the composed source map, when an upstream map was found (off in a detected
-  production build).
-- `.afterpack/backup/` — the originals, **on by default**, never inside the directory you deploy.
-  `afterpack restore [dir]` puts them back; `--build.backup=false` turns this off.
-- `.afterpack/protectionMap.html` — one combined, self-contained report for the whole run, in a
-  gitignored directory rather than in your output.
-
-Add these to `.gitignore` (AfterPack adds any that are missing to the nearest `.gitignore` above the build output, when one exists):
-
-```gitignore
-.afterpack/
-*.protectionMap.html
-*.backup.*.js
-```
-
-Each of those contains your **original source**. They are local development artifacts: never serve
-them, never publish them, never commit them.
+The backup and the Protection Map contain the original source. AfterPack adds `.afterpack/` to the
+nearest `.gitignore`. Never deploy, publish or commit them.
 
 ## Configuration
 
-Every option is written the same way in four places. Most specific wins:
+Every option has one dot-delimited camelCase name, used the same way in every place:
 
-1. an `/* @afterpack key=value */` source directive (region-scoped keys only)
-2. a `--key=value` flag
-3. `AFTERPACK_<key with dots replaced by underscores>` in the environment
-4. `afterpack.json` — the nearest one at or above the working directory
+1. `/* @afterpack key=value */` in source, for region-scoped keys such as `preset` and `complexity`
+2. `--key=value` on the command line
+3. `AFTERPACK_<key with dots as underscores>` in the environment, for example
+   `AFTERPACK_diagnostics_format=json`
+4. `afterpack.json`, the nearest one at or above the working directory
 
-Keys are dot-delimited camelCase and identical on every surface. The only short flags are `-h` and
-`-v`; there is no `--no-` form and no space-separated value. A boolean key written alone means
-`true`, and `=false` switches it off. An unknown key, a kebab-cased key or a malformed value **fails
-the run** (exit `64`) naming the canonical spelling — nothing is silently ignored.
-
-The options worth knowing (`--help` lists them all):
+Higher in the list wins. A boolean flag on its own means `true`; `=false` turns it off. There is
+no `--no-` form and no space-separated value (`--seed git` is wrong, `--seed=git` is right). The
+only short flags are `-h` and `-v`. An unknown, kebab-cased or malformed key fails the run with
+exit `64` and names the right spelling.
 
 | Key | Meaning | Default |
 | --- | --- | --- |
-| `preset` | `minify` \| `light` \| `medium` \| `hard` \| `extreme` | `light` |
-| `complexity` | raw numeric target, overriding the preset's | the preset's |
-| `seed` | pin the build seed; `git` derives it from the current commit | fresh random per build |
+| `preset` | `minify`, `light`, `medium`, `hard` or `extreme` | `light` |
+| `complexity` | numeric protection level, overriding the preset's | the preset's value |
+| `seed` | fix the seed; `git` uses the current commit | a new random seed per build |
 | `paths.exclude` | globs to leave untouched | `[]` |
-| `paths.include` | re-admit what the disk walk skips | `[]` |
-| `identifiers.reserved` | identifier names never renamed | `[]` |
-| `diagnostics.format` | `text` or `json` — see below | `text` |
-| `diagnostics.level` | `summary`, `all`, or `none` (silent; errors still print) | `summary` |
-| `allowUnobfuscated` | ship a file the engine could not obfuscate as cleartext (exit `2`) | `false` |
-| `build.backup` | keep the originals under `.afterpack/backup/`, restorable with `afterpack restore` | `true` for the CLI, `false` inside a bundler pipeline |
-| `sourceMap.enabled` | write `.map` siblings | on iff an upstream map exists |
-| `protectionMap.enabled` | write the local HTML report | on when an upstream map is found |
-| `build.autorun` | `false` turns AfterPack off project-wide | `true` |
-| `telemetry.enabled` | anonymous diagnostics, reported when a build reports an error-level diagnostic (a refused or partial build), never on a clean build | `true` |
+| `paths.include` | globs to add back to the walk | `[]` |
+| `identifiers.reserved` | names never to rename | `[]` |
+| `build.backup` | keep originals in `.afterpack/backup/` | `true` for the CLI, `false` in plugins |
+| `sourceMap.enabled` | write `.map` files | on when an input map exists, off in production |
+| `protectionMap.enabled` | write the Protection Map | on when an input map exists |
+| `diagnostics.format` | `text` or `json` | `text` |
+| `diagnostics.level` | `summary`, `all` or `none` (errors still print) | `summary` |
+| `allowUnobfuscated` | ship a file that could not be processed, instead of failing (exit `2`) | `false` |
+| `build.autorun` | `false` turns AfterPack off for the project, CLI and plugins alike | `true` |
+| `telemetry.enabled` | anonymous diagnostics, sent only when a build is refused or partial | `true` |
 
-`afterpack.json` is the one config file, shared by the CLI and every plugin. It accepts the whole
-schema, nested, and an unknown key fails the build:
+`afterpack.json` is shared by the CLI and every plugin, and takes the whole schema, nested:
 
 ```json
 {
@@ -136,12 +119,13 @@ schema, nested, and an unknown key fails the build:
 }
 ```
 
+Full reference: https://www.afterpack.dev/docs/config
+
 ## Machine-readable output
 
-`--diagnostics.format=json` makes stdout carry **exactly one** JSON document and nothing else — no
-ANSI, no progress. Every human line goes to stderr. It works from the flag,
-`AFTERPACK_diagnostics_format=json`, or `diagnostics.format` in `afterpack.json`, and `verify` and
-`audit` honour it too. Read it instead of parsing the text output.
+Read `--diagnostics.format=json` output instead of parsing text. Stdout carries exactly one JSON
+document, with no colour or progress; everything else goes to stderr. `verify` and `audit` support
+it too. Add `--diagnostics.level=none` for a run that prints nothing else.
 
 ```json
 {
@@ -158,8 +142,8 @@ ANSI, no progress. Every human line goes to stderr. It works from the flag,
 }
 ```
 
-`status` is `obfuscated`, `unchanged`, `unobfuscated` or `failed`. A failure is a document too, with
-the same exit code and a `fix` field:
+`status` is `obfuscated`, `unchanged`, `unobfuscated` or `failed`. A failure is a document too,
+with the same exit code and a `fix` field to act on:
 
 ```json
 {
@@ -171,80 +155,63 @@ the same exit code and a `fix` field:
 }
 ```
 
-Lists are sorted and no field carries a timestamp, so two runs of one build produce byte-identical
-documents. Pair it with `--diagnostics.level=none` for a run that prints nothing but the document.
+Lists are sorted and there are no timestamps, so two runs of one build give identical documents.
 
 ## The Pro key
 
-Set it as `AFTERPACK_KEY` in the environment, or as `key` in `afterpack.json`. Those are the only two
-places the engine reads.
+Without a key, builds run locally with basic protection. With a Pro key, the same command sends the
+build to AfterPack's cloud, which applies much stronger protection.
 
-**Never put it in a plugin's options object** — no plugin forwards it, so a key set there validates,
-builds green and silently runs the **free** engine. **Never commit it**: a bundler config is source
-code. Without a key, builds run locally on the free engine, which is fully functional. A Pro build
-that cannot reach the cloud **fails closed** at exit `1`; it never falls back to free-tier output.
+- Set it as `AFTERPACK_KEY` in the environment (a CI secret), or `key` in an uncommitted
+  `afterpack.json`.
+- Never put it in a plugin's options object. Plugins reject it there, because a bundler config is
+  committed source.
+- Never commit it.
+- If the cloud cannot be reached, the run fails with exit `1`. It never falls back to weaker output.
+
+Details: https://www.afterpack.dev/docs/pro
 
 ## `afterpack verify [dir]`
 
-The deploy gate. Every AfterPack run that writes to disk leaves a **protection receipt** in the tree
-it wrote — `afterpack <dir>` does, and so does `@afterpack/next` from inside `next build` — naming
-the tool, the engine version, the seed, the bundler, the build id, and a sha256 per obfuscated file.
-`verify` re-hashes everything the receipt names.
+Add this to the deploy step. It re-hashes every file the protection receipt names.
 
 ```bash
-npx afterpack@latest verify .        # a project root: looks in ./ then ./.next/
-npx afterpack@latest verify .next    # or the build output directory itself
+npx afterpack@latest verify .        # looks in ./ and ./.next/
+npx afterpack@latest verify dist
 ```
 
-It exits non-zero when the receipt is **missing** (nothing protected this tree), when it is from a
-**different build** (rebuilt without the wrapper), or when a recorded file **no longer hashes** to
-what it was obfuscated to (replaced after the build). A missing receipt is a failure, never a quiet
-pass. `verify` reads no configuration; it takes only `--diagnostics.format` and
-`--diagnostics.level`. Run it in the deploy step.
+It exits `1` when the receipt is missing, belongs to a different build, or a file changed after it
+was obfuscated. A missing receipt is a failure. `verify` reads no configuration and takes only
+`--diagnostics.format` and `--diagnostics.level`.
 
 ## `afterpack restore [dir]`
 
-Undoes a CLI run in place. The CLI backs up every original file to `.afterpack/backup/` before
-obfuscating it — on by default, `--build.backup=false` turns it off — and `restore` reads the
-manifest it left there, checks each file on disk still hashes to what that run obfuscated it to (so
-it never clobbers a change made since), and writes the originals back.
+Puts the originals from `.afterpack/backup/` back. It checks each file still matches what the run
+wrote and skips (and names) any that changed since, exiting `1` if any were skipped. With no backup
+there is nothing to restore, and it exits `1`.
 
 ```bash
-npx afterpack@latest restore        # the project root that holds .afterpack/backup/
-npx afterpack@latest restore dist   # restore a specific project root
+npx afterpack@latest restore         # the project root holding .afterpack/backup/
+npx afterpack@latest restore dist
 ```
-
-A file that no longer matches is skipped and named, and the whole command exits `1` — everything
-else still gets restored. A missing manifest is also a failure: there is nothing to restore.
-`restore` reads no configuration either.
 
 ## `afterpack audit <url>`
 
-Scans a **deployed** site for leaked secrets, exposed source and unprotected JavaScript, streaming
-the findings as they land. A bare host is normalised to `https://`. It reads no configuration and
-writes no file; it sends nothing but the URL. `AFTERPACK_API_URL` overrides the endpoint.
-
-```bash
-npx afterpack@latest audit example.com
-npx afterpack@latest audit https://example.com --diagnostics.format=json
-```
-
-Findings are a **result**, not a failure: a completed scan exits `0` however much it found, and
-prints the full report link. Unregistered use is rate-limited per 24h, reported as such rather than
-as an HTTP error. A scan that failed or a stream that ended early exits `1`.
+Scans a deployed site for leaked secrets, exposed source maps and unprotected JavaScript, streams
+findings as they arrive, and prints a link to the full report. A bare host gets `https://`. It sends
+only the URL and writes nothing. A finished scan exits `0` however much it found; a failed scan
+exits `1`. Anonymous use is rate-limited per 24 hours. Docs: https://www.afterpack.dev/docs/audit
 
 ## Exit codes
 
 | Code | Meaning |
 | --- | --- |
-| `0` | Success. Every collected file was obfuscated and written. Also `--help` and `--version`. |
-| `1` | Total failure. Nothing usable was produced: a path that does not exist, no JavaScript found under it, any engine error, a failed `verify`, a failed scan, or a Pro build whose cloud call failed. |
-| `2` | Partial. Some files shipped unobfuscated — only reachable with `allowUnobfuscated`. |
-| `3` | Size cap. `inflation.max` could not reach the complexity target (`DIAG_SIZE_CAP_REACHED`). |
-| `4` | **Reserved** — a Pro feature without a key, or a lapsed entitlement. Documented, never emitted. |
-| `5` | **Reserved** — runtime reflection detected without `reflection.allow`. Documented, never emitted. |
-| `6` | Update required. The AfterPack cloud API no longer serves this `@afterpack/core` (or has retired the API version it speaks), or the installed `@afterpack/core` is older than this package supports. Prints a fixed update line — `npm install afterpack@latest @afterpack/core@<minimum>`, or `npx afterpack@latest` without a local install — and the server's reason; nothing is written. |
-| `64` | Misuse. An unknown flag or command, a malformed value, or a doubled path argument. |
+| `0` | Success. Also `--help` and `--version`. |
+| `1` | Failure: bad path, no JavaScript found, an engine error, an already-obfuscated tree, a failed `verify`, `restore` or scan, or an unreachable cloud on a Pro build. |
+| `2` | Partial: some files shipped unobfuscated. Only with `allowUnobfuscated`. |
+| `3` | Size cap: `inflation.max` stopped the run before it reached the protection level. |
+| `6` | Update required. Run the install command it prints, for example `npm install afterpack@latest @afterpack/core@<version>`. Nothing was written. |
+| `64` | Misuse: unknown flag or command, malformed value, or two path arguments. |
 
-Every non-zero exit prints one actionable line naming the fix. Fail-closed: nothing ships partially
-obfuscated, and a failed run leaves the build output exactly as the bundler wrote it.
+Every non-zero exit prints one line that says how to fix it. A failed run leaves the build output
+exactly as the bundler wrote it.

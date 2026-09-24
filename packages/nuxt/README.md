@@ -1,43 +1,59 @@
 # @afterpack/nuxt
 
-AfterPack for **Nuxt 3** — obfuscates your production build output automatically. Nuxt bundles with
-Vite, and AfterPack integrates at the bundler level, so this package is a thin, idiomatic **Nuxt module**
-over [`@afterpack/vite`](../vite): add it to your `modules` and every emitted `.js` chunk is obfuscated
-after Vite writes it, with a source map and a Protection Map dropped alongside.
+A Nuxt 3 module that obfuscates your production JavaScript, using the
+[AfterPack](https://www.afterpack.dev) JavaScript obfuscator.
+
+## Install
+
+```sh
+npm install --save-dev @afterpack/nuxt
+```
+
+## Usage
 
 ```ts
 // nuxt.config.ts
 export default defineNuxtConfig({
   modules: ["@afterpack/nuxt"],
   afterpack: {
-    // seed, preset, complexity, protectionMap, regions, build.autorun, ... — see @afterpack/vite
     seed: "git",
   },
 });
 ```
 
-The module registers `@afterpack/vite` on Nuxt's Vite config via `addVitePlugin`, so the client bundle is
-obfuscated in Vite's `generateBundle`, before the build is written. Every **configuration** option under the `afterpack` key is
-forwarded verbatim to [`@afterpack/vite`](../vite) — see it for the full option reference and the
-opt-out / production-flip policy. `@afterpack/vite`'s own `leg`/`projectRoot` are
-Vite/Electron plumbing and are not part of this module's API.
+The module adds AfterPack to Nuxt's Vite build, so every JavaScript chunk is obfuscated before it
+is written. That covers the client bundle of a server-rendered app and the prerendered output of
+`nuxt generate` in `.output/public/_nuxt/`. A failed run fails the build.
 
-## Static vs. server
+Options under the `afterpack` key are the same as
+[`@afterpack/vite`](https://www.npmjs.com/package/@afterpack/vite), for example
+`preset`, `complexity` and `seed`. See the
+[configuration reference](https://www.afterpack.dev/docs/config) for every key. Options can also
+live in `afterpack.json` or in `AFTERPACK_*` environment variables.
 
-- **Static / prerendered** (`nuxt generate`): the prerendered client bundle in `.output/public/_nuxt/`
-  is obfuscated — the recommended shape for shipping protected client code.
-- **Server (SSR)**: the client bundle is obfuscated the same way; the Nitro server bundle is your own
-  deployment artifact.
+Nuxt 2 builds with webpack. Use [`@afterpack/webpack`](https://www.npmjs.com/package/@afterpack/webpack)
+there.
 
-Nuxt 2 (webpack) projects should use [`@afterpack/webpack`](../webpack) instead.
+## Pro
 
-## Configuration
+Without a key, AfterPack runs on your machine and applies basic protection. Set `AFTERPACK_KEY` in
+your environment and the same module sends the build to AfterPack's cloud, which applies much
+stronger protection. Keep the key out of `nuxt.config.ts`. See
+[AfterPack Pro](https://www.afterpack.dev/docs/pro).
 
-Options can also be set in `afterpack.json` — the one config file every AfterPack integration reads,
-at the nearest ancestor of your working directory — or in an `AFTERPACK_<key>` environment variable.
-Most specific wins: the options object here, then the environment, then the file. See
-[`@afterpack/vite`](../vite#configuration) for the canonical names and the validation rules.
+## Links
+
+- [Nuxt setup guide](https://www.afterpack.dev/docs/frameworks/nuxt)
+- [Presets and protection levels](https://www.afterpack.dev/docs/presets)
+- [How AfterPack compares to other obfuscators](https://www.afterpack.dev/docs/comparison)
+- [Stopping userscripts and extensions from patching your app](https://www.afterpack.dev/docs/use-cases/patching-tools)
+
+## License
+
+Apache-2.0. The engine it runs, `@afterpack/core`, has its own
+[license](https://www.afterpack.dev/license).
 
 ## Feedback
 
-Questions and proposals: https://github.com/afterpack-dev/afterpack/discussions · Bugs: https://github.com/afterpack-dev/afterpack/issues
+Questions and ideas: [GitHub Discussions](https://github.com/afterpack-dev/afterpack/discussions).
+Bugs: [GitHub Issues](https://github.com/afterpack-dev/afterpack/issues).

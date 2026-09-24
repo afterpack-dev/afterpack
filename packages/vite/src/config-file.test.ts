@@ -42,7 +42,7 @@ async function run(options: AfterpackViteOptions = {}): Promise<Record<string, u
       "index.js": { type: "chunk", fileName: "index.js", code: "export const a = 1;", modules: {} },
     },
   );
-  return JSON.parse(engineCalls[engineCalls.length - 1].configJson) as Record<string, unknown>;
+  return engineCalls[engineCalls.length - 1].config as Record<string, unknown>;
 }
 
 describe("afterpackVite reads afterpack.json (options outrank AFTERPACK_* outrank the file)", () => {

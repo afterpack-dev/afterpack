@@ -5,9 +5,9 @@ import {
   type AfterpackArtifactOptions,
   type AfterpackPluginOptions,
   type CapturedModule,
+  type CoreConfigSubset,
   createTelemetryReporter,
   decodeDataUri,
-  type EngineConfigSubset,
   extractSourceMappingURL,
   type InMemoryInput,
   type PluginOptionsView,
@@ -96,7 +96,7 @@ function collectResourcesThroughConcatenatedModules(module: unknown, out: string
 export class AfterpackWebpackPlugin {
   private readonly settings: PluginOptionsView;
   private readonly artifactOptions: AfterpackArtifactOptions;
-  private readonly engineConfig: EngineConfigSubset;
+  private readonly engineConfig: CoreConfigSubset;
   private readonly captured = new Map<string, CapturedSource>();
   private readonly seenByBuildHooksThisCompilation = new Set<string>();
   private readonly captureDiagnostics: string[] = [];

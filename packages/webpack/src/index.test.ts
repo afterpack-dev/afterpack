@@ -177,7 +177,7 @@ describe("AfterpackWebpackPlugin processAssets", () => {
     const regions = [{ start: 0, end: 12, floor: false }];
     const invoke = applyPlugin(new AfterpackWebpackPlugin({ regions }));
     await invoke(fixture({ "main.js": "export const a = 1;" }, ["main.js"]));
-    expect(JSON.parse(engineCalls[0].configJson).regions).toEqual(regions);
+    expect(engineCalls[0].config.regions).toEqual(regions);
   });
 
   it("does nothing when build.autorun is disabled via the option", async () => {
@@ -292,7 +292,7 @@ describe("AfterpackWebpackPlugin afterpack.json", () => {
       fixture({ "main.js": "export const a = 1;" }, ["main.js"]),
     );
 
-    expect(JSON.parse(engineCalls[0].configJson).preset).toBe("hard");
+    expect(engineCalls[0].config.preset).toBe("hard");
   });
 
   it("is outranked by the plugin options object", async () => {
@@ -303,7 +303,7 @@ describe("AfterpackWebpackPlugin afterpack.json", () => {
       fixture({ "main.js": "export const a = 1;" }, ["main.js"]),
     );
 
-    expect(JSON.parse(engineCalls[0].configJson).preset).toBe("medium");
+    expect(engineCalls[0].config.preset).toBe("medium");
   });
 
   it("fails the build on an unknown key instead of silently dropping it", () => {

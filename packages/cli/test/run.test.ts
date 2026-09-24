@@ -358,7 +358,7 @@ describe("run — node_modules", () => {
     expect(await invoke(["dist", "--protectionMap.enabled=false"])).toBe(0);
     expect(out.join("\n")).toContain("using afterpack.json");
     expect(out.join("\n")).not.toContain(root);
-    expect(JSON.parse(engineCalls[0].configJson).preset).toBe("medium");
+    expect(engineCalls[0].config.preset).toBe("medium");
   });
 
   it("fails the run and names every rejected key rather than ignoring it", async () => {

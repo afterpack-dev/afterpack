@@ -86,7 +86,7 @@ describe("the build context carries the client identity", () => {
         logger: capture().logger,
       }),
     );
-    expect(JSON.parse(batchCalls[0].buildContextJson ?? "null")).toEqual({
+    expect(batchCalls[0].buildContext).toEqual({
       commitSha: "abcdef1",
       ref: "main",
       clientVersion: "0.1.2-rc.9",
@@ -98,14 +98,14 @@ describe("the build context carries the client identity", () => {
     await runObfuscationPass(
       options({ client: { ...IDENTITY, coreVersion: null }, logger: capture().logger }),
     );
-    expect(JSON.parse(batchCalls[0].buildContextJson ?? "null")).toEqual({
+    expect(batchCalls[0].buildContext).toEqual({
       client: "@afterpack/vite/0.1.4",
     });
 
     writeFileSync(file, "export const a = 1;");
     rmSync(join(outDir, PROTECTION_RECEIPT_FILE));
     await runObfuscationPass(options({ logger: capture().logger }));
-    expect(batchCalls[1].buildContextJson).toBeUndefined();
+    expect(batchCalls[1].buildContext).toBeUndefined();
   });
 });
 
@@ -263,7 +263,10 @@ describe("the result status rule", () => {
   it("fails a file with an unknown status and writes nothing", async () => {
     __setBatchDecorator((result) => ({
       ...result,
-      files: result.files.map((f) => ({ ...f, status: "skipped" })),
+      files: result.files.map((f) => ({
+        ...f,
+        status: "skipped" as unknown as (typeof result.files)[number]["status"],
+      })),
     }));
     await expect(runObfuscationPass(options({ logger: capture().logger }))).rejects.toThrow(
       /failed to obfuscate .*app\.js: the engine reported status "skipped"/,
@@ -275,7 +278,11 @@ describe("the result status rule", () => {
   it("fails a file whose non-success status carries output anyway", async () => {
     __setBatchDecorator((result) => ({
       ...result,
-      files: result.files.map((f) => ({ ...f, status: "partial", error: "half done" })),
+      files: result.files.map((f) => ({
+        ...f,
+        status: "partial" as unknown as (typeof result.files)[number]["status"],
+        error: "half done",
+      })),
     }));
     await expect(runObfuscationPass(options({ logger: capture().logger }))).rejects.toThrow(
       /app\.js: half done/,
@@ -286,7 +293,9 @@ describe("the result status rule", () => {
   it("fails a file whose result does not say whether it was obfuscated", async () => {
     __setBatchDecorator((result) => ({
       ...result,
-      files: result.files.map(({ unobfuscated: _drop, ...f }) => f),
+      files: result.files.map(
+        ({ unobfuscated: _drop, ...f }) => f as unknown as (typeof result.files)[number],
+      ),
     }));
     await expect(runObfuscationPass(options({ logger: capture().logger }))).rejects.toThrow(
       /does not say whether the file was obfuscated/,

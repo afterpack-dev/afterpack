@@ -1,9 +1,16 @@
 # @afterpack/svelte
 
-AfterPack for plain **Svelte** — obfuscates your production build output automatically. Svelte apps
-build with Vite, and AfterPack integrates at the bundler level, so this package is a thin, idiomatic
-wrapper over [`@afterpack/vite`](../vite): add it to your Vite plugins and every emitted `.js` chunk is
-obfuscated after the bundler writes it, with a source map and a Protection Map dropped alongside.
+Obfuscate a Svelte app's production build. `@afterpack/svelte` adds the
+[AfterPack](https://www.afterpack.dev) JavaScript obfuscator to a Svelte 4 or 5 project built with
+Vite.
+
+## Install
+
+```sh
+npm install --save-dev @afterpack/svelte
+```
+
+## Usage
 
 ```ts
 // vite.config.ts
@@ -16,25 +23,37 @@ export default defineConfig({
 });
 ```
 
-`afterpackSvelte(options)` is exactly `afterpackVite(options)` — every **configuration** option (`seed`, `preset`,
-`complexity`, `protectionMap`, `regions`, `directives`, `build.autorun`, …) is forwarded verbatim.
-`@afterpack/vite`'s own `leg`/`projectRoot` are Vite/Electron plumbing and are not part of
-this package's API. See
-[`@afterpack/vite`](../vite) for the full option reference and the opt-out / production-flip policy.
+Every JavaScript chunk is obfuscated before Vite writes it, and a failed run fails the build.
 
-## SvelteKit and Svelte libraries
+`afterpackSvelte(options)` takes the same options as
+[`@afterpack/vite`](https://www.npmjs.com/package/@afterpack/vite), for example
+`afterpackSvelte({ preset: "hard", seed: "git" })`. See the
+[configuration reference](https://www.afterpack.dev/docs/config) for every key. Options can also
+live in `afterpack.json` or in `AFTERPACK_*` environment variables.
 
-- Full **SvelteKit** apps: use [`@afterpack/sveltekit`](../sveltekit) (same Vite pipeline, SvelteKit
-  front door).
-- A Svelte component **library** bundled with Rollup: use [`@afterpack/rollup`](../rollup).
+For a SvelteKit app, use [`@afterpack/sveltekit`](https://www.npmjs.com/package/@afterpack/sveltekit).
+For a component library bundled with Rollup, use
+[`@afterpack/rollup`](https://www.npmjs.com/package/@afterpack/rollup).
 
-## Configuration
+## Pro
 
-Options can also be set in `afterpack.json` — the one config file every AfterPack integration reads,
-at the nearest ancestor of your working directory — or in an `AFTERPACK_<key>` environment variable.
-Most specific wins: the options object here, then the environment, then the file. See
-[`@afterpack/vite`](../vite#configuration) for the canonical names and the validation rules.
+Without a key, AfterPack runs on your machine and applies basic protection. Set `AFTERPACK_KEY` in
+your environment and the same plugin sends the build to AfterPack's cloud, which applies much
+stronger protection. See [AfterPack Pro](https://www.afterpack.dev/docs/pro).
+
+## Links
+
+- [Svelte setup guide](https://www.afterpack.dev/docs/frameworks/svelte)
+- [Presets and protection levels](https://www.afterpack.dev/docs/presets)
+- [How AfterPack compares to other obfuscators](https://www.afterpack.dev/docs/comparison)
+- [Hiding unreleased features in client code](https://www.afterpack.dev/docs/use-cases/unreleased-features)
+
+## License
+
+Apache-2.0. The engine it runs, `@afterpack/core`, has its own
+[license](https://www.afterpack.dev/license).
 
 ## Feedback
 
-Questions and proposals: https://github.com/afterpack-dev/afterpack/discussions · Bugs: https://github.com/afterpack-dev/afterpack/issues
+Questions and ideas: [GitHub Discussions](https://github.com/afterpack-dev/afterpack/discussions).
+Bugs: [GitHub Issues](https://github.com/afterpack-dev/afterpack/issues).

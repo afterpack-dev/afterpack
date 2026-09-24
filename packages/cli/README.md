@@ -1,212 +1,153 @@
 # afterpack
 
-The `afterpack` CLI obfuscates the JavaScript a build already emitted. Run it after your bundler,
-over the build output — vanilla ESM, `require`/AMD, a lone script, or a CI step.
+The command-line JavaScript obfuscator from [AfterPack](https://www.afterpack.dev). Run it after
+your build, over the output directory, to protect JavaScript source code before you ship it. It
+works with any bundler, or none.
 
 ```sh
-npx afterpack@latest                       # detects the build output
-npx afterpack@latest dist                  # or name the directory
-npx afterpack@latest dist/bundle.js        # or one .js / .mjs / .cjs file
+npx afterpack@latest dist                  # a build directory, walked recursively
+npx afterpack@latest dist/bundle.js        # or one .js, .mjs or .cjs file
 npx afterpack@latest dist --preset=hard --seed=git
-npx afterpack@latest verify .              # the deploy gate
-npx afterpack@latest audit https://example.com
+npx afterpack@latest verify .              # check a build before you deploy it
+npx afterpack@latest restore               # undo the last run
+npx afterpack@latest audit example.com     # scan a live site
 ```
 
-If your `package.json` names a bundler with a plugin (`@afterpack/vite`, `@afterpack/webpack`,
-`@afterpack/rollup`, `@afterpack/esbuild`, `@afterpack/next`, `@afterpack/nuxt`), the CLI says so at
-the end of a run: a plugin hooks the build itself, so the cleartext bundle is never written to disk.
+Use `afterpack@latest` so `npx` does not pick up an old cached copy. `afterpack --help` lists the
+common options and `afterpack --help --all` lists every one.
+
+If your project uses a framework with an AfterPack plugin (Vite, Next.js, webpack, Nuxt, Astro and
+others), the plugin is the better fit: it obfuscates inside the build, so the readable bundle never
+reaches disk. Run `afterpack` with no path and it tells you which plugin to install.
 
 ## `afterpack [path]`
 
-A directory is walked recursively for every `.js`, `.mjs` and `.cjs`; a single file is obfuscated on
-its own. AfterPack's own `.backup.<hash>` copies are never re-obfuscated, and nested `node_modules/`
-are skipped — pass `--paths.include='**/node_modules/**'` to walk them too (quote it, or the shell
-expands the glob first).
+Files are obfuscated in place. Build first, then run AfterPack once. A second run over the same
+output is refused, because AfterPack recognises its own output.
 
-**Omit the path** and `afterpack` picks the build output itself: the directory your detected bundler
-writes (Next → `.next/`, Nuxt → `.output/`, everything else → `dist/`), else the newest of `dist/`,
-`build/`, `out/`, `.output/`, `.next/`. It prints what it found and what it will do, then runs. It
-never prompts, in a terminal or in CI. When it finds nothing it prints the quickstart and exits `1`.
+Nested `node_modules/` folders are skipped. Pass `--paths.include='**/node_modules/**'` (quoted)
+to include them.
 
-### Output is written in place
+Each run writes:
 
-The files under `[path]` are **replaced** with their obfuscated form, and no copy is kept to
-re-obfuscate from. **Build, then run it once.** A second run over the same, unrebuilt tree is
-**refused** (`DIAG_ALREADY_OBFUSCATED`): the run records a sha256 per shipped file in the protection
-receipt below, so AfterPack recognises its own output rather than obfuscating it twice.
+- `.afterpack-protection.json` in the output directory, the receipt that `afterpack verify` checks.
+- `.afterpack/backup/`, a copy of the original files, so `afterpack restore` can undo the run.
+  Turn it off with `--build.backup=false`.
+- `.afterpack/protectionMap.html`, the [Protection Map](https://www.afterpack.dev/docs/protection-map),
+  when your build has source maps.
+- `.map` files next to the output, when your build has source maps and the run is not a production
+  build.
 
-Every run writes `.afterpack-protection.json` — the protection receipt `afterpack verify` reads back
-— into the directory it walked. Alongside the output AfterPack may also write:
+The backup and the Protection Map contain your original source. AfterPack adds `.afterpack/` to the
+nearest `.gitignore`. Never deploy or commit them.
 
-- `foo.js.map` — the composed source map, when an upstream map was found (off in a detected
-  production build).
-- `foo.backup.<hash>.js` — the original file, only with `--build.backup`.
-- `.afterpack/protectionMap.html` — one combined, self-contained Protection Map for the whole run,
-  in a gitignored directory rather than in your output.
-
-Every one of those contains your original source. Never serve, publish or commit them:
-
-```gitignore
-.afterpack/
-*.protectionMap.html
-*.backup.*.js
-```
-
-The CLI adds any of these globs that are missing to the nearest `.gitignore` above the build output, when one exists, and
-warns once if an artifact lands under a served path segment.
+With no path, `afterpack` looks at your project first. If it finds a framework, it prints the plugin
+to install (or tells you the one you have already covers the build) and exits `1`. Otherwise it
+picks the build output (`dist/`, `build/`, `out/`, `.output/` or `.next/`), says what it found and
+runs. It never prompts.
 
 ## `afterpack verify [dir]`
 
-The deploy gate. Every AfterPack run that writes to disk leaves a **protection receipt** in the tree
-it wrote — `afterpack <dir>` does, and so does `@afterpack/next` from inside `next build` — listing
-the tool, the engine version, the seed, the bundler, the build id and a sha256 per obfuscated file.
-`verify` reads that receipt back and re-hashes everything it names.
+Checks a build against its protection receipt. Run it in your deploy step.
 
 ```sh
-npx afterpack@latest verify .        # a project root: looks in ./ then ./.next/
-npx afterpack@latest verify .next    # or the build output directory itself
+npx afterpack@latest verify .        # looks in ./ and ./.next/
+npx afterpack@latest verify dist
 ```
 
-It exits non-zero when the receipt is **missing** (nothing protected this tree), when it is from a
-**different build** (rebuilt without the wrapper), or when any recorded file **no longer hashes** to
-what it was obfuscated to (replaced after the build). A missing receipt is a failure, never a quiet
-pass. It reads no configuration; it takes only `--diagnostics.format` and `--diagnostics.level`.
+It exits `1` when the receipt is missing, belongs to a different build, or a file changed after it
+was obfuscated. The CLI and the plugins for Vite, Next.js, webpack, Rollup, esbuild and Angular all
+write a receipt.
+
+## `afterpack restore [dir]`
+
+Puts back the original files from `.afterpack/backup/`. A file that changed since the run is
+skipped and named, and the command exits `1`.
 
 ## `afterpack audit <url>`
 
-Scans a **deployed** site for leaked secrets, exposed source and unprotected JavaScript, streaming
-the findings as they land.
+Scans a live site for leaked secrets, exposed source maps and unprotected JavaScript, and prints a
+link to the full report. It sends only the URL and writes nothing. A finished scan exits `0` however
+much it found. It is the [free website security scanner](https://www.afterpack.dev/security-scanner)
+in your terminal; see [auditing a live site](https://www.afterpack.dev/docs/audit).
 
-```sh
-npx afterpack@latest audit example.com
-npx afterpack@latest audit https://example.com --diagnostics.format=json
-```
+## Options
 
-A bare host is normalised to `https://`. It reads no configuration and writes no file; it sends
-nothing but the URL. `AFTERPACK_API_URL` overrides the endpoint. Findings are a **result**, not a
-failure: a completed scan exits `0` however much it found, and the report link is printed at the end.
-Unregistered use is rate-limited per 24h, and the limit is reported as such rather than as an HTTP
-error.
+Every option has one name, written the same way everywhere:
 
-## Configuration
+- `--preset=hard` on the command line
+- `AFTERPACK_preset=hard` in the environment (dots become underscores)
+- `"preset": "hard"` in `afterpack.json`, the nearest one at or above the working directory
 
-Every option is written the same way in all four places, derived from the key rather than from a
-per-flag table: `--key=value` here, `AFTERPACK_<key with dots replaced by underscores>` in the
-environment, nested in `afterpack.json` (the nearest one at or above the working directory), and —
-for the region-scoped keys — in an `/* @afterpack key=value */` source directive.
+A flag wins over the environment, which wins over the file. A boolean flag on its own means `true`.
+An unknown or misspelled option fails the run and names the right spelling.
 
-Most specific wins:
-
-1. an `/* @afterpack key=value */` source directive (region-scoped keys only)
-2. a `--key=value` flag
-3. `AFTERPACK_<key_with_underscores>` in the environment
-4. `afterpack.json`
-
-Keys are dot-delimited camelCase and identical on every surface. A boolean key written alone means
-`true`; `=false` switches it off. The only short flags are `-h` and `-v`; there is no `--no-` form
-and no space-separated value. An unknown key, a kebab-cased key or a malformed value **fails the
-run** naming the canonical spelling — it is never silently ignored. `afterpack --help` lists every
-key with its type and default.
-
-| Flag | Description | Default |
+| Option | Meaning | Default |
 | --- | --- | --- |
-| `--preset=<name>` | `minify` \| `light` \| `medium` \| `hard` \| `extreme` — a bundle of complexity target, output-size multiplier and inflation budget | `light` |
-| `--complexity=<n>` | raw numeric complexity target, overriding just the preset's target | the preset's target |
-| `--seed=<n\|string>` | pin the build seed (`git` derives it from the current commit) | fresh random per build |
-| `--diagnostics.format=<text\|json>` | `json` prints ONE JSON document on stdout and moves every human line to stderr | `text` |
-| `--diagnostics.level=<summary\|all\|none>` | rolled up, every engine diagnostic, or silent (errors still print) | `summary` |
-| `--protectionMap.enabled=false` | skip writing the Protection Map | on when an upstream map is found |
-| `--build.backup` / `--build.backup=false` | keep / skip a `.backup.<hash>.js` copy of each original | off |
-| `--sourceMap.enabled=false` | skip writing `.map` siblings | auto (on iff an upstream map exists) |
-| `--paths.include=<glob[,glob]>` | re-admit what the walk skips; `**/node_modules/**` walks nested `node_modules/` | `[]` |
-| `--paths.exclude=<glob[,glob]>` | leave matching files untouched | `[]` |
-| `--identifiers.reserved=<name[,name]>` | identifier names never renamed | `[]` |
-| `--allowUnobfuscated` | ship a file the engine could not obfuscate, as cleartext, instead of failing | `false` |
-| `--build.autorun=false` | skip obfuscation entirely — the project-wide "AfterPack is off" switch, honoured here exactly as a bundler plugin honours it, so one setting cannot mean two things | `true` |
-| `--help` / `-h`, `--version` / `-v` | print usage / the installed version | |
+| `preset` | `minify`, `light`, `medium`, `hard` or `extreme` | `light` |
+| `complexity` | a numeric protection level, overriding the preset's | the preset's value |
+| `seed` | fix the seed; `git` uses the current commit | a new random seed per build |
+| `paths.exclude` | globs to leave untouched | none |
+| `paths.include` | globs to add back to the walk | none |
+| `identifiers.reserved` | names never to rename | none |
+| `build.backup` | back up originals to `.afterpack/backup/` | `true` |
+| `sourceMap.enabled` | write `.map` files | on when an input map exists, off in production |
+| `protectionMap.enabled` | write the Protection Map | on when an input map exists |
+| `diagnostics.format` | `text` or `json` | `text` |
+| `diagnostics.level` | `summary`, `all` or `none` | `summary` |
+| `allowUnobfuscated` | ship a file AfterPack could not process, instead of failing | `false` |
+| `build.autorun` | `false` turns AfterPack off for the project | `true` |
+| `telemetry.enabled` | report anonymous diagnostics when a build fails | `true` |
 
-`--telemetry.enabled=false` (or `AFTERPACK_telemetry_enabled=false`) turns off anonymous build
-diagnostics; they are on by default and report when a build reports an error-level diagnostic (a
-refused or partial build), never on a clean build.
-
-### `afterpack.json`
-
-The one config file, for the CLI and every plugin. `@afterpack/vite`, `rollup`, `webpack`, `esbuild`,
-`astro`, `nuxt`, `svelte`, `sveltekit`, `vue`, `angular`, `electron`, `next` and `parcel-optimizer`
-all read the same file, validated against the same schema, with their own options object outranking
-it. It accepts the whole schema, nested, and an unknown key fails the build:
+The full list is in the [CLI reference](https://www.afterpack.dev/docs/cli) and the
+[configuration reference](https://www.afterpack.dev/docs/config).
 
 ```json
 {
   "preset": "hard",
   "seed": "git",
-  "paths": { "exclude": ["**/*.min.js", "dist/vendor/**"] },
-  "identifiers": { "reserved": ["Hls", { "glob": "src/legacy/**", "names": ["jQuery"] }] }
+  "paths": { "exclude": ["dist/vendor/**"] },
+  "identifiers": { "reserved": ["Hls"] }
 }
 ```
 
-## Machine-readable output
+`--diagnostics.format=json` prints exactly one JSON document on stdout and sends everything else
+to stderr. Use it in CI and scripts. `verify` and `audit` support it too.
 
-`--diagnostics.format=json` (or `AFTERPACK_diagnostics_format=json`, or `diagnostics.format` in
-`afterpack.json`) makes stdout carry **exactly one** JSON document and nothing else — no ANSI, no
-progress. Every human line goes to stderr. Both `verify` and `audit` honour it too.
+## Pro
 
-```json
-{
-  "afterpack": "0.1.0",
-  "command": "obfuscate",
-  "exitCode": 0,
-  "ok": true,
-  "files": [
-    { "path": "dist/app.js", "status": "obfuscated", "bytesIn": 4211, "bytesOut": 15980, "diagnostics": [] }
-  ],
-  "diagnostics": [{ "code": "DIAG_TARGET_REACHED", "level": "info", "message": "…", "file": "dist/app.js" }],
-  "summary": { "files": 1, "transformed": 1, "seed": 4242, "engine": "local", "diagnostics": { "total": 1 } },
-  "artifacts": { "protectionMap": ".afterpack/protectionMap.html" }
-}
-```
-
-A failure is a document too, with the same exit code:
-
-```json
-{
-  "afterpack": "0.1.0",
-  "command": "obfuscate",
-  "exitCode": 3,
-  "ok": false,
-  "error": { "code": "DIAG_SIZE_CAP_REACHED", "message": "…", "fix": "Raise --inflation.max, or lower --complexity, …" }
-}
-```
-
-Lists are sorted and no field carries a timestamp, so two runs of one build produce byte-identical
-documents.
-
-## The Pro key
-
-Set it as `AFTERPACK_KEY` in the environment, or as `key` in `afterpack.json`. Those are the only two
-places the engine reads.
-
-**Never put it in a plugin's options object** — no plugin forwards it, so a key set there validates,
-builds green and silently runs the **free** engine. **Never commit it**: a bundler config is source
-code. Without a key, builds run locally on the free engine, which is fully functional. A Pro build
-that cannot reach the cloud **fails closed** at exit `1`; it never falls back to free-tier output.
+Without a key, AfterPack runs on your machine and applies basic protection. Set `AFTERPACK_KEY` in
+your environment (or `key` in `afterpack.json`) and the same command sends the build to AfterPack's
+cloud, which applies much stronger protection. If the cloud cannot be reached, the run fails; it
+never quietly ships weaker output. Never commit the key. See
+[AfterPack Pro](https://www.afterpack.dev/docs/pro).
 
 ## Exit codes
 
 | Code | Meaning |
 | --- | --- |
-| `0` | Success. Every collected file was obfuscated and written. Also `--help` and `--version`. |
-| `1` | Total failure. Nothing usable was produced: a path that does not exist, no JavaScript found under it, any engine error, a failed `verify`, or a Pro build whose cloud call failed. |
-| `2` | Partial. Some files shipped unobfuscated — only reachable with `allowUnobfuscated`. |
-| `3` | Size cap. `inflation.max` could not reach the complexity target (`DIAG_SIZE_CAP_REACHED`). |
-| `4` | **Reserved** — a Pro feature without a key, or a lapsed entitlement. Documented, never emitted. |
-| `5` | **Reserved** — runtime reflection detected without `reflection.allow`. Documented, never emitted. |
-| `6` | Update required. The AfterPack cloud API no longer serves this `@afterpack/core` (or has retired the API version it speaks), or the installed `@afterpack/core` is older than this package supports. Prints a fixed update line — `npm install afterpack@latest @afterpack/core@<minimum>`, or `npx afterpack@latest` without a local install — and the server's reason; nothing is written. |
-| `64` | Misuse. An unknown flag or command, a malformed value, or a doubled path argument. |
+| `0` | Success. |
+| `1` | Failure. Nothing was changed, or `verify`, `restore` or `audit` failed. |
+| `2` | Some files shipped unobfuscated. Only possible with `allowUnobfuscated`. |
+| `3` | The size limit (`inflation.max`) stopped AfterPack before it reached the protection level. |
+| `6` | An update is required. The CLI prints the install command to run. |
+| `64` | Misuse: an unknown option or command, or a malformed value. |
 
-Every non-zero exit prints one actionable line naming the fix. Fail-closed: nothing ships partially
-obfuscated, and a failed run leaves your build output exactly as your bundler wrote it.
+Every failure prints one line that says how to fix it. A failed run leaves your build output as
+your bundler wrote it.
+
+## Links
+
+- [Quickstart](https://www.afterpack.dev/docs/quickstart)
+- [Obfuscate your build in CI](https://www.afterpack.dev/docs/builds)
+- [How AfterPack compares to javascript-obfuscator and Jscrambler](https://www.afterpack.dev/docs/comparison)
+
+## License
+
+Apache-2.0. The engine it runs, `@afterpack/core`, has its own
+[license](https://www.afterpack.dev/license).
 
 ## Feedback
 
-Questions and proposals: https://github.com/afterpack-dev/afterpack/discussions · Bugs: https://github.com/afterpack-dev/afterpack/issues
+Questions and ideas: [GitHub Discussions](https://github.com/afterpack-dev/afterpack/discussions).
+Bugs: [GitHub Issues](https://github.com/afterpack-dev/afterpack/issues).

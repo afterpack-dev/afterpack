@@ -1,7 +1,7 @@
 {
   "name": "@afterpack/integration-utils",
   "version": "0.1.0",
-  "description": "AfterPack framework-integration helpers - source-map discovery, artifact paths, report policy, and artifact writing shared by @afterpack/vite and @afterpack/next",
+  "description": "Internal shared code for the AfterPack CLI and framework plugins",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -47,9 +47,21 @@
     "url": "https://github.com/afterpack-dev/afterpack.git",
     "directory": "packages/integration-utils"
   },
+  "keywords": [
+    "obfuscation",
+    "obfuscator",
+    "javascript-obfuscator",
+    "code-protection",
+    "source-code-protection",
+    "javascript-security",
+    "build-tools",
+    "source-map",
+    "internal",
+    "afterpack"
+  ],
   "author": "AfterPack (https://www.afterpack.dev)",
   "license": "Apache-2.0",
-  "homepage": "https://www.afterpack.dev",
+  "homepage": "https://github.com/afterpack-dev/afterpack",
   "bugs": {
     "url": "https://github.com/afterpack-dev/afterpack/issues"
   }

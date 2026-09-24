@@ -11,7 +11,7 @@ import {
   sanitizeCommitSha,
   sanitizeGitRef,
 } from "./git.js";
-import { buildContextJson, buildEngineConfig, resolveReportPolicy } from "./policy.js";
+import { buildContext, buildEngineConfig, resolveReportPolicy } from "./policy.js";
 
 const SHA = "3c332a94b80dce02cbefe6dcb641d6763e7a7aed";
 
@@ -176,9 +176,10 @@ describe("the build context a build hands the cloud client", () => {
   const policy = resolveReportPolicy({}, {});
 
   it("travels on its own lane, never as an engine config key", () => {
-    expect(buildContextJson({ commitSha: SHA, ref: "main" })).toBe(
-      JSON.stringify({ commitSha: SHA, ref: "main" }),
-    );
+    expect(buildContext({ commitSha: SHA, ref: "main" })).toEqual({
+      commitSha: SHA,
+      ref: "main",
+    });
     const config = buildEngineConfig({ policy });
     expect("git" in config).toBe(false);
     expect(JSON.stringify(config)).not.toContain("git");
@@ -186,22 +187,20 @@ describe("the build context a build hands the cloud client", () => {
 
   it("carries the client identity as flat keys next to git, never nested", () => {
     expect(
-      JSON.parse(
-        buildContextJson(
-          { commitSha: SHA, ref: "main" },
-          { clientVersion: "0.1.0", client: "afterpack/0.1.0" },
-        ) ?? "null",
+      buildContext(
+        { commitSha: SHA, ref: "main" },
+        { clientVersion: "0.1.0", client: "afterpack/0.1.0" },
       ),
     ).toEqual({ commitSha: SHA, ref: "main", clientVersion: "0.1.0", client: "afterpack/0.1.0" });
-    expect(buildContextJson(null, { clientVersion: "0.1.0", client: null })).toBe(
-      JSON.stringify({ clientVersion: "0.1.0" }),
-    );
+    expect(buildContext(null, { clientVersion: "0.1.0", client: null })).toEqual({
+      clientVersion: "0.1.0",
+    });
   });
 
   it("is `undefined` when nothing was detected", () => {
     for (const git of [null, undefined, detectGitContext(null, noRepo())]) {
-      expect(buildContextJson(git)).toBeUndefined();
-      expect(buildContextJson(git, { clientVersion: null, client: null })).toBeUndefined();
+      expect(buildContext(git)).toBeUndefined();
+      expect(buildContext(git, { clientVersion: null, client: null })).toBeUndefined();
     }
   });
 });

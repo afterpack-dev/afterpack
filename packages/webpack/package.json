@@ -1,7 +1,7 @@
 {
   "name": "@afterpack/webpack",
   "version": "0.1.0",
-  "description": "AfterPack webpack plugin - obfuscate your build output automatically",
+  "description": "webpack plugin for AfterPack: obfuscate your production JavaScript during the webpack build",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -51,9 +51,21 @@
     "url": "https://github.com/afterpack-dev/afterpack.git",
     "directory": "packages/webpack"
   },
+  "keywords": [
+    "obfuscator",
+    "javascript-obfuscator",
+    "obfuscation",
+    "code-protection",
+    "source-code-protection",
+    "javascript-security",
+    "anti-reverse-engineering",
+    "webpack",
+    "webpack-plugin",
+    "afterpack"
+  ],
   "author": "AfterPack (https://www.afterpack.dev)",
   "license": "Apache-2.0",
-  "homepage": "https://www.afterpack.dev",
+  "homepage": "https://www.afterpack.dev/docs/frameworks/webpack",
   "bugs": {
     "url": "https://github.com/afterpack-dev/afterpack/issues"
   }

@@ -1,7 +1,7 @@
 {
   "name": "@afterpack/protection-map",
   "version": "0.1.0",
-  "description": "AfterPack Protection Map - render ProtectionMapData JSON into a self-contained HTML heatmap viewer",
+  "description": "AfterPack Protection Map viewer: render protection data into a self-contained HTML report",
   "type": "module",
   "main": "./render-core.mjs",
   "types": "./render-core.d.ts",
@@ -38,9 +38,21 @@
     "url": "https://github.com/afterpack-dev/afterpack.git",
     "directory": "packages/protection-map"
   },
+  "keywords": [
+    "obfuscation",
+    "obfuscator",
+    "javascript-obfuscator",
+    "code-protection",
+    "source-code-protection",
+    "javascript-security",
+    "protection-map",
+    "heatmap",
+    "report",
+    "afterpack"
+  ],
   "author": "AfterPack (https://www.afterpack.dev)",
   "license": "Apache-2.0",
-  "homepage": "https://www.afterpack.dev",
+  "homepage": "https://www.afterpack.dev/docs/protection-map",
   "bugs": {
     "url": "https://github.com/afterpack-dev/afterpack/issues"
   },

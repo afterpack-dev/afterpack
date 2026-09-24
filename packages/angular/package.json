@@ -1,7 +1,7 @@
 {
   "name": "@afterpack/angular",
   "version": "0.1.0",
-  "description": "AfterPack for Angular (v17+ application builder) - obfuscate your ng build output as a postbuild step",
+  "description": "Angular 17+ integration for AfterPack: obfuscate the browser bundle after ng build",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -49,13 +49,19 @@
   },
   "keywords": [
     "obfuscator",
-    "angular",
+    "javascript-obfuscator",
+    "obfuscation",
     "code-protection",
+    "source-code-protection",
+    "javascript-security",
+    "anti-reverse-engineering",
+    "angular",
+    "angular-cli",
     "afterpack"
   ],
   "author": "AfterPack (https://www.afterpack.dev)",
   "license": "Apache-2.0",
-  "homepage": "https://www.afterpack.dev",
+  "homepage": "https://www.afterpack.dev/docs/frameworks/angular",
   "bugs": {
     "url": "https://github.com/afterpack-dev/afterpack/issues"
   }

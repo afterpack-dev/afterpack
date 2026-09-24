@@ -100,7 +100,7 @@ describe("afterpackAngular afterpack.json", () => {
 
     await afterpackAngular({ cwd: root });
 
-    expect(JSON.parse(engineCalls[0].configJson).preset).toBe("hard");
+    expect(engineCalls[0].config.preset).toBe("hard");
   });
 
   it("is outranked by the options object", async () => {
@@ -109,7 +109,7 @@ describe("afterpackAngular afterpack.json", () => {
 
     await afterpackAngular({ cwd: root, preset: "medium" });
 
-    expect(JSON.parse(engineCalls[0].configJson).preset).toBe("medium");
+    expect(engineCalls[0].config.preset).toBe("medium");
   });
 
   it("fails the run on an unknown key instead of silently dropping it", async () => {

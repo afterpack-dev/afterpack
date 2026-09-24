@@ -66,7 +66,7 @@ async function crossedFrom(layer: Layer): Promise<Record<string, unknown>> {
   }
 
   await runAfterpackHook({ metadata, options, engine, env });
-  return JSON.parse(engineCalls[0].configJson) as Record<string, unknown>;
+  return engineCalls[0].config as Record<string, unknown>;
 }
 
 const crossed: Partial<Record<Layer, Record<string, unknown>>> = {};

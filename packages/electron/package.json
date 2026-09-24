@@ -1,7 +1,7 @@
 {
   "name": "@afterpack/electron",
   "version": "0.1.0",
-  "description": "AfterPack Electron integration - obfuscate the main, preload and renderer bundles of one app with ONE seed",
+  "description": "Electron integration for AfterPack: obfuscate the main, preload and renderer bundles of an app with one seed",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -53,15 +53,20 @@
   },
   "keywords": [
     "obfuscator",
+    "javascript-obfuscator",
+    "obfuscation",
+    "code-protection",
+    "source-code-protection",
+    "javascript-security",
+    "anti-reverse-engineering",
     "electron",
     "electron-vite",
     "electron-forge",
-    "code-protection",
     "afterpack"
   ],
   "author": "AfterPack (https://www.afterpack.dev)",
   "license": "Apache-2.0",
-  "homepage": "https://www.afterpack.dev",
+  "homepage": "https://www.afterpack.dev/docs/frameworks/electron",
   "bugs": {
     "url": "https://github.com/afterpack-dev/afterpack/issues"
   }

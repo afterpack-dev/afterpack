@@ -1,7 +1,7 @@
 {
   "name": "@afterpack/astro",
   "version": "0.1.0",
-  "description": "AfterPack Astro integration - obfuscate your build output automatically",
+  "description": "Astro integration for AfterPack: obfuscate the client and server JavaScript of an Astro build",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -53,14 +53,20 @@
   },
   "keywords": [
     "obfuscator",
+    "javascript-obfuscator",
+    "obfuscation",
+    "code-protection",
+    "source-code-protection",
+    "javascript-security",
+    "anti-reverse-engineering",
     "astro",
     "astro-integration",
-    "code-protection",
+    "withastro",
     "afterpack"
   ],
   "author": "AfterPack (https://www.afterpack.dev)",
   "license": "Apache-2.0",
-  "homepage": "https://www.afterpack.dev",
+  "homepage": "https://www.afterpack.dev/docs/frameworks/astro",
   "bugs": {
     "url": "https://github.com/afterpack-dev/afterpack/issues"
   }

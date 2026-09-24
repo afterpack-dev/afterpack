@@ -1,13 +1,16 @@
 export interface EngineCall {
   input: string;
-  configJson: string;
+  config: Record<string, unknown>;
   inputSourceMap?: string;
-  regions?: string;
+  regions?: unknown[];
 }
 
 export const engineCalls: EngineCall[] = [];
 
-export const batchCalls: Array<{ configJson: string; buildContextJson?: string }> = [];
+export const batchCalls: Array<{
+  config: Record<string, unknown>;
+  buildContext?: Record<string, unknown>;
+}> = [];
 
 export interface FakeNotice {
   severity: string;
@@ -16,15 +19,29 @@ export interface FakeNotice {
   url?: string;
 }
 
+export interface FakeDiagnosticData {
+  kind: string;
+  [key: string]: unknown;
+}
+
+export interface FakeDiagnostic {
+  severity: "info" | "error" | "critical";
+  code: string;
+  message: string;
+  file?: string | null;
+  span?: { startByte: number; endByte: number } | null;
+  data?: FakeDiagnosticData | null;
+}
+
 export interface FakeFileResult {
   filePath: string;
   code: string;
   sourceMap?: string;
-  protectionMap?: string;
-  status: string;
+  protectionMap?: unknown;
+  status: "success" | "failure";
   error?: string;
-  unobfuscated?: boolean;
-  diagnostics?: string;
+  unobfuscated: boolean;
+  diagnostics?: FakeDiagnostic[];
 }
 
 export interface FakeBatchResult {
@@ -32,7 +49,7 @@ export interface FakeBatchResult {
   totalFiles: number;
   successCount: number;
   failureCount: number;
-  source: string;
+  source: "local" | "cloud";
   notices?: FakeNotice[];
   engineVersion?: string;
 }
@@ -74,28 +91,30 @@ export function asCloudBatch(result: FakeBatchResult): FakeBatchResult {
     ...result,
     source: "cloud",
     files: result.files.map((f) => {
-      const diagnostics = JSON.parse(f.diagnostics ?? "[]") as Array<Record<string, unknown>>;
+      const diagnostics = f.diagnostics ?? [];
       const cloudDiagnostics = diagnostics.map((d) => ({
         code: d.code,
         severity: d.severity,
         message: d.message,
+        file: null,
+        span: null,
       }));
       const blocking = cloudDiagnostics.find(
         (d) => d.severity === "error" || d.severity === "critical",
       );
       return {
         ...f,
-        diagnostics: JSON.stringify(cloudDiagnostics),
+        diagnostics: cloudDiagnostics,
         ...(blocking ? { error: `${String(blocking.code)}: ${String(blocking.message)}` } : {}),
       };
     }),
   };
 }
 
-type ProcessImpl = (input: string, configJson: string) => string;
+type ProcessImpl = (input: string, config: Record<string, unknown>) => Record<string, unknown>;
 
-function defaultResult(input: string): string {
-  return JSON.stringify({
+function defaultResult(input: string): Record<string, unknown> {
+  return {
     code: input,
     sourceMap: null,
     coverage: {},
@@ -111,7 +130,7 @@ function defaultResult(input: string): string {
       literals: [],
     },
     advisory: [],
-  });
+  };
 }
 
 let impl: ProcessImpl = (input) => defaultResult(input);
@@ -121,9 +140,9 @@ export function __setProcessImpl(fn: ProcessImpl): void {
 }
 
 export function __setProcessResult(
-  makeResult: (input: string, configJson: string) => Record<string, unknown>,
+  makeResult: (input: string, config: Record<string, unknown>) => Record<string, unknown>,
 ): void {
-  impl = (input, configJson) => JSON.stringify(makeResult(input, configJson));
+  impl = (input, config) => makeResult(input, config);
 }
 
 export function __reset(): void {
@@ -135,27 +154,29 @@ export function __reset(): void {
 }
 
 export async function processBatch(
-  files: Array<{ filePath: string; source: string; inputSourceMap?: string; regions?: string }>,
-  configJson: string,
-  buildContextJson?: string,
+  files: Array<{ filePath: string; source: string; inputSourceMap?: string; regions?: unknown[] }>,
+  config: unknown,
+  buildContext?: unknown,
 ): Promise<FakeBatchResult> {
-  batchCalls.push({ configJson, buildContextJson });
+  const configRecord = (config ?? {}) as Record<string, unknown>;
+  const buildContextRecord = (buildContext ?? undefined) as Record<string, unknown> | undefined;
+  batchCalls.push({ config: configRecord, buildContext: buildContextRecord });
   if (batchError) throw batchError;
   let successCount = 0;
   let failureCount = 0;
   const results = files.map((f) => {
     engineCalls.push({
       input: f.source,
-      configJson,
+      config: configRecord,
       inputSourceMap: f.inputSourceMap,
       regions: f.regions,
     });
-    const pr = JSON.parse(impl(f.source, configJson)) as {
+    const pr = impl(f.source, configRecord) as {
       code: string;
       sourceMap?: string | null;
       protectionMap?: unknown;
       unobfuscated?: boolean;
-      diagnostics?: Array<Record<string, unknown> & { severity: string; message: string }>;
+      diagnostics?: FakeDiagnostic[];
     };
     const fatal = pr.diagnostics?.find((d) => d.severity === "error" || d.severity === "critical");
     if (fatal) {
@@ -163,9 +184,10 @@ export async function processBatch(
       return {
         filePath: f.filePath,
         code: "",
-        status: "failure",
+        status: "failure" as const,
         error: fatal.message,
-        diagnostics: JSON.stringify(pr.diagnostics ?? []),
+        unobfuscated: false,
+        diagnostics: pr.diagnostics ?? [],
       };
     }
     successCount++;
@@ -173,10 +195,10 @@ export async function processBatch(
       filePath: f.filePath,
       code: pr.code,
       sourceMap: pr.sourceMap ?? undefined,
-      protectionMap: pr.protectionMap != null ? JSON.stringify(pr.protectionMap) : undefined,
-      status: "success",
+      protectionMap: pr.protectionMap ?? undefined,
+      status: "success" as const,
       unobfuscated: pr.unobfuscated === true,
-      diagnostics: JSON.stringify(pr.diagnostics ?? []),
+      diagnostics: pr.diagnostics ?? [],
     };
   });
   const result: FakeBatchResult = {

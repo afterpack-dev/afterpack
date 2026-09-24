@@ -1,8 +1,15 @@
 # @afterpack/vite
 
-AfterPack Vite/Rollup plugin — obfuscates your build output **inside the bundler's own pipeline**,
-before a byte of it reaches disk, and writes the Protection Map beside your project rather than
-inside the build.
+A Vite plugin that obfuscates your production JavaScript as part of `vite build`. It is the
+[AfterPack](https://www.afterpack.dev) JavaScript obfuscator for Vite.
+
+## Install
+
+```sh
+npm install --save-dev @afterpack/vite
+```
+
+## Usage
 
 ```ts
 // vite.config.ts
@@ -14,106 +21,84 @@ export default defineConfig({
 });
 ```
 
-The plugin runs in `generateBundle` (`order: "post"`), with the finished bundle in memory and BEFORE
-Vite writes any of it. For each JS entry in the bundle it takes the bundler's own live source map,
-obfuscates via `@afterpack/core`, and hands the chunk back — so **the cleartext bundle never reaches
-disk**, and a refusal leaves the output directory untouched. It is **fail-closed**: if the engine
-reports an `error`/`critical` diagnostic (or empty output), the hook throws and the build fails
-rather than shipping unobfuscated code.
+The plugin obfuscates every JavaScript chunk in the bundle before Vite writes it, so the readable
+bundle never reaches disk. If obfuscation fails, the build fails and your output directory is left
+untouched.
 
-What it obfuscates is exactly what the bundler **built**: every chunk in the output bundle. Files
-Vite copies verbatim into the output directory (`publicDir`) are not built, are not in the bundle,
-and are not touched — put anything that needs protecting through the bundler.
+Files Vite copies as-is from `publicDir` are not part of the bundle and are not obfuscated. Import
+anything you want protected.
 
-## What it writes
-
-- `foo.js.map` — the composed source map replaces the bundler's own map entry, when `sourceMap` is
-  on. When policy ships no map (the production default) that entry is **dropped**: it describes the
-  pre-obfuscation bytes and carries `sourcesContent`, so shipping it beside obfuscated code is a
-  complete deobfuscation.
-- `protectionMap.html` — ONE combined, self-contained Protection Map for the whole build dir.
-
-There is no `foo.backup.<hash>.js` here: the obfuscated bytes go back into the bundle rather than
-beside an emitted file, so there is nothing for a backup to sit next to. `build.backup: true` says so
-instead of silently doing nothing. `paths.include` is refused — it re-admits what an on-disk walk
-skips, and this plugin does no walk.
-
-It also appends the artifact guard globs (`.afterpack/`, `*.protectionMap.html`, `protectionMap.html`,
-`*.backup.*`, `*.map`) to your project `.gitignore`, and warns if an artifact lands under a served path.
+Each build writes a protection receipt, `.afterpack-protection.json`, into the output directory.
+Run `npx afterpack verify dist` in your deploy step to check that what you ship is what was
+obfuscated.
 
 ## Options
 
-All options are opt-out (**ON by default**), with a **production auto-flip** (detected from
-`NODE_ENV=production`, `CI=true`, or a framework prod hook — `vite build` sets `NODE_ENV=production`).
-Explicit options always win.
-
-| Option | Type | Default | Prod flip |
-| --- | --- | --- | --- |
-| `seed` | `number \| string` | a fresh random seed per build | — |
-| `build.autorun` | `boolean` | `true` (or `AFTERPACK_build_autorun=false`) | — |
-| `protectionMap` | `boolean` | ON iff a bundler sourcemap is discovered | governed by that, not prod; warns loudly if left on in prod (it always lands in gitignored `.afterpack/`) |
-| `sourceMap` | `boolean` | auto (on iff an input map exists) | **OFF in prod** (a map leads straight back to your source) |
-| `sourceMap.emitUrl` | `boolean` | ON | **OFF in prod** (a public obfuscator map = full deobfuscation) |
-| `production` | `boolean` | inferred from env | forces the prod posture |
-| `directives` | `boolean` | ON — captured pre-minify, so your `/* @afterpack */` comments survive the bundler | — |
-| `leg` | `string` | — | see "Multi-config builds" |
-| `projectRoot` | `string` | Vite's `root` | see "Multi-config builds" |
-
 ```ts
-// See the real Protection Map even on a production build (writes to gitignored .afterpack/):
-afterpackVite({ protectionMap: true });
-// Advertise the source map in prod too (opt-in):
-afterpackVite({ sourceMap: { emitUrl: true } });
-// Turn everything sensitive off:
-afterpackVite({ protectionMap: false, sourceMap: false });
+afterpackVite({ preset: "hard", seed: "git" });
 ```
 
-## Multi-config builds (Electron, SSR pairs)
+| Option | Type | Default |
+| --- | --- | --- |
+| `preset` | `"minify"`, `"light"`, `"medium"`, `"hard"`, `"extreme"` | `"light"` |
+| `complexity` | `number` | the preset's value |
+| `seed` | `number` or `string` (`"git"` uses the current commit) | a new random seed per build |
+| `protectionMap` | `boolean` | on when Vite emits source maps |
+| `sourceMap` | `boolean` | on in development when Vite emits a map, off in production |
+| `sourceMap.emitUrl` | `boolean` | on in development, off in production |
+| `directives` | `boolean` | `true` |
+| `build.autorun` | `boolean` | `true`; `false` turns AfterPack off |
+| `production` | `boolean` | detected from `NODE_ENV=production` or `CI=true` |
+| `leg` | `string` | none; names one build when an app runs Vite several times |
+| `projectRoot` | `string` | Vite's `root` |
 
-Some apps run Vite more than once for a single logical build — Electron's main/preload/renderer, an
-SSR client/server pair. Two options make one instance of this plugin a named **leg** of that build.
-Each leg only ever sees its OWN bundle, so two builds sharing one `outDir` (Electron Forge points
-main and preload at `.vite/build`) no longer step on each other:
+Dotted names are nested objects: `sourceMap.emitUrl` is `{ sourceMap: { emitUrl: true } }`. Every
+other key in the [configuration reference](https://www.afterpack.dev/docs/config) works too, such as
+`identifiers.reserved` or `paths.exclude`.
 
-- **`leg`** — `"main"`, `"renderer"`, `"client"`, `"server"`… It suffixes the diagnostic label, keys
-  the shared build seed (every leg of one build obfuscates with ONE seed, drawn once), and nests this
-  leg's Protection Map under `.afterpack/<leg>/` so the legs stop overwriting each other's map.
-- **`projectRoot`** — the APP root, when Vite's own `root` is a sub-directory of it (electron-vite
-  roots the renderer build at `src/renderer/`). It is where `.gitignore` and `.afterpack/` land, and
-  which build a leg joins for the shared seed. Legs with different roots are different builds.
+The [Protection Map](https://www.afterpack.dev/docs/protection-map) is written to `.afterpack/`,
+and the plugin adds `.afterpack/` and its other local artifacts to your `.gitignore`. It contains
+your original source, so never deploy or commit it.
 
-Across separate PROCESSES there is no session to share, so set the seed in the environment instead —
-`AFTERPACK_SEED` takes the same values as `seed` (an integer, `git`, or any other string):
+Options can also live in `afterpack.json` or in `AFTERPACK_*` environment variables. The options
+object wins over the environment, which wins over the file. An unknown or misspelled key fails the
+build and names the right spelling.
 
-```sh
-AFTERPACK_SEED=git npm run build   # every leg, and `npx afterpack`, pick it up
-```
+## Several Vite builds in one app
 
-For Electron specifically, use [`@afterpack/electron`](https://www.npmjs.com/package/@afterpack/electron),
-which sets both per leg and adds the Electron-specific fail-closed guards.
+Electron and SSR apps can run Vite more than once per build. Give each run a `leg` name
+(`"main"`, `"renderer"`, `"server"`) so all of them share one seed and keep separate Protection
+Maps under `.afterpack/<leg>/`. Set `projectRoot` when Vite's `root` is a subfolder of the app. When
+the runs are separate processes, pin the seed with `AFTERPACK_SEED=git`. For Electron, use
+[`@afterpack/electron`](https://www.npmjs.com/package/@afterpack/electron), which sets this up for
+you.
 
-## Configuration
+## Pro
 
-Every option above can also be set in `afterpack.json` — the one config file every AfterPack
-integration reads, at the nearest ancestor of your working directory — or in an `AFTERPACK_<key>`
-environment variable. Most specific wins: the options object here, then the environment, then the
-file.
+Without a key, AfterPack runs on your machine and applies basic protection. Set `AFTERPACK_KEY` in
+your environment and the same plugin sends the build to AfterPack's cloud, which applies much
+stronger protection. Keep the key out of `vite.config.ts`: the plugin rejects it there, because the
+config is committed source. See [AfterPack Pro](https://www.afterpack.dev/docs/pro).
 
-```json
-{
-  "preset": "hard",
-  "seed": "git"
-}
-```
+## Not supported here
 
-In the file and the environment each option carries its canonical name: `protectionMap` is
-`protectionMap.enabled`, `sourceMap` is `sourceMap.enabled`, `complexity` is already the registry key, and every
-other option keeps the name it has above. `leg` and `projectRoot` name this build rather than configure it, so they belong in the options object only.
+- `build.backup`: the output is handed back to Vite in memory, so there is no file to back up.
+- `paths.include`: the plugin works on Vite's bundle and does not walk the output directory. Use
+  the [`afterpack` CLI](https://www.npmjs.com/package/afterpack) if you need that.
 
-The whole configuration is validated when the plugin is constructed: an unknown key, a kebab-cased
-key or a malformed value fails the build naming the canonical spelling, instead of being silently
-discarded.
+## Links
+
+- [Vite setup guide](https://www.afterpack.dev/docs/frameworks/vite)
+- [Presets and protection levels](https://www.afterpack.dev/docs/presets)
+- [How AfterPack compares to javascript-obfuscator and Jscrambler](https://www.afterpack.dev/docs/comparison)
+- [Protecting paywall and license checks](https://www.afterpack.dev/docs/use-cases/paywall-checks)
+
+## License
+
+Apache-2.0. The engine it runs, `@afterpack/core`, has its own
+[license](https://www.afterpack.dev/license).
 
 ## Feedback
 
-Questions and proposals: https://github.com/afterpack-dev/afterpack/discussions · Bugs: https://github.com/afterpack-dev/afterpack/issues
+Questions and ideas: [GitHub Discussions](https://github.com/afterpack-dev/afterpack/discussions).
+Bugs: [GitHub Issues](https://github.com/afterpack-dev/afterpack/issues).

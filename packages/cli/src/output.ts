@@ -145,14 +145,9 @@ function isEngineDiagnostic(value: unknown): value is EngineDiagnostic {
   );
 }
 
-export function parseEngineDiagnostics(json: string | null | undefined): EngineDiagnostic[] {
-  if (json == null) return [];
-  try {
-    const parsed: unknown = JSON.parse(json);
-    return Array.isArray(parsed) ? parsed.filter(isEngineDiagnostic) : [];
-  } catch {
-    return [];
-  }
+export function sanitizeEngineDiagnostics(value: unknown): EngineDiagnostic[] {
+  if (value == null) return [];
+  return Array.isArray(value) ? value.filter(isEngineDiagnostic) : [];
 }
 
 export function toJsonDiagnostic(d: EngineDiagnostic): JsonDiagnostic {

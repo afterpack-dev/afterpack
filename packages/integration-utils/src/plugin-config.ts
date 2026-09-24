@@ -7,9 +7,9 @@ import {
   CONFIG_KEYS,
   CONFIG_PREFIXES,
   type ConfigIssue,
+  type CoreConfigSubset,
   deepMerge,
   EMPTY_CONFIG,
-  type EngineConfigSubset,
   getPath,
   isPlainObject,
   mergeConfig,
@@ -34,9 +34,9 @@ export interface NormalizedPluginOptions {
 
 function proKeyMessage(surface: string): string {
   return (
-    `\`key\` is not a plugin option (${surface}) — no plugin forwards it, so a Pro key set here ` +
-    "silently builds on the FREE engine, and a bundler config is committed source. Set " +
-    "`AFTERPACK_KEY` in the environment (or `key` in afterpack.json) instead."
+    `\`key\` is not a plugin option (${surface}) — no plugin forwards it, and a bundler config is ` +
+    "committed source. Set `AFTERPACK_KEY` in the environment, or `key` in afterpack.json, instead " +
+    "— without it the build runs locally, without Pro protection."
   );
 }
 
@@ -87,7 +87,7 @@ export interface PluginConfigInput {
 export interface ResolvedPluginConfig {
   config: AfterpackConfig;
   options: PluginOptionsView;
-  engineConfig: EngineConfigSubset;
+  engineConfig: CoreConfigSubset;
   configFile: string | null;
   positionals: string[];
   help: boolean;

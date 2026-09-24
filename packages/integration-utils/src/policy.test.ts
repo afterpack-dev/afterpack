@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   buildEngineConfig,
-  buildEngineConfigJson,
   DEFAULT_PRESET,
   detectProduction,
   effectiveComplexityTarget,
@@ -233,11 +232,11 @@ describe("buildEngineConfig — preset bundle vs numeric complexity target", () 
     expect(effectiveComplexityTarget("extreme", 0)).toBe(0);
   });
 
-  it("the LIGHT default rides through to the serialized configJson", () => {
-    const json = JSON.parse(buildEngineConfigJson({ policy, seed: 3 }));
-    expect(json.complexity).toBe(2);
-    expect(json.strings).toBeUndefined();
-    expect(json.preset).toBeUndefined();
+  it("the LIGHT default rides through to the engine config object", () => {
+    const cfg = buildEngineConfig({ policy, seed: 3 });
+    expect(cfg.complexity).toBe(2);
+    expect(cfg.strings).toBeUndefined();
+    expect(cfg.preset).toBeUndefined();
   });
 
   it("lets an explicitly-configured complexity beat the preset's", () => {

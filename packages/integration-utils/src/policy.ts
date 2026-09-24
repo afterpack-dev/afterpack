@@ -1,6 +1,6 @@
 import type { GitBuildContext } from "./git.js";
 import {
-  type EngineConfigSubset,
+  type CoreConfigSubset,
   mergeInto,
   PRESET_VALUES,
   type TRANSFORM_KIND_VALUES,
@@ -136,10 +136,10 @@ export interface BuildEngineConfigOptions {
   sourcesContent?: boolean;
   regions?: RegionConfig[];
   renameGlobals?: boolean;
-  engine?: EngineConfigSubset;
+  engine?: CoreConfigSubset;
 }
 
-export interface EngineConfig extends EngineConfigSubset {
+export interface CoreConfig extends CoreConfigSubset {
   seed: number | string;
   preset?: Preset;
   sourceMap: { enabled?: boolean; sourcesContent: boolean };
@@ -149,7 +149,7 @@ export interface EngineConfig extends EngineConfigSubset {
   regions?: RegionConfig[];
 }
 
-export function buildEngineConfig(options: BuildEngineConfigOptions): EngineConfig {
+export function buildEngineConfig(options: BuildEngineConfigOptions): CoreConfig {
   const { filePath, policy, seed = 0, engine } = options;
   const perFileMap = "inputSourceMap" in options;
   const inputSourceMap = options.inputSourceMap ?? null;
@@ -159,7 +159,7 @@ export function buildEngineConfig(options: BuildEngineConfigOptions): EngineConf
     ? resolveSourceMapEnabled(policy.engineSourceMapOverride, inputSourceMap != null)
     : policy.engineSourceMapOverride;
 
-  const sourceMap: EngineConfig["sourceMap"] = { sourcesContent };
+  const sourceMap: CoreConfig["sourceMap"] = { sourcesContent };
   if (smEnabled !== undefined) sourceMap.enabled = smEnabled;
 
   const defaults: {
@@ -171,7 +171,7 @@ export function buildEngineConfig(options: BuildEngineConfigOptions): EngineConf
   if (options.preset === undefined || options.complexity !== undefined) {
     defaults.complexity = target;
   }
-  const config = mergeInto<EngineConfig>(
+  const config = mergeInto<CoreConfig>(
     { ...defaults, sourceMap, protectionMap: { enabled: policy.protectionMap } },
     (engine ?? {}) as Record<string, unknown>,
   );
@@ -192,18 +192,21 @@ export interface ClientContext {
   client?: string | null;
 }
 
-export function buildContextJson(
+export interface BuildContext {
+  commitSha?: string;
+  ref?: string;
+  clientVersion?: string;
+  client?: string;
+}
+
+export function buildContext(
   git: GitBuildContext | null | undefined,
   client: ClientContext = {},
-): string | undefined {
-  const context: Record<string, string> = {};
+): BuildContext | undefined {
+  const context: BuildContext = {};
   if (git?.commitSha) context.commitSha = git.commitSha;
   if (git?.ref) context.ref = git.ref;
   if (client.clientVersion) context.clientVersion = client.clientVersion;
   if (client.client) context.client = client.client;
-  return Object.keys(context).length > 0 ? JSON.stringify(context) : undefined;
-}
-
-export function buildEngineConfigJson(options: BuildEngineConfigOptions): string {
-  return JSON.stringify(buildEngineConfig(options));
+  return Object.keys(context).length > 0 ? context : undefined;
 }

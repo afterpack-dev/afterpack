@@ -420,7 +420,7 @@ export const CONFIG_KEYS = [
     tier: "pro",
     surface: "build",
     item: { kind: "string" },
-    default: "unset; builds run locally on the Free engine",
+    default: "unset; builds run locally with basic protection",
   },
 ] as const satisfies readonly ConfigKeyDef[];
 
@@ -840,7 +840,7 @@ export function nest(path: string, value: unknown): Record<string, unknown> {
   >;
 }
 
-export interface EngineConfigSubset {
+export interface CoreConfigSubset {
   seed?: number | string;
   preset?: string;
   complexity?: number;
@@ -875,7 +875,7 @@ function setPath(target: Record<string, unknown>, path: string, value: unknown):
   node[parts[parts.length - 1]] = value;
 }
 
-export function toEngineConfig(config: AfterpackConfig): EngineConfigSubset {
+export function toEngineConfig(config: AfterpackConfig): CoreConfigSubset {
   const out: Record<string, unknown> = {};
   for (const key of CONFIG_KEYS) {
     if (key.surface !== "engine") continue;
@@ -883,7 +883,7 @@ export function toEngineConfig(config: AfterpackConfig): EngineConfigSubset {
     if (value === undefined) continue;
     setPath(out, key.path, value);
   }
-  return out as EngineConfigSubset;
+  return out as CoreConfigSubset;
 }
 
 export interface PluginOptionsView {

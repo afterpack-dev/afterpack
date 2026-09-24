@@ -1,7 +1,7 @@
 {
   "name": "afterpack",
   "version": "0.1.0",
-  "description": "AfterPack CLI - obfuscate any build output; the universal fallback and zero-install demo",
+  "description": "AfterPack CLI: obfuscate the JavaScript in any build output, verify a build before deploy, and scan a live site",
   "type": "module",
   "bin": {
     "afterpack": "./dist/cli.js"
@@ -42,14 +42,20 @@
   },
   "keywords": [
     "obfuscator",
-    "javascript",
-    "cli",
+    "javascript-obfuscator",
+    "obfuscation",
     "code-protection",
+    "source-code-protection",
+    "javascript-security",
+    "anti-reverse-engineering",
+    "cli",
+    "cloudflare-workers",
+    "build-tool",
     "afterpack"
   ],
   "author": "AfterPack (https://www.afterpack.dev)",
   "license": "Apache-2.0",
-  "homepage": "https://www.afterpack.dev",
+  "homepage": "https://www.afterpack.dev/docs/cli",
   "bugs": {
     "url": "https://github.com/afterpack-dev/afterpack/issues"
   },

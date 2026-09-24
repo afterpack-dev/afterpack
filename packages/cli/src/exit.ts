@@ -18,7 +18,7 @@ export const SIZE_CAP_CODE = "DIAG_SIZE_CAP_REACHED";
 export const EXIT_CODE_HELP = `Exit codes:
   0   success — every collected file was obfuscated and written
   1   total failure — nothing usable was produced (also: a Pro build whose
-      cloud call failed, which never degrades to Free)
+      cloud call failed; it never falls back to a local build)
   2   partial — some files shipped unobfuscated; only reachable with
       \`--allowUnobfuscated\`
   3   size cap — \`inflation.max\` could not reach the complexity target

@@ -1,97 +1,94 @@
 # @afterpack/angular
 
-AfterPack for **Angular** (v17+) — obfuscates your `ng build` output.
+Obfuscate an Angular 17+ build. `@afterpack/angular` runs the
+[AfterPack](https://www.afterpack.dev) JavaScript obfuscator over the browser bundle that `ng build`
+writes.
 
-Modern Angular builds with the default `@angular-devkit/build-angular:application` builder, which is
-esbuild-based but **sealed**: it exposes no consumer plugin hook, so — unlike the Vite/webpack/Rollup
-plugins — AfterPack cannot ride an in-build hook here. The robust, honest integration is a **postbuild
-pass** over the emitted browser bundle. This package is a thin convenience over that; it contains **zero
-obfuscation logic** and simply runs the same shared pass the plugins use.
+Angular's application builder has no plugin hook, so AfterPack runs as a step after `ng build`.
 
-### The cleartext window
+## The simplest setup: the CLI
 
-Because the pass runs after `ng build` has finished writing, your unobfuscated bundle exists on disk
-until it completes. Anything that can read `dist/` during the build can read it in the clear, and a
-failed obfuscation leaves the cleartext output in place (the build fails, so nothing ships, but the
-files are there until the next build overwrites them). This is a property of the sealed builder, not
-a choice: `@afterpack/vite`, `@afterpack/rollup`, `@afterpack/webpack` and
-`@afterpack/parcel-optimizer` obfuscate inside the bundler's own pipeline and have no such window.
-`@afterpack/next` narrows but does not close it — it runs from inside `next build`, so it cannot be
-skipped and a failure aborts the build, but Next writes the chunks before the hook runs.
-`@afterpack/esbuild` shares this window for the same reason.
-
-## Canonical path: the `afterpack` CLI
-
-The simplest, dependency-light path needs nothing from this package — just the universal
-[`afterpack`](../cli) CLI as a postbuild step:
+You do not need this package for the common case. Add the
+[`afterpack` CLI](https://www.npmjs.com/package/afterpack) after `ng build`:
 
 ```jsonc
 // package.json
 {
   "scripts": {
-    "build": "ng build && afterpack dist/*/browser --seed git"
+    "build": "ng build && afterpack dist/my-app/browser --seed=git"
   }
 }
 ```
 
-Angular's application builder writes the client bundle to `dist/<app>/browser`; point the CLI at it and
-every emitted `.js` chunk is obfuscated in place, with a source map and a Protection Map dropped
-alongside. This is exactly what the framework-integration fixture does.
+## Using this package
 
-## Convenience: the programmatic helper
+Use this package when you prefer a Node script. It finds `dist/<app>/browser` for you.
 
-If you prefer a Node postbuild script (e.g. to avoid hard-coding the app name in a shell glob), this
-package auto-locates the browser output and runs the pass:
+```sh
+npm install --save-dev @afterpack/angular
+```
 
 ```ts
-// scripts/obfuscate.mjs — run after `ng build`
+// scripts/obfuscate.mjs, run after ng build
 import { afterpackAngular } from "@afterpack/angular";
 
-await afterpackAngular({ seed: "git" }); // finds dist/*/browser under cwd
+await afterpackAngular({ seed: "git" });
 ```
 
-`afterpackAngular(options)` locates `dist/*/browser` (override with `distRoot` or `browserDir`),
-collects the emitted JS, and obfuscates it in place. Fail-closed: throws on any engine failure.
+Each JavaScript file is obfuscated in place. If obfuscation fails, the promise rejects.
 
-Options (`seed`, `preset`, `complexity`, `protectionMap`, `regions`, `backup`, `sourceMap`, …) mirror every other
-AfterPack front door, so a config is portable. See [`@afterpack/integration-utils`](../integration-utils)
-for the full reference.
+## Options
 
-**`directives` is refused here, in every layer** (options object, `AFTERPACK_directives`,
-`afterpack.json`) — the application builder is sealed, so this postbuild pass only ever sees
-already-minified output and has no hook to capture `/* @afterpack ... */` comments from. Setting it
-fails the build with that reason rather than being quietly ignored. Build through a bundler AfterPack
-can hook ([`@afterpack/vite`](../vite), [`@afterpack/webpack`](../webpack),
-[`@afterpack/esbuild`](../esbuild)) if you need them.
+| Option | Type | Default |
+| --- | --- | --- |
+| `preset` | `"minify"`, `"light"`, `"medium"`, `"hard"`, `"extreme"` | `"light"` |
+| `complexity` | `number` | the preset's value |
+| `seed` | `number` or `string` (`"git"` uses the current commit) | a new random seed per build |
+| `protectionMap` | `boolean` | on when the build emitted source maps |
+| `sourceMap` | `boolean` | on in development when an input map exists, off in production |
+| `build.backup` | `boolean` | `false`; `true` keeps a `.backup.<hash>.js` copy of each original |
+| `build.autorun` | `boolean` | `true`; `false` turns AfterPack off |
+| `production` | `boolean` | detected from `NODE_ENV=production` or `CI=true` |
+| `cwd` | `string` | `process.cwd()` |
+| `distRoot` | `string` | `"dist"` |
+| `browserDir` | `string` | found under `distRoot`; set it when there are several apps |
 
-## Legacy Angular (webpack)
+Dotted names are nested objects: `build.backup` is `{ build: { backup: true } }`. Every other key
+in the [configuration reference](https://www.afterpack.dev/docs/config) works too, except
+`directives`: the build output is already minified, so `/* @afterpack */` comments are gone by the
+time AfterPack sees it. Setting `directives` fails with an explanation.
 
-Angular projects still on the older webpack-based builder can obfuscate in-build with
-[`@afterpack/webpack`](../webpack) via a custom builder, but the CLI postbuild above works uniformly
-across both builders and is the recommended path.
+Options can also live in `afterpack.json` or in `AFTERPACK_*` environment variables. The options
+object wins over the environment, which wins over the file. An unknown or misspelled key fails the
+run and names the right spelling.
 
-## Configuration
+## Limitations
 
-Every option above can also be set in `afterpack.json` — the one config file every AfterPack
-integration reads, at the nearest ancestor of your working directory — or in an `AFTERPACK_<key>`
-environment variable. Most specific wins: the options object here, then the environment, then the
-file.
+Because AfterPack runs after `ng build`, the readable bundle sits in `dist/` until the step
+finishes, and stays there if it fails. Projects on the older webpack-based builder can use
+[`@afterpack/webpack`](https://www.npmjs.com/package/@afterpack/webpack) through a custom builder
+instead.
 
-```json
-{
-  "preset": "hard",
-  "seed": "git"
-}
-```
+## Pro
 
-In the file and the environment each option carries its canonical name: `protectionMap` is
-`protectionMap.enabled`, `sourceMap` is `sourceMap.enabled`, `complexity` is already the registry key, and every
-other option keeps the name it has above. `cwd`, `distRoot` and `browserDir` locate the build rather than configure it, so they belong in the options object only.
+Without a key, AfterPack runs on your machine and applies basic protection. Set `AFTERPACK_KEY` in
+your environment and the same step sends the build to AfterPack's cloud, which applies much stronger
+protection. See [AfterPack Pro](https://www.afterpack.dev/docs/pro).
 
-The whole configuration is validated when the plugin is constructed: an unknown key, a kebab-cased
-key or a malformed value fails the build naming the canonical spelling, instead of being silently
-discarded.
+## Links
+
+- [Angular setup guide](https://www.afterpack.dev/docs/frameworks/angular)
+- [Presets and protection levels](https://www.afterpack.dev/docs/presets)
+- [Obfuscate your build in CI](https://www.afterpack.dev/docs/builds)
+- [How AfterPack compares to other obfuscators](https://www.afterpack.dev/docs/comparison)
+- [Protecting pricing logic](https://www.afterpack.dev/docs/use-cases/pricing-logic)
+
+## License
+
+Apache-2.0. The engine it runs, `@afterpack/core`, has its own
+[license](https://www.afterpack.dev/license).
 
 ## Feedback
 
-Questions and proposals: https://github.com/afterpack-dev/afterpack/discussions · Bugs: https://github.com/afterpack-dev/afterpack/issues
+Questions and ideas: [GitHub Discussions](https://github.com/afterpack-dev/afterpack/discussions).
+Bugs: [GitHub Issues](https://github.com/afterpack-dev/afterpack/issues).

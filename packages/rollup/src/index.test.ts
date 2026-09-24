@@ -101,7 +101,7 @@ describe("afterpackRollup generateBundle", () => {
   it("forwards a hand-authored regions array into the shared engine config", async () => {
     const regions = [{ start: 0, end: 12, floor: false }];
     await runPlugin({ regions }, { dir: outDir }, bundleOf(chunk("a.js", "export const a = 1;")));
-    expect(JSON.parse(engineCalls[0].configJson).regions).toEqual(regions);
+    expect(engineCalls[0].config.regions).toEqual(regions);
   });
 
   it("does nothing when build.autorun is disabled via the option", async () => {
@@ -262,7 +262,7 @@ describe("afterpackRollup directive capture (backward-coloring)", () => {
   it("colors a captured directive onto the emitted chunk's own bytes", async () => {
     await runCapture({});
     expect(engineCalls).toHaveLength(1);
-    const regions = JSON.parse(engineCalls[0].regions as string) as Array<Record<string, unknown>>;
+    const regions = engineCalls[0].regions as Array<Record<string, unknown>>;
     expect(regions).toHaveLength(1);
     expect(
       regions[0],
@@ -298,7 +298,7 @@ describe("afterpackRollup afterpack.json", () => {
   it("reaches the engine when the plugin was given no options at all", async () => {
     writeFileSync(join(root, "afterpack.json"), JSON.stringify({ preset: "hard" }));
     await runPlugin({}, { dir: outDir }, bundleOf(chunk("index.js", "export const a = 1;")));
-    expect(JSON.parse(engineCalls[0].configJson).preset).toBe("hard");
+    expect(engineCalls[0].config.preset).toBe("hard");
   });
 
   it("is outranked by the plugin options object", async () => {
@@ -308,7 +308,7 @@ describe("afterpackRollup afterpack.json", () => {
       { dir: outDir },
       bundleOf(chunk("index.js", "export const a = 1;")),
     );
-    expect(JSON.parse(engineCalls[0].configJson).preset).toBe("medium");
+    expect(engineCalls[0].config.preset).toBe("medium");
   });
 
   it("fails the build on an unknown key instead of silently dropping it", () => {

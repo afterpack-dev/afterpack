@@ -54,7 +54,7 @@ describe("directive capture through a real Rollup build", () => {
     expect(chunk).toContain("REGION_INSIDE_MARKER");
     expect(chunk).toContain("REGION_OUTSIDE_MARKER");
 
-    const regions = JSON.parse(engineCalls[0].regions as string) as Array<{
+    const regions = engineCalls[0].regions as Array<{
       start: number;
       end: number;
       target?: number;

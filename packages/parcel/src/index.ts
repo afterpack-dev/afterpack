@@ -5,8 +5,8 @@ import { processBatch, version } from "@afterpack/core";
 import {
   applyResolvedKey,
   CONFIG_FILE_NAME,
+  type CoreConfigSubset,
   createTelemetryReporter,
-  type EngineConfigSubset,
   extractSourceMappingURL,
   mergeConfig,
   type PluginOptionsView,
@@ -27,7 +27,7 @@ const CONFIG_FILES = [CONFIG_FILE_NAME];
 
 interface ParcelConfig {
   options: PluginOptionsView;
-  engineConfig: EngineConfigSubset;
+  engineConfig: CoreConfigSubset;
 }
 
 function interopCjsDefaultExport<T>(mod: T): T {
@@ -194,7 +194,7 @@ export default new Optimizer<ParcelConfig, void>({
           origin: PLUGIN_NAME,
           hints: [
             "Run `parcel build --no-content-hash` (chunk URLs stop being content-addressed).",
-            'Or set `"complexity": { "target": 0 }` in afterpack.json to ship minify-only.',
+            'Or set `"preset": "minify"` in afterpack.json to ship minify-only.',
           ],
         },
       });

@@ -1,7 +1,7 @@
 {
   "name": "@afterpack/nuxt",
   "version": "0.1.0",
-  "description": "AfterPack for Nuxt 3 (Vite) - obfuscate your build output automatically",
+  "description": "Nuxt 3 module for AfterPack: obfuscate a Nuxt app's production JavaScript during the build",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -53,14 +53,20 @@
   },
   "keywords": [
     "obfuscator",
-    "nuxt",
-    "vite",
+    "javascript-obfuscator",
+    "obfuscation",
     "code-protection",
+    "source-code-protection",
+    "javascript-security",
+    "anti-reverse-engineering",
+    "nuxt",
+    "nuxt-module",
+    "vite",
     "afterpack"
   ],
   "author": "AfterPack (https://www.afterpack.dev)",
   "license": "Apache-2.0",
-  "homepage": "https://www.afterpack.dev",
+  "homepage": "https://www.afterpack.dev/docs/frameworks/nuxt",
   "bugs": {
     "url": "https://github.com/afterpack-dev/afterpack/issues"
   }

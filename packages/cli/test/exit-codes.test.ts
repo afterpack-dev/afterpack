@@ -249,7 +249,10 @@ describe("the exit-code contract", () => {
   it("1 — a file with a status this CLI does not know is a failure, never written", async () => {
     __setBatchDecorator((result) => ({
       ...result,
-      files: result.files.map((f) => ({ ...f, status: "skipped" })),
+      files: result.files.map((f) => ({
+        ...f,
+        status: "skipped" as unknown as (typeof result.files)[number]["status"],
+      })),
     }));
     expect(await invoke(["dist", ...QUIET])).toBe(1);
     expect(readFileSync(join(buildDir, "app.js"), "utf8")).toBe("export const a = 1;");
