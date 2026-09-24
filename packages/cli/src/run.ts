@@ -467,7 +467,10 @@ async function runObfuscationAndBackup(input: {
             buildDir: input.buildDir,
             afterpackDir: join(input.cwd, ".afterpack"),
           },
-          artifactOptions: { ...input.parsed.artifactOptions, build: { backup: false } },
+          artifactOptions: {
+            ...input.parsed.artifactOptions,
+            build: { ...input.parsed.artifactOptions.build, backup: false },
+          },
           telemetry: createTelemetryReporter({ logger: input.notice }),
           clientVersion: input.version,
           client: input.client,
@@ -476,7 +479,7 @@ async function runObfuscationAndBackup(input: {
           complexity: input.parsed.complexity,
           diagnostics: input.parsed.diagnostics?.level,
           engineConfig: input.parsed.engineConfig,
-          directives: false,
+          directivesEnabled: false,
           receipt: { buildId: readBuildId(input.buildDir) },
           logger: input.report,
           summaryStyle: "cli",
@@ -704,7 +707,7 @@ export async function run(deps: CliDeps): Promise<number> {
       cwd,
       argv,
       env,
-      unsupported: { directives: DIRECTIVES_UNSUPPORTED },
+      unsupported: { "directives.enabled": DIRECTIVES_UNSUPPORTED },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

@@ -144,7 +144,10 @@ export default new Optimizer<ParcelConfig, void>({
       buildLeg: bundleLegIdentity,
       artifactOptions: {
         ...config.options.artifactOptions,
-        production: options.mode === "production",
+        build: {
+          ...config.options.artifactOptions.build,
+          mode: options.mode === "production" ? "production" : "development",
+        },
       },
       hasBundlerSourcemap: Boolean(bundle.env.sourceMap),
       env: seedEnvCopy,
@@ -158,15 +161,15 @@ export default new Optimizer<ParcelConfig, void>({
       regions: config.options.regions,
       engineConfig: config.engineConfig,
       diagnostics: config.options.diagnostics?.level,
-      directives: config.options.directives,
-      directivesExplicit: config.options.directivesExplicit,
+      directivesEnabled: config.options.directives.enabled,
+      directivesEnabledExplicit: config.options.directives.explicit,
       postMinify: true,
       messages: {
         autoEnableBundlerSourcemap:
           "protectionMap:true but this bundle carried no source map; enable source maps on the " +
           "Parcel target so future builds can render original source in the map.",
         directivesNeedClientMaps:
-          "directives:true but this bundle carried no source map with `sourcesContent`; enable " +
+          "`directives.enabled` is true but this bundle carried no source map with `sourcesContent`; enable " +
           "source maps on the Parcel target so `/* @afterpack ... */` directives can be recovered. " +
           "No directive was applied to this bundle.",
       },

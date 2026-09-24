@@ -275,7 +275,11 @@ describe("AfterpackWebpackPlugin source maps", () => {
 
   it("deletes the bundler's own map when policy ships none", async () => {
     const invoke = applyPlugin(
-      new AfterpackWebpackPlugin({ sourceMap: false, production: true, protectionMap: false }),
+      new AfterpackWebpackPlugin({
+        sourceMap: false,
+        build: { mode: "production" },
+        protectionMap: false,
+      }),
     );
     const assets = await invoke(withMap());
     expect(assets.has("main.js.map")).toBe(false);

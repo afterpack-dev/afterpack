@@ -87,7 +87,6 @@ withAfterpack(config, { preset: "hard", seed: "git" });
 | Option | What it does | Default |
 | --- | --- | --- |
 | [`preset`][preset] | `"minify"`, `"light"`, `"medium"`, `"hard"` or `"extreme"` | `"light"` |
-| [`complexity`][complexity] | a numeric protection level, overriding the preset's | the preset's value |
 | [`seed`][seed] | a number or string; `"git"` uses the current commit | a new random seed per build, shared by every part |
 | [`identifiers.reserved`][identifiers.reserved] | names never to rename | none |
 | [`protectionMap.enabled`][protectionMap.enabled] | write the Protection Map, one per part in `.afterpack/<leg>/` | on when Vite emits source maps |
@@ -100,7 +99,6 @@ every other option is in the [configuration reference](https://www.afterpack.dev
 Options can also live in `afterpack.json` or in `AFTERPACK_*` environment variables.
 
 [preset]: https://www.afterpack.dev/docs/config#preset
-[complexity]: https://www.afterpack.dev/docs/config#complexity
 [seed]: https://www.afterpack.dev/docs/config#seed
 [identifiers.reserved]: https://www.afterpack.dev/docs/config#identifiers-reserved
 [protectionMap.enabled]: https://www.afterpack.dev/docs/config#protectionMap-enabled

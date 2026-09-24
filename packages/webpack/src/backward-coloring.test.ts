@@ -155,7 +155,7 @@ describe("directive capture through a real production webpack build (terser stri
   }, 60_000);
 
   it("captures nothing when directives are disabled", async () => {
-    await build("source-map", { options: { directives: false } });
+    await build("source-map", { options: { directives: { enabled: false } } });
 
     for (const call of engineCalls) expect(call.regions).toBeUndefined();
   }, 60_000);

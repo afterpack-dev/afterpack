@@ -1,5 +1,6 @@
 import type { GitBuildContext } from "./git.js";
 import {
+  type BuildMode,
   type CoreConfigSubset,
   mergeInto,
   PRESET_VALUES,
@@ -22,8 +23,8 @@ export interface AfterpackArtifactOptions {
   };
   build?: {
     backup?: boolean;
+    mode?: BuildMode;
   };
-  production?: boolean;
   allowUnobfuscated?: boolean;
   telemetry?: {
     enabled?: boolean;
@@ -48,7 +49,8 @@ export interface ReportPolicy {
 }
 
 export function detectProduction(env: EnvLike = {}, opts: AfterpackArtifactOptions = {}): boolean {
-  return opts.production === true || env.NODE_ENV === "production" || env.CI === "true";
+  if (opts.build?.mode !== undefined) return opts.build.mode === "production";
+  return env.NODE_ENV === "production" || env.CI === "true";
 }
 
 export function resolveReportPolicy(

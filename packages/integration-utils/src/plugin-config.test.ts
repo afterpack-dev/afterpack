@@ -286,7 +286,7 @@ describe("resolvePluginConfig — fail-closed, with provenance", () => {
 });
 
 describe("resolvePluginConfig — keys a front door cannot honour", () => {
-  const unsupported = { directives: "this pass only sees minified output" };
+  const unsupported = { "directives.enabled": "this pass only sees minified output" };
 
   it("refuses the key on the options object, naming the reason", () => {
     expect(() =>
@@ -294,10 +294,10 @@ describe("resolvePluginConfig — keys a front door cannot honour", () => {
         label: "afterpack-angular",
         cwd,
         env: {},
-        options: { directives: true },
+        options: { directives: { enabled: true } },
         unsupported,
       }),
-    ).toThrow(/`directives` is not supported here — this pass only sees minified output/);
+    ).toThrow(/`directives\.enabled` is not supported here — this pass only sees minified output/);
   });
 
   it("refuses it from the environment too, so no layer is a silent bypass", () => {
@@ -305,28 +305,28 @@ describe("resolvePluginConfig — keys a front door cannot honour", () => {
       resolvePluginConfig({
         label: "afterpack-angular",
         cwd,
-        env: { AFTERPACK_directives: "true" },
+        env: { AFTERPACK_directives_enabled: "true" },
         unsupported,
       }),
-    ).toThrow(/environment: `directives` is not supported here/);
+    ).toThrow(/environment: `directives\.enabled` is not supported here/);
   });
 
   it("refuses it from afterpack.json too", () => {
-    writeConfigFile({ directives: true });
+    writeConfigFile({ directives: { enabled: true } });
     expect(() =>
       resolvePluginConfig({ label: "afterpack-angular", cwd, env: {}, unsupported }),
-    ).toThrow(/afterpack\.json: `directives` is not supported here/);
+    ).toThrow(/afterpack\.json: `directives\.enabled` is not supported here/);
   });
 
   it("allows an explicit `false` from any layer — that asks for what it already does", () => {
-    writeConfigFile({ directives: false });
+    writeConfigFile({ directives: { enabled: false } });
     expect(() =>
       resolvePluginConfig({
         label: "afterpack-angular",
         cwd,
-        env: { AFTERPACK_directives: "false" },
-        options: { directives: false },
-        unsupported: { directives: "the postbuild runs over a sealed builder" },
+        env: { AFTERPACK_directives_enabled: "false" },
+        options: { directives: { enabled: false } },
+        unsupported: { "directives.enabled": "the postbuild runs over a sealed builder" },
       }),
     ).not.toThrow();
   });
@@ -362,18 +362,58 @@ describe("resolvePluginConfig — keys a front door cannot honour", () => {
   });
 });
 
-describe("resolvePluginConfig — the ONE directives default", () => {
+describe("resolvePluginConfig — the ONE directives.enabled default", () => {
   it("resolves to the registry default when nobody set it", () => {
     const resolved = resolvePluginConfig({ label: "afterpack-vite", cwd, env: {} });
-    expect(resolved.options.directives).toBe(true);
-    expect(resolved.options.directivesExplicit).toBe(false);
+    expect(resolved.options.directives).toEqual({ enabled: true, explicit: false });
   });
 
   it("marks it explicit when the user set it, in any layer", () => {
-    writeConfigFile({ directives: false });
+    writeConfigFile({ directives: { enabled: false } });
     const resolved = resolvePluginConfig({ label: "afterpack-vite", cwd, env: {} });
-    expect(resolved.options.directives).toBe(false);
-    expect(resolved.options.directivesExplicit).toBe(true);
+    expect(resolved.options.directives).toEqual({ enabled: false, explicit: true });
+  });
+});
+
+describe("resolvePluginConfig — build.mode", () => {
+  it("carries the mode to the artifact options", () => {
+    writeConfigFile({ build: { mode: "production" } });
+    const resolved = resolvePluginConfig({ label: "afterpack-vite", cwd, env: {} });
+    expect(resolved.options.artifactOptions.build?.mode).toBe("production");
+  });
+
+  it("reads it from the flag and the environment", () => {
+    const fromFlag = resolvePluginConfig({
+      label: "afterpack",
+      cwd,
+      env: {},
+      argv: ["--build.mode=development"],
+    });
+    expect(fromFlag.options.artifactOptions.build?.mode).toBe("development");
+    const fromEnv = resolvePluginConfig({
+      label: "afterpack",
+      cwd,
+      env: { AFTERPACK_build_mode: "production" },
+    });
+    expect(fromEnv.options.artifactOptions.build?.mode).toBe("production");
+  });
+
+  it("refuses a value outside the enum, listing the allowed ones", () => {
+    writeConfigFile({ build: { mode: "prod" } });
+    expect(() => resolvePluginConfig({ label: "afterpack-vite", cwd, env: {} })).toThrow(
+      /`build\.mode`: expected one of: production, development, got "prod"/,
+    );
+  });
+
+  it("refuses a boolean", () => {
+    expect(() =>
+      resolvePluginConfig({
+        label: "afterpack-vite",
+        cwd,
+        env: {},
+        options: { build: { mode: true } },
+      }),
+    ).toThrow(/`build\.mode`: expected one of: production, development, got true/);
   });
 });
 

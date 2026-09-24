@@ -116,7 +116,7 @@ export class AfterpackWebpackPlugin {
 
   apply(compiler: Compiler): void {
     const context = compiler.options.context ?? process.cwd();
-    const directivesEnabled = this.settings.directives;
+    const directivesEnabled = this.settings.directives.enabled;
     if (directivesEnabled) {
       compiler.hooks.thisCompilation.tap(PLUGIN_NAME, () => {
         this.seenByBuildHooksThisCompilation.clear();
@@ -179,7 +179,7 @@ export class AfterpackWebpackPlugin {
     const files = [...byPath.keys()];
     if (files.length === 0) return;
 
-    const directivesEnabled = this.settings.directives;
+    const directivesEnabled = this.settings.directives.enabled;
     const capturedByFile = directivesEnabled
       ? this.joinCaptured(compilation, outputPath, new Set(files), context)
       : new Map<string, CapturedModule[]>();

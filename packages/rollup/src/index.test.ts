@@ -209,7 +209,7 @@ describe("afterpackRollup source maps", () => {
 
   it("drops the bundler's own map entry when policy ships none", async () => {
     const bundle = await runPlugin(
-      { sourceMap: false, production: true, protectionMap: false },
+      { sourceMap: false, build: { mode: "production" }, protectionMap: false },
       { dir: outDir, sourcemap: true },
       mapped(),
     );
@@ -271,7 +271,7 @@ describe("afterpackRollup directive capture (backward-coloring)", () => {
   });
 
   it("sends no per-file regions when directives are disabled", async () => {
-    await runCapture({ directives: false });
+    await runCapture({ directives: { enabled: false } });
     expect(engineCalls).toHaveLength(1);
     expect(engineCalls[0].regions).toBeUndefined();
   });

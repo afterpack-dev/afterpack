@@ -39,7 +39,7 @@ export function afterpackRollup(options: AfterpackRollupOptions = {}): Plugin {
   });
   const settings = resolved.options;
   const autorun = settings.build?.autorun ?? true;
-  const directivesEnabled = settings.directives;
+  const directivesEnabled = settings.directives.enabled;
   const preMinifyCapturedModulesById = new Map<
     string,
     { source: string; directives: CapturedDirective[]; renameGlobals: boolean }

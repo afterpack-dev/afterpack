@@ -21,7 +21,13 @@ describe("detectProduction", () => {
   it("is true for NODE_ENV=production, CI=true, or an explicit hint", () => {
     expect(detectProduction({ NODE_ENV: "production" })).toBe(true);
     expect(detectProduction({ CI: "true" })).toBe(true);
-    expect(detectProduction({}, { production: true })).toBe(true);
+    expect(detectProduction({}, { build: { mode: "production" } })).toBe(true);
+  });
+  it("an explicit build.mode wins over the environment", () => {
+    expect(detectProduction({ CI: "true" }, { build: { mode: "development" } })).toBe(false);
+    expect(detectProduction({ NODE_ENV: "production" }, { build: { mode: "development" } })).toBe(
+      false,
+    );
   });
 });
 

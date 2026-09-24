@@ -172,14 +172,17 @@ describe("afterpackEsbuild per-region directives", () => {
 
   it("scans nothing when the user turns directives off", async () => {
     writeChunk(true);
-    await applyPlugin({ directives: false }, { outdir: outDir, absWorkingDir: root })();
+    await applyPlugin(
+      { directives: { enabled: false } },
+      { outdir: outDir, absWorkingDir: root },
+    )();
     expect(engineCalls).toHaveLength(1);
     expect(engineCalls[0].regions).toBeUndefined();
   });
 
   it("warns (never silently no-ops) when opted in with no usable source map", async () => {
     writeChunk(false);
-    await applyPlugin({ directives: true }, { outdir: outDir, absWorkingDir: root })();
+    await applyPlugin({ directives: { enabled: true } }, { outdir: outDir, absWorkingDir: root })();
     expect(engineCalls[0].regions).toBeUndefined();
     const warned = vi.mocked(console.warn).mock.calls.map((c) => String(c[0]));
     expect(warned.some((w) => w.includes("No directive was applied to this build."))).toBe(true);

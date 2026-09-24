@@ -105,12 +105,15 @@ interface Invocation {
 
 describe("a key the CLI cannot honour is refused from every layer", () => {
   const layers: [string, (root: string) => Invocation][] = [
-    ["flag", () => ({ argv: ["dist", "--directives"], env: {} })],
-    ["environment", () => ({ argv: ["dist"], env: { AFTERPACK_directives: "true" } })],
+    ["flag", () => ({ argv: ["dist", "--directives.enabled"], env: {} })],
+    ["environment", () => ({ argv: ["dist"], env: { AFTERPACK_directives_enabled: "true" } })],
     [
       "afterpack.json",
       (root) => {
-        writeFileSync(join(root, "afterpack.json"), JSON.stringify({ directives: true }));
+        writeFileSync(
+          join(root, "afterpack.json"),
+          JSON.stringify({ directives: { enabled: true } }),
+        );
         return { argv: ["dist"], env: {} };
       },
     ],
@@ -129,7 +132,7 @@ describe("a key the CLI cannot honour is refused from every layer", () => {
       env,
     });
     expect(code).toBe(64);
-    expect(errors.join("\n")).toContain("`directives` is not supported here");
+    expect(errors.join("\n")).toContain("`directives.enabled` is not supported here");
     expect(engineCalls).toHaveLength(0);
   });
 });
@@ -209,11 +212,11 @@ const BUILD_PROBES: Record<string, () => Promise<void>> = {
     expect(ran.logs.join("\n")).toContain("build.autorun is false");
   },
 
-  directives: async () => {
+  "directives.enabled": async () => {
     const root = project();
-    const ran = await runCli(root, ["dist", "--directives"]);
+    const ran = await runCli(root, ["dist", "--directives.enabled"]);
     expect(ran.code).toBe(64);
-    expect(ran.errors.join("\n")).toContain("`directives` is not supported here");
+    expect(ran.errors.join("\n")).toContain("`directives.enabled` is not supported here");
     expect(engineCalls).toHaveLength(0);
   },
 

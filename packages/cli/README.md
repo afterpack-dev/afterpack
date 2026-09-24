@@ -85,37 +85,26 @@ An unknown or misspelled option fails the run and names the right spelling.
 | Flag | What it does | Default |
 | --- | --- | --- |
 | [`--preset`][preset] | `minify`, `light`, `medium`, `hard` or `extreme` | `light` |
-| [`--complexity`][complexity] | a numeric protection level, overriding the preset's | the preset's value |
 | [`--seed`][seed] | fix the seed; `git` uses the current commit | a new random seed per build |
 | [`--paths.exclude`][paths.exclude] | globs to leave untouched | none |
 | [`--paths.include`][paths.include] | globs to add back to the walk | none |
 | [`--identifiers.reserved`][identifiers.reserved] | names never to rename | none |
 | [`--build.backup`][build.backup] | back up originals to `.afterpack/backup/` | `true` |
-| [`--sourceMap.enabled`][sourceMap.enabled] | write `.map` files | on when an input map exists, off in production |
 | [`--protectionMap.enabled`][protectionMap.enabled] | write the Protection Map | on when an input map exists |
-| [`--diagnostics.format`][diagnostics.format] | `text` or `json` | `text` |
-| [`--allowUnobfuscated`][allowUnobfuscated] | ship a file AfterPack could not process, instead of failing | `false` |
-| [`--telemetry.enabled`][telemetry.enabled] | report anonymous diagnostics when a build fails | `true` |
 
-Each flag is also a key in `afterpack.json` and an `AFTERPACK_*` variable. Every other option, such
-as [`diagnostics.level`][diagnostics.level] or [`build.autorun`][build.autorun], is in the
-[configuration reference](https://www.afterpack.dev/docs/config). The
+Each flag is also a key in `afterpack.json` and an `AFTERPACK_*` variable. Every other option is in
+the [configuration reference](https://www.afterpack.dev/docs/config). The
 [CLI reference](https://www.afterpack.dev/docs/cli) covers the commands.
 
 [preset]: https://www.afterpack.dev/docs/config#preset
-[complexity]: https://www.afterpack.dev/docs/config#complexity
 [seed]: https://www.afterpack.dev/docs/config#seed
 [paths.exclude]: https://www.afterpack.dev/docs/config#paths-exclude
 [paths.include]: https://www.afterpack.dev/docs/config#paths-include
 [identifiers.reserved]: https://www.afterpack.dev/docs/config#identifiers-reserved
 [build.backup]: https://www.afterpack.dev/docs/config#build-backup
-[sourceMap.enabled]: https://www.afterpack.dev/docs/config#sourceMap-enabled
 [protectionMap.enabled]: https://www.afterpack.dev/docs/config#protectionMap-enabled
 [diagnostics.format]: https://www.afterpack.dev/docs/config#diagnostics-format
 [allowUnobfuscated]: https://www.afterpack.dev/docs/config#allowUnobfuscated
-[telemetry.enabled]: https://www.afterpack.dev/docs/config#telemetry-enabled
-[diagnostics.level]: https://www.afterpack.dev/docs/config#diagnostics-level
-[build.autorun]: https://www.afterpack.dev/docs/config#build-autorun
 [inflation.max]: https://www.afterpack.dev/docs/config#inflation-max
 [key]: https://www.afterpack.dev/docs/config#key
 

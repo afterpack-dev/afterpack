@@ -366,13 +366,13 @@ describe("runObfuscationPass buffer -> verify -> write", () => {
 });
 
 describe("runObfuscationPass directive capture", () => {
-  it("captures a single-file source directive when directives:true", async () => {
+  it("captures a single-file source directive when directives.enabled is true", async () => {
     const a = join(outDir, "only.js");
     writeFileSync(a, 'const s = /* @afterpack strings.encode=off */ "KEEP";\n');
     const { engine, calls } = makeEngine(() => ({}));
     await runObfuscationPass({
       ...baseOptions([a], engine),
-      directives: true,
+      directivesEnabled: true,
       logger: silentLogger().logger,
     });
     const regions = calls[0].config.regions as Array<{ floor?: boolean }>;
@@ -397,7 +397,11 @@ describe("runObfuscationPass identifiers.globals.rename scope", () => {
     writeFileSync(a, RENAME);
     const { engine, calls } = makeEngine(() => ({}));
     const cap = silentLogger();
-    await runObfuscationPass({ ...baseOptions([a], engine), directives: true, logger: cap.logger });
+    await runObfuscationPass({
+      ...baseOptions([a], engine),
+      directivesEnabled: true,
+      logger: cap.logger,
+    });
     expect(calls[0].config.identifiers?.globals?.rename).toBe(true);
     expect(cap.warnings.some((w) => w.includes("REFUSED"))).toBe(false);
   });
@@ -412,7 +416,7 @@ describe("runObfuscationPass identifiers.globals.rename scope", () => {
 
     await runObfuscationPass({
       ...baseOptions([a, b], engine),
-      directives: true,
+      directivesEnabled: true,
       logger: cap.logger,
     });
 
@@ -438,7 +442,7 @@ describe("runObfuscationPass identifiers.globals.rename scope", () => {
 
     await runObfuscationPass({
       ...baseOptions([a], engine),
-      directives: true,
+      directivesEnabled: true,
       postMinify: true,
       logger: cap.logger,
     });
@@ -460,7 +464,7 @@ describe("runObfuscationPass identifiers.globals.rename scope", () => {
 
     await runObfuscationPass({
       ...baseOptions([a], engine),
-      directives: true,
+      directivesEnabled: true,
       capturedByFile: new Map([
         [a, [{ id: "./src/legacy.js", source: RENAME, directives: [], renameGlobals: true }]],
       ]),
@@ -497,7 +501,7 @@ describe("runObfuscationPass post-minify (sourcesContent) directive capture", ()
 
     await runObfuscationPass({
       ...baseOptions([a], engine),
-      directives: true,
+      directivesEnabled: true,
       postMinify: true,
       logger: silentLogger().logger,
     });
@@ -519,7 +523,7 @@ describe("runObfuscationPass post-minify (sourcesContent) directive capture", ()
 
     await runObfuscationPass({
       ...baseOptions([a], engine),
-      directives: true,
+      directivesEnabled: true,
       postMinify: true,
       logger: silentLogger().logger,
     });
@@ -537,7 +541,7 @@ describe("runObfuscationPass post-minify (sourcesContent) directive capture", ()
 
     await runObfuscationPass({
       ...baseOptions([a], engine),
-      directives: true,
+      directivesEnabled: true,
       postMinify: true,
       logger: silentLogger().logger,
     });
@@ -553,7 +557,7 @@ describe("runObfuscationPass post-minify (sourcesContent) directive capture", ()
 
     await runObfuscationPass({
       ...baseOptions([a], engine),
-      directives: true,
+      directivesEnabled: true,
       postMinify: true,
       capturedByFile: new Map([[join(outDir, "other.js"), []]]),
       logger: silentLogger().logger,
@@ -570,8 +574,8 @@ describe("runObfuscationPass post-minify (sourcesContent) directive capture", ()
 
     await runObfuscationPass({
       ...baseOptions([a], engine),
-      directives: true,
-      directivesExplicit: true,
+      directivesEnabled: true,
+      directivesEnabledExplicit: true,
       postMinify: true,
       messages: { directivesNeedClientMaps: "enable productionBrowserSourceMaps" },
       logger: cap.logger,
@@ -588,7 +592,7 @@ describe("runObfuscationPass post-minify (sourcesContent) directive capture", ()
 
     await runObfuscationPass({
       ...baseOptions([a], engine),
-      directives: true,
+      directivesEnabled: true,
       postMinify: true,
       messages: { directivesNeedClientMaps: "enable productionBrowserSourceMaps" },
       logger: cap.logger,
@@ -605,7 +609,7 @@ describe("runObfuscationPass post-minify (sourcesContent) directive capture", ()
 
     await runObfuscationPass({
       ...baseOptions([a], engine),
-      directives: true,
+      directivesEnabled: true,
       logger: silentLogger().logger,
     });
 

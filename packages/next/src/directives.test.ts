@@ -51,7 +51,7 @@ describe("afterpack-next post-minify directive capture (the original survives on
       label: "afterpack-next",
       gitignoreDir: dir,
       combinedProtectionMap: { buildDir: join(dir, ".next") },
-      directives: true,
+      directivesEnabled: true,
       postMinify: true,
     });
 

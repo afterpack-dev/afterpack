@@ -60,9 +60,13 @@ const REFLECTION_ALLOW_VALUES = [
   "nestjs",
 ] as const;
 
+export const BUILD_MODE_VALUES = ["production", "development"] as const;
+
+export type BuildMode = (typeof BUILD_MODE_VALUES)[number];
+
 const UNLIMITED = "unlimited";
 
-export const DIRECTIVES_DEFAULT = true;
+export const DIRECTIVES_ENABLED_DEFAULT = true;
 
 const RESERVED_FILE_FORM = '{ "identifiers": { "reserved": [{ "glob": "…", "names": ["…"] }] } }';
 const REGIONS_FILE_FORM = '{ "regions": [{ "start": 0, "end": 100, "target": 40 }] }';
@@ -360,16 +364,16 @@ export const CONFIG_KEYS = [
     default: "true",
   },
   {
-    path: "production",
+    path: "build.mode",
     shape: "scalar",
     scope: "program",
     tier: "free",
     surface: "build",
-    item: { kind: "boolean" },
+    item: { kind: "enum", values: BUILD_MODE_VALUES },
     default: "detected from the environment",
   },
   {
-    path: "directives",
+    path: "directives.enabled",
     shape: "scalar",
     scope: "program",
     tier: "free",
@@ -894,8 +898,7 @@ export interface PluginOptionsView {
   preset?: Preset;
   complexity?: number;
   regions?: RegionConfig[];
-  directives: boolean;
-  directivesExplicit: boolean;
+  directives: { enabled: boolean; explicit: boolean };
   build?: { autorun?: boolean };
   diagnostics?: { level?: "summary" | "all" | "none"; format?: "text" | "json" };
   paths?: { include?: string[] };
@@ -913,8 +916,7 @@ export function toPluginOptions(config: AfterpackConfig): PluginOptionsView {
         enabled: read<boolean>("sourceMap.enabled"),
         emitUrl: read<boolean>("sourceMap.emitUrl"),
       }),
-      build: set({ backup: read<boolean>("build.backup") }),
-      production: read<boolean>("production"),
+      build: set({ backup: read<boolean>("build.backup"), mode: read<BuildMode>("build.mode") }),
       allowUnobfuscated: read<boolean>("allowUnobfuscated"),
       telemetry: set({ enabled: read<boolean>("telemetry.enabled") }),
     },
@@ -922,8 +924,10 @@ export function toPluginOptions(config: AfterpackConfig): PluginOptionsView {
     preset: read<Preset>("preset"),
     complexity: read<number>("complexity"),
     regions: read<RegionConfig[]>("regions"),
-    directives: read<boolean>("directives") ?? DIRECTIVES_DEFAULT,
-    directivesExplicit: read<boolean>("directives") !== undefined,
+    directives: {
+      enabled: read<boolean>("directives.enabled") ?? DIRECTIVES_ENABLED_DEFAULT,
+      explicit: read<boolean>("directives.enabled") !== undefined,
+    },
     build: set({ autorun: read<boolean>("build.autorun") }),
     diagnostics: set({
       level: read<"summary" | "all" | "none">("diagnostics.level"),

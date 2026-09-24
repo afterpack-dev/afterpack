@@ -155,7 +155,7 @@ describe("afterpack verify", () => {
 
   it("runs with no configuration at all — an afterpack.json the CLI cannot honour never reaches it", async () => {
     protectedBuild();
-    writeFileSync(join(root, "afterpack.json"), JSON.stringify({ directives: true }));
+    writeFileSync(join(root, "afterpack.json"), JSON.stringify({ directives: { enabled: true } }));
 
     expect(await invoke(["verify", "."])).toBe(0);
   });

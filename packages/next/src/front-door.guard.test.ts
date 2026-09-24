@@ -173,11 +173,11 @@ const BUILD_PROBES: Record<string, () => Promise<void>> = {
     expect(engineCalls).toHaveLength(0);
   },
 
-  directives: async () => {
+  "directives.enabled": async () => {
     const off = captured("warn");
     await runAfterpackHook({
       metadata: project(),
-      options: { directives: false },
+      options: { directives: { enabled: false } },
       engine,
       env: BASE_ENV,
     });
@@ -186,7 +186,7 @@ const BUILD_PROBES: Record<string, () => Promise<void>> = {
     const on = captured("warn");
     await runAfterpackHook({
       metadata: project(),
-      options: { directives: true },
+      options: { directives: { enabled: true } },
       engine,
       env: BASE_ENV,
     });

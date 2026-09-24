@@ -14,7 +14,7 @@ import { resolvePluginConfig } from "./plugin-config.js";
 import {
   type AfterpackConfig,
   CONFIG_KEYS,
-  DIRECTIVES_DEFAULT,
+  DIRECTIVES_ENABLED_DEFAULT,
   getPath,
   toEngineConfig,
   validateConfig,
@@ -380,9 +380,9 @@ describe("the environment mapper", () => {
     expect(parseEnvOptions({ AFTERPACK_PRESET: "hard" }).config).toEqual({});
   });
 
-  it("documents the directives default as a LITERAL that still matches the constant", () => {
-    const key = CONFIG_KEYS.find((k) => k.path === "directives");
-    expect(key?.default).toBe(String(DIRECTIVES_DEFAULT));
+  it("documents the directives.enabled default as a LITERAL that still matches the constant", () => {
+    const key = CONFIG_KEYS.find((k) => k.path === "directives.enabled");
+    expect(key?.default).toBe(String(DIRECTIVES_ENABLED_DEFAULT));
   });
 
   it("is loud on the SCREAMING twin of every registry key, never silent", () => {

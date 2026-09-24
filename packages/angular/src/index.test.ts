@@ -121,7 +121,7 @@ describe("afterpackAngular afterpack.json", () => {
   });
 });
 
-describe("afterpackAngular refuses `directives`", () => {
+describe("afterpackAngular refuses `directives.enabled`", () => {
   function write(): void {
     writeFileSync(join(browserDir, "main.js"), "export const a = 1;");
   }
@@ -130,23 +130,23 @@ describe("afterpackAngular refuses `directives`", () => {
     write();
     await expect(
       // @ts-expect-error `directives` is Omitted from this front door's options on purpose.
-      afterpackAngular({ cwd: root, directives: true }),
+      afterpackAngular({ cwd: root, directives: { enabled: true } }),
     ).rejects.toThrow(
-      /`directives` is not supported here — the Angular application builder is sealed/,
+      /`directives\.enabled` is not supported here — the Angular application builder is sealed/,
     );
   });
 
   it("fails the build when afterpack.json sets it, not just the options object", async () => {
     write();
-    writeFileSync(join(root, "afterpack.json"), JSON.stringify({ directives: true }));
+    writeFileSync(join(root, "afterpack.json"), JSON.stringify({ directives: { enabled: true } }));
     await expect(afterpackAngular({ cwd: root })).rejects.toThrow(
-      /`directives` is not supported here/,
+      /`directives\.enabled` is not supported here/,
     );
   });
 
   it("allows an explicit `false`, so one shared afterpack.json can name the key", async () => {
     write();
-    writeFileSync(join(root, "afterpack.json"), JSON.stringify({ directives: false }));
+    writeFileSync(join(root, "afterpack.json"), JSON.stringify({ directives: { enabled: false } }));
     await expect(afterpackAngular({ cwd: root })).resolves.toBeUndefined();
   });
 

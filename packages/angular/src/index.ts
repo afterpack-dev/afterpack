@@ -35,7 +35,7 @@ export async function afterpackAngular(options: AfterpackAngularOptions = {}): P
     options,
     cwd,
     localKeys: LOCAL_KEYS,
-    unsupported: { directives: DIRECTIVES_UNSUPPORTED },
+    unsupported: { "directives.enabled": DIRECTIVES_UNSUPPORTED },
   });
   const settings = resolved.options;
   if (settings.build?.autorun === false) {
@@ -61,6 +61,6 @@ export async function afterpackAngular(options: AfterpackAngularOptions = {}): P
     startedAt: startedBeforeDirDiscovery,
     combinedProtectionMap: { buildDir: browserDir, afterpackDir: gitignoredNonServedAfterpackDir },
     ...passSettings(resolved),
-    directives: DIRECTIVES_ALWAYS_DISABLED,
+    directivesEnabled: DIRECTIVES_ALWAYS_DISABLED,
   });
 }

@@ -292,8 +292,8 @@ describe("afterpackVite directive capture (single-file, un-bundled)", () => {
     expect("regions" in sharedConfig()).toBe(false);
   });
 
-  it("directives:false disables source capture", async () => {
-    await runPlugin({ directives: false }, bundleOf(chunk("only.js", DIRECTIVE)));
+  it("directives.enabled false disables source capture", async () => {
+    await runPlugin({ directives: { enabled: false } }, bundleOf(chunk("only.js", DIRECTIVE)));
     expect("regions" in sharedConfig()).toBe(false);
   });
 });

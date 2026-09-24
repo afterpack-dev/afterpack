@@ -353,7 +353,7 @@ describe("directives", () => {
     await run({
       contents: NON_ENTRY_CONTENTS,
       map: fakeMap(NON_ENTRY_MAP),
-      config: { directives: true },
+      config: { directives: { enabled: true } },
     });
 
     expect(engineCalls[0].regions).toBeDefined();
@@ -379,7 +379,11 @@ describe("directives", () => {
       names: [],
     };
 
-    await run({ contents: "(()=>{})();", map: fakeMap(map), config: { directives: true } });
+    await run({
+      contents: "(()=>{})();",
+      map: fakeMap(map),
+      config: { directives: { enabled: true } },
+    });
 
     const userVisibleWarnings = warnings.map((w) => w.replace(/\\(.)/g, "$1"));
     expect(engineCalls[0].regions).toBeUndefined();

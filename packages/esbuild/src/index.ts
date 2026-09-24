@@ -68,7 +68,7 @@ export function afterpackEsbuild(options: AfterpackEsbuildOptions = {}): Plugin 
               "protectionMap:true but no bundler sourcemap was found; set `sourcemap: true` " +
               "so future builds can render original source in the map.",
             directivesNeedClientMaps:
-              "directives:true but no emitted file carried a source map with `sourcesContent`; " +
+              "`directives.enabled` is true but no emitted file carried a source map with `sourcesContent`; " +
               "set `sourcemap: true` so `/* @afterpack ... */` directives can be recovered from " +
               "the emitted chunks. No directive was applied to this build.",
           },

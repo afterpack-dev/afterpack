@@ -145,9 +145,9 @@ export interface ObfuscationPassOptions {
   complexity?: number;
   regions?: RegionConfig[];
   engineConfig?: CoreConfigSubset;
-  directives?: boolean;
+  directivesEnabled?: boolean;
   postMinify?: boolean;
-  directivesExplicit?: boolean;
+  directivesEnabledExplicit?: boolean;
   capturedByFile?: Map<string, CapturedModule[]>;
   env?: EnvLike;
   messages?: PassMessages;
@@ -305,7 +305,7 @@ export async function runObfuscationPass(
     );
   }
 
-  const directivesEnabled = options.directives ?? false;
+  const directivesEnabled = options.directivesEnabled ?? false;
   const bundledCapture = options.capturedByFile != null;
   const postMinifyMode = directivesEnabled && options.postMinify === true && !bundledCapture;
 
@@ -435,7 +435,7 @@ export async function runObfuscationPass(
   }
   if (
     postMinifyMode &&
-    options.directivesExplicit === true &&
+    options.directivesEnabledExplicit === true &&
     files.length > 0 &&
     postMinifyMapsSeen === 0 &&
     options.messages?.directivesNeedClientMaps

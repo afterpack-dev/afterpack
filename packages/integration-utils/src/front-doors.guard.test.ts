@@ -32,14 +32,14 @@ const FORCED_OFF_AND_REFUSING = new Set([
   "integration-utils/src/pass.ts",
 ]);
 
-describe("no front door carries its own `directives` default", () => {
+describe("no front door carries its own `directives.enabled` default", () => {
   it.each(frontDoorSources().map((f) => [f.slice(PACKAGES.length), f]))("%s", (rel, file) => {
     if (FORCED_OFF_AND_REFUSING.has(rel)) return;
     const text = readFileSync(file, "utf8")
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/^\s*\/\/.*$/gm, "");
-    expect(text, "re-defaults `directives`; the registry owns it").not.toMatch(
-      /directives\s*\?\?\s*(true|false)|directives:\s*(true|false)\s*[,}]/,
+    expect(text, "re-defaults `directives.enabled`; the registry owns it").not.toMatch(
+      /directivesEnabled\s*\?\?\s*(true|false)|directivesEnabled:\s*(true|false)\s*[,}]/,
     );
   });
 });

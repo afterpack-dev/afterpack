@@ -42,35 +42,24 @@ Each JavaScript file is obfuscated in place. If obfuscation fails, the promise r
 | Option | What it does | Default |
 | --- | --- | --- |
 | [`preset`][preset] | `"minify"`, `"light"`, `"medium"`, `"hard"` or `"extreme"` | `"light"` |
-| [`complexity`][complexity] | a numeric protection level, overriding the preset's | the preset's value |
 | [`seed`][seed] | a number or string; `"git"` uses the current commit | a new random seed per build |
 | [`identifiers.reserved`][identifiers.reserved] | names never to rename | none |
 | [`paths.exclude`][paths.exclude] | globs for files to leave untouched | none |
-| [`sourceMap.enabled`][sourceMap.enabled] | write source maps for the obfuscated output | on in development when an input map exists, off in production |
-| [`protectionMap.enabled`][protectionMap.enabled] | write the Protection Map | on when the build emitted source maps |
-| [`build.backup`][build.backup] | keep a `.backup.<hash>.js` copy of each original | `false` |
-| [`build.autorun`][build.autorun] | `false` turns AfterPack off | `true` |
-| [`production`][production] | force production or development defaults | detected from `NODE_ENV=production` or `CI=true` |
 | `cwd` | option of this package: the project root | `process.cwd()` |
 | `distRoot` | option of this package: the Angular output folder | `"dist"` |
 | `browserDir` | option of this package: the browser bundle folder; set it when there are several apps | found under `distRoot` |
 
-Dotted names are nested objects: `build.backup` is `{ build: { backup: true } }`. Every other option
-is in the [configuration reference](https://www.afterpack.dev/docs/config), except
-[`directives`][directives]: the build output is already minified, so `/* @afterpack */` comments are
-gone by the time AfterPack sees it. Setting `directives` fails with an explanation.
+Dotted names are nested objects: `paths.exclude` is `{ paths: { exclude: ["…"] } }`. Every other
+option is in the [configuration reference](https://www.afterpack.dev/docs/config), except
+[`directives.enabled`][directives.enabled]: the build output is already minified, so
+`/* @afterpack */` comments are gone by the time AfterPack sees it. Setting it to `true` fails with
+an explanation.
 
 [preset]: https://www.afterpack.dev/docs/config#preset
-[complexity]: https://www.afterpack.dev/docs/config#complexity
 [seed]: https://www.afterpack.dev/docs/config#seed
 [identifiers.reserved]: https://www.afterpack.dev/docs/config#identifiers-reserved
 [paths.exclude]: https://www.afterpack.dev/docs/config#paths-exclude
-[sourceMap.enabled]: https://www.afterpack.dev/docs/config#sourceMap-enabled
-[protectionMap.enabled]: https://www.afterpack.dev/docs/config#protectionMap-enabled
-[build.backup]: https://www.afterpack.dev/docs/config#build-backup
-[build.autorun]: https://www.afterpack.dev/docs/config#build-autorun
-[production]: https://www.afterpack.dev/docs/config#production
-[directives]: https://www.afterpack.dev/docs/config#directives
+[directives.enabled]: https://www.afterpack.dev/docs/config#directives-enabled
 
 Options can also live in `afterpack.json` or in `AFTERPACK_*` environment variables. The options
 object wins over the environment, which wins over the file. An unknown or misspelled key fails the

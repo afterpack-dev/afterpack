@@ -104,8 +104,8 @@ export type PassSettings = Pick<
   | "regions"
   | "engineConfig"
   | "diagnostics"
-  | "directives"
-  | "directivesExplicit"
+  | "directivesEnabled"
+  | "directivesEnabledExplicit"
 >;
 
 export function passSettings(
@@ -120,8 +120,8 @@ export function passSettings(
     regions: settings.regions,
     engineConfig: resolved.engineConfig,
     diagnostics: settings.diagnostics?.level,
-    directives: settings.directives,
-    directivesExplicit: settings.directivesExplicit,
+    directivesEnabled: settings.directives.enabled,
+    directivesEnabledExplicit: settings.directives.explicit,
   };
 }
 

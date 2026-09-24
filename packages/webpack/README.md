@@ -40,29 +40,23 @@ new AfterpackWebpackPlugin({ preset: "hard", seed: "git" });
 | Option | What it does | Default |
 | --- | --- | --- |
 | [`preset`][preset] | `"minify"`, `"light"`, `"medium"`, `"hard"` or `"extreme"` | `"light"` |
-| [`complexity`][complexity] | a numeric protection level, overriding the preset's | the preset's value |
 | [`seed`][seed] | a number or string; `"git"` uses the current commit | a new random seed per build |
 | [`identifiers.reserved`][identifiers.reserved] | names never to rename | none |
 | [`paths.exclude`][paths.exclude] | globs for files to leave untouched | none |
 | [`sourceMap.enabled`][sourceMap.enabled] | write source maps for the obfuscated output | on in development when webpack emits a map, off in production |
 | [`protectionMap.enabled`][protectionMap.enabled] | write the Protection Map | on when `devtool` emits source maps |
-| [`directives`][directives] | read `/* @afterpack */` comments in your source | `true` |
 | [`build.autorun`][build.autorun] | `false` turns AfterPack off | `true` |
-| [`production`][production] | force production or development defaults | detected from `NODE_ENV=production` or `CI=true` |
 
 Dotted names are nested objects: `sourceMap.enabled` is `{ sourceMap: { enabled: true } }`. Every
 other option is in the [configuration reference](https://www.afterpack.dev/docs/config).
 
 [preset]: https://www.afterpack.dev/docs/config#preset
-[complexity]: https://www.afterpack.dev/docs/config#complexity
 [seed]: https://www.afterpack.dev/docs/config#seed
 [identifiers.reserved]: https://www.afterpack.dev/docs/config#identifiers-reserved
 [paths.exclude]: https://www.afterpack.dev/docs/config#paths-exclude
 [sourceMap.enabled]: https://www.afterpack.dev/docs/config#sourceMap-enabled
 [protectionMap.enabled]: https://www.afterpack.dev/docs/config#protectionMap-enabled
-[directives]: https://www.afterpack.dev/docs/config#directives
 [build.autorun]: https://www.afterpack.dev/docs/config#build-autorun
-[production]: https://www.afterpack.dev/docs/config#production
 
 `/* @afterpack */` [directives](https://www.afterpack.dev/docs/directives) in your source need a
 `devtool` that emits source maps, such as `"source-map"`. Without one, the plugin skips them and
