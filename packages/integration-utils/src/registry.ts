@@ -69,7 +69,7 @@ const UNLIMITED = "unlimited";
 export const DIRECTIVES_ENABLED_DEFAULT = true;
 
 const RESERVED_FILE_FORM = '{ "identifiers": { "reserved": [{ "glob": "…", "names": ["…"] }] } }';
-const REGIONS_FILE_FORM = '{ "regions": [{ "start": 0, "end": 100, "target": 40 }] }';
+const REGIONS_FILE_FORM = '{ "regions": [{ "start": 0, "end": 100, "complexity": 40 }] }';
 
 export const CONFIG_KEYS = [
   {
@@ -629,6 +629,7 @@ interface FieldSpec {
   readonly required?: true;
   readonly is: (value: unknown) => boolean;
   readonly want: string;
+  readonly fields?: Readonly<Record<string, FieldSpec>>;
 }
 
 const isFiniteNumber = (v: unknown): boolean => typeof v === "number" && Number.isFinite(v);
@@ -637,14 +638,22 @@ const isTransformKinds = (v: unknown): boolean =>
 
 const KINDS = `a list of: ${TRANSFORM_KIND_VALUES.join(", ")}`;
 
+const isNonNegative = (v: unknown): boolean => isFiniteNumber(v) && (v as number) >= 0;
+
+function group(fields: Readonly<Record<string, FieldSpec>>): FieldSpec {
+  return { is: isPlainObject, want: "an object", fields };
+}
+
 const REGION_FIELDS: Readonly<Record<string, FieldSpec>> = {
   start: { required: true, is: isFiniteNumber, want: "a number" },
   end: { required: true, is: isFiniteNumber, want: "a number" },
-  target: { is: (v) => isFiniteNumber(v) && (v as number) >= 0, want: "a number >= 0" },
-  max: { is: (v) => isFiniteNumber(v) && (v as number) >= 0, want: "a number >= 0" },
-  floor: { is: (v) => typeof v === "boolean", want: "true or false" },
-  only: { is: isTransformKinds, want: KINDS },
-  deny: { is: isTransformKinds, want: KINDS },
+  complexity: { is: isNonNegative, want: "a number >= 0" },
+  inflation: group({ max: { is: isNonNegative, want: "a number >= 0" } }),
+  strings: group({ encode: { is: (v) => typeof v === "boolean", want: "true or false" } }),
+  transforms: group({
+    only: { is: isTransformKinds, want: KINDS },
+    deny: { is: isTransformKinds, want: KINDS },
+  }),
   label: { is: (v) => typeof v === "string", want: "a string" },
 };
 
@@ -657,28 +666,45 @@ const RESERVED_FIELDS: Readonly<Record<string, FieldSpec>> = {
   },
 };
 
+function leafNames(spec: Readonly<Record<string, FieldSpec>>, prefix: string): string[] {
+  return Object.entries(spec).flatMap(([name, field]) =>
+    field.fields ? leafNames(field.fields, `${prefix}${name}.`) : [prefix + name],
+  );
+}
+
 function checkFields(
   spec: Readonly<Record<string, FieldSpec>>,
   value: Record<string, unknown>,
+  prefix = "",
 ): string | undefined {
-  const allowed = Object.keys(spec);
   for (const name of Object.keys(value)) {
     if (name in spec) continue;
-    const near = nearestName(name, allowed);
+    const near = nearestName(
+      prefix + name,
+      Object.keys(spec).map((n) => prefix + n),
+    );
     return (
-      `item has an unknown field \`${name}\`` +
+      `item has an unknown field \`${prefix}${name}\`` +
       (near ? ` — did you mean \`${near}\`?` : "") +
-      ` (allowed: ${allowed.join(", ")})`
+      ` (allowed: ${leafNames(spec, prefix).join(", ")})`
     );
   }
   for (const [name, field] of Object.entries(spec)) {
     const present = value[name];
     if (present === undefined) {
-      if (field.required) return `item is missing \`${name}\` (${field.want})`;
+      if (field.required) return `item is missing \`${prefix}${name}\` (${field.want})`;
       continue;
     }
     if (!field.is(present)) {
-      return `item's \`${name}\` must be ${field.want}, got ${JSON.stringify(present)}`;
+      return `item's \`${prefix}${name}\` must be ${field.want}, got ${JSON.stringify(present)}`;
+    }
+    if (field.fields) {
+      const nested = checkFields(
+        field.fields,
+        present as Record<string, unknown>,
+        `${prefix}${name}.`,
+      );
+      if (nested) return nested;
     }
   }
   return undefined;

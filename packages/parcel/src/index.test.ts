@@ -196,9 +196,13 @@ describe("afterpack parcel optimizer", () => {
   });
 
   it("forwards a hand-authored regions array into the shared engine config", async () => {
-    await run({ config: { regions: [{ start: 0, end: 5, target: 9, floor: false }] } });
+    await run({
+      config: { regions: [{ start: 0, end: 5, complexity: 9, strings: { encode: false } }] },
+    });
 
-    expect(engineCalls[0].config.regions).toEqual([{ start: 0, end: 5, target: 9, floor: false }]);
+    expect(engineCalls[0].config.regions).toEqual([
+      { start: 0, end: 5, complexity: 9, strings: { encode: false } },
+    ]);
   });
 });
 

@@ -99,7 +99,7 @@ describe("afterpackRollup generateBundle", () => {
   });
 
   it("forwards a hand-authored regions array into the shared engine config", async () => {
-    const regions = [{ start: 0, end: 12, floor: false }];
+    const regions = [{ start: 0, end: 12, strings: { encode: false } }];
     await runPlugin({ regions }, { dir: outDir }, bundleOf(chunk("a.js", "export const a = 1;")));
     expect(engineCalls[0].config.regions).toEqual(regions);
   });
@@ -267,7 +267,7 @@ describe("afterpackRollup directive capture (backward-coloring)", () => {
     expect(
       regions[0],
       "keep statement only — the drop statement is outside the directive block",
-    ).toMatchObject({ start: 0, end: KEEP_LEN, target: 0, floor: false });
+    ).toMatchObject({ start: 0, end: KEEP_LEN, complexity: 0, strings: { encode: false } });
   });
 
   it("sends no per-file regions when directives are disabled", async () => {

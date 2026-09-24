@@ -14,7 +14,7 @@ function directive(): CapturedDirective {
     tier: "amplifying",
     line: 1,
     column: 1,
-    region: { start: 0, end: 0, floor: false },
+    region: { start: 0, end: 0, strings: { encode: false } },
     charStart: 0,
     charEnd: SOURCE.indexOf("\n"),
   };
@@ -36,15 +36,20 @@ describe("colorRegions (backward-coloring)", () => {
     };
     const regions = colorRegions(CHUNK, { sources: ["src/mod.ts"], mappings: MAPPINGS }, [mod]);
     expect(regions).toHaveLength(1);
-    expect(regions[0]).toMatchObject({ start: 0, end: KEEP_LEN, floor: false });
+    expect(regions[0]).toMatchObject({ start: 0, end: KEEP_LEN, strings: { encode: false } });
   });
 
-  it("preserves the full delta (only/deny/target) on the colored region", () => {
+  it("preserves the full delta (complexity and transforms) on the colored region", () => {
     const d = directive();
-    d.region = { start: 0, end: 0, target: 0, deny: ["integerBytecode"] };
+    d.region = { start: 0, end: 0, complexity: 0, transforms: { deny: ["integerBytecode"] } };
     const mod: CapturedModule = { id: "/project/src/mod.ts", source: SOURCE, directives: [d] };
     const [r] = colorRegions(CHUNK, { sources: ["src/mod.ts"], mappings: MAPPINGS }, [mod]);
-    expect(r).toMatchObject({ start: 0, end: KEEP_LEN, target: 0, deny: ["integerBytecode"] });
+    expect(r).toMatchObject({
+      start: 0,
+      end: KEEP_LEN,
+      complexity: 0,
+      transforms: { deny: ["integerBytecode"] },
+    });
   });
 
   it("skips (emits no region) when there is no map, and says so", () => {

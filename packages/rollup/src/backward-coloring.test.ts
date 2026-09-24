@@ -57,8 +57,8 @@ describe("directive capture through a real Rollup build", () => {
     const regions = engineCalls[0].regions as Array<{
       start: number;
       end: number;
-      target?: number;
-      floor?: boolean;
+      complexity?: number;
+      strings?: { encode?: boolean };
     }>;
     expect(regions.length, "the directive colored to >=1 chunk range").toBeGreaterThan(0);
 
@@ -73,7 +73,7 @@ describe("directive capture through a real Rollup build", () => {
     for (const r of regions) {
       expect(r.end).toBeLessThanOrEqual(Buffer.byteLength(chunk, "utf8"));
       expect(r.end).toBeGreaterThan(r.start);
-      expect(r).toMatchObject({ target: 0, floor: false });
+      expect(r).toMatchObject({ complexity: 0, strings: { encode: false } });
     }
   }, 30_000);
 

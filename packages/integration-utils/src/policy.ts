@@ -120,11 +120,10 @@ export type TransformKind = (typeof TRANSFORM_KIND_VALUES)[number];
 export interface RegionConfig {
   start: number;
   end: number;
-  target?: number;
-  max?: number;
-  floor?: boolean;
-  only?: TransformKind[];
-  deny?: TransformKind[];
+  complexity?: number;
+  inflation?: { max?: number };
+  strings?: { encode?: boolean };
+  transforms?: { only?: TransformKind[]; deny?: TransformKind[] };
   label?: string;
 }
 

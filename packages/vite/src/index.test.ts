@@ -242,7 +242,7 @@ describe("afterpackVite per-region overrides", () => {
   });
 
   it("forwards a hand-authored regions array into the shared engine config", async () => {
-    const regions = [{ start: 0, end: 12, floor: false }];
+    const regions = [{ start: 0, end: 12, strings: { encode: false } }];
     await runPlugin({ regions });
     expect(sharedConfig().regions).toEqual(regions);
   });
@@ -267,18 +267,18 @@ describe("afterpackVite directive capture (single-file, un-bundled)", () => {
 
   it("captures a single-file source directive into the shared engine config", async () => {
     await runPlugin({}, bundleOf(chunk("only.js", DIRECTIVE)));
-    const regions = sharedConfig().regions as Array<{ floor?: boolean }>;
+    const regions = sharedConfig().regions as Array<{ strings?: { encode?: boolean } }>;
     expect(regions).toHaveLength(1);
-    expect(regions[0].floor).toBe(false);
+    expect(regions[0].strings?.encode).toBe(false);
   });
 
   it("merges captured regions AFTER hand-authored ones (single file)", async () => {
-    const hand = [{ start: 0, end: 4, target: 0 }];
+    const hand = [{ start: 0, end: 4, complexity: 0 }];
     await runPlugin({ regions: hand }, bundleOf(chunk("only.js", DIRECTIVE)));
     const regions = sharedConfig().regions as Array<Record<string, unknown>>;
     expect(regions).toHaveLength(2);
     expect(regions[0]).toEqual(hand[0]);
-    expect(regions[1].floor).toBe(false);
+    expect(regions[1]).toMatchObject({ strings: { encode: false } });
   });
 
   it("keeps a multi-file build's directives out of the shared regions config", async () => {

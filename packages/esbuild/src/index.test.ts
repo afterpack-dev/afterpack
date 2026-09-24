@@ -96,7 +96,7 @@ describe("afterpackEsbuild onEnd", () => {
 
   it("forwards a hand-authored regions array into the shared engine config", async () => {
     writeFileSync(join(outDir, "app.js"), "export const a = 1;");
-    const regions = [{ start: 0, end: 12, floor: false }];
+    const regions = [{ start: 0, end: 12, strings: { encode: false } }];
     await applyPlugin({ regions }, { outdir: outDir, absWorkingDir: root })();
     expect(engineCalls[0].config.regions).toEqual(regions);
   });
@@ -167,7 +167,12 @@ describe("afterpackEsbuild per-region directives", () => {
     await applyPlugin({}, { outdir: outDir, absWorkingDir: root })();
     const regions = engineCalls[0].regions as Array<Record<string, unknown>>;
     expect(regions).toHaveLength(1);
-    expect(regions[0]).toMatchObject({ start: 0, end: KEEP_LEN, target: 0, floor: false });
+    expect(regions[0]).toMatchObject({
+      start: 0,
+      end: KEEP_LEN,
+      complexity: 0,
+      strings: { encode: false },
+    });
   });
 
   it("scans nothing when the user turns directives off", async () => {

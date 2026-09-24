@@ -90,30 +90,50 @@ describe("a structured key never rides a flag or a variable", () => {
 
   it("accepts the structured value in afterpack.json", () => {
     const dir = tempProject({
-      "afterpack.json": JSON.stringify({ regions: [{ start: 0, end: 10, target: 40 }] }),
+      "afterpack.json": JSON.stringify({ regions: [{ start: 0, end: 10, complexity: 40 }] }),
     });
     const file = loadConfigFile(dir);
     expect(file.issues).toEqual([]);
-    expect(getPath(file.config, "regions")).toEqual([{ start: 0, end: 10, target: 40 }]);
+    expect(getPath(file.config, "regions")).toEqual([{ start: 0, end: 10, complexity: 40 }]);
   });
 });
 
 describe("a structured item is a CLOSED field set", () => {
-  it("rejects a typo inside a region instead of running it at the global target", () => {
+  it("rejects a typo inside a region instead of running it at the global complexity", () => {
     const { config, issues } = validateConfig(
-      { regions: [{ start: 0, end: 10, targt: 40 }] },
+      { regions: [{ start: 0, end: 10, complexty: 40 }] },
       "afterpack.json",
     );
     expect(issues).toHaveLength(1);
-    expect(issues[0].message).toContain("unknown field `targt`");
-    expect(issues[0].message).toContain("did you mean `target`?");
+    expect(issues[0].message).toContain("unknown field `complexty`");
+    expect(issues[0].message).toContain("did you mean `complexity`?");
     expect(getPath(config, "regions")).toBeUndefined();
+  });
+
+  it("rejects a typo inside a nested region group, naming its full path", () => {
+    const { issues } = validateConfig(
+      { regions: [{ start: 0, end: 10, strings: { encod: false } }] },
+      "afterpack.json",
+    );
+    expect(issues).toHaveLength(1);
+    expect(issues[0].message).toContain("unknown field `strings.encod`");
+    expect(issues[0].message).toContain("did you mean `strings.encode`?");
+  });
+
+  it("refuses the engine's internal region names", () => {
+    for (const field of ["target", "max", "floor", "only", "deny"]) {
+      const { issues } = validateConfig({ regions: [{ start: 0, end: 1, [field]: 1 }] }, "t");
+      expect(issues[0].message).toContain(`unknown field \`${field}\``);
+    }
   });
 
   it("names every field a region item may carry", () => {
     expect(
       validateConfig({ regions: [{ start: 0, end: 1, nope: 1 }] }, "t").issues[0].message,
-    ).toContain("allowed: start, end, target, max, floor, only, deny, label");
+    ).toContain(
+      "allowed: start, end, complexity, inflation.max, strings.encode, transforms.only, " +
+        "transforms.deny, label",
+    );
     expect(
       validateConfig(
         {
@@ -121,11 +141,10 @@ describe("a structured item is a CLOSED field set", () => {
             {
               start: 0,
               end: 1,
-              target: 4,
-              max: 2,
-              floor: true,
-              only: ["scopeDeepen"],
-              deny: ["integerBytecode"],
+              complexity: 4,
+              inflation: { max: 2 },
+              strings: { encode: true },
+              transforms: { only: ["scopeDeepen"], deny: ["integerBytecode"] },
               label: "skip",
             },
           ],
@@ -137,11 +156,18 @@ describe("a structured item is a CLOSED field set", () => {
 
   it("type-checks each region field and requires start and end", () => {
     expect(
-      validateConfig({ regions: [{ start: 0, end: 1, target: "hard" }] }, "t").issues[0],
-    ).toMatchObject({ message: expect.stringContaining("`target` must be a number >= 0") });
+      validateConfig({ regions: [{ start: 0, end: 1, complexity: "hard" }] }, "t").issues[0],
+    ).toMatchObject({ message: expect.stringContaining("`complexity` must be a number >= 0") });
     expect(
-      validateConfig({ regions: [{ start: 0, end: 1, deny: ["nope"] }] }, "t").issues[0],
-    ).toMatchObject({ message: expect.stringContaining("`deny` must be a list of:") });
+      validateConfig({ regions: [{ start: 0, end: 1, transforms: { deny: ["nope"] } }] }, "t")
+        .issues[0],
+    ).toMatchObject({ message: expect.stringContaining("`transforms.deny` must be a list of:") });
+    expect(
+      validateConfig({ regions: [{ start: 0, end: 1, inflation: { max: -1 } }] }, "t").issues[0],
+    ).toMatchObject({ message: expect.stringContaining("`inflation.max` must be a number >= 0") });
+    expect(
+      validateConfig({ regions: [{ start: 0, end: 1, strings: true }] }, "t").issues[0],
+    ).toMatchObject({ message: expect.stringContaining("`strings` must be an object") });
     expect(validateConfig({ regions: [{ start: 0 }] }, "t").issues[0]).toMatchObject({
       message: expect.stringContaining("missing `end`"),
     });
@@ -461,7 +487,7 @@ describe("the derived options type", () => {
         selfIntegrity: { enabled: true },
       },
       reflection: { allow: ["nameIntrospection"] },
-      regions: [{ start: 0, end: 10, target: 4 }],
+      regions: [{ start: 0, end: 10, complexity: 4 }],
       seed: "git",
       diagnostics: { level: "all" },
     };

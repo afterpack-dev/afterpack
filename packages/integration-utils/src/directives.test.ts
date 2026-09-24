@@ -11,38 +11,38 @@ describe("parseDirectivePayload", () => {
     expect(parseDirectivePayload("skip")).toMatchObject({
       keyword: "skip",
       tier: "free",
-      delta: { target: 0, floor: false },
+      delta: { complexity: 0, strings: { encode: false } },
     });
     expect(parseDirectivePayload("preset=hard")).toMatchObject({
       tier: "amplifying",
-      delta: { target: 25, floor: true },
+      delta: { complexity: 25, strings: { encode: true } },
     });
     expect(parseDirectivePayload("preset=extreme")).toMatchObject({
       tier: "amplifying",
-      delta: { target: 80, floor: true },
+      delta: { complexity: 80, strings: { encode: true } },
     });
   });
 
   it("parses K=V attributes and classifies decrease-only as free", () => {
     expect(parseDirectivePayload("strings.encode=off")).toMatchObject({
       tier: "free",
-      delta: { floor: false },
+      delta: { strings: { encode: false } },
     });
     expect(parseDirectivePayload("strings.encode=on")).toMatchObject({
       tier: "amplifying",
-      delta: { floor: true },
+      delta: { strings: { encode: true } },
     });
     expect(parseDirectivePayload("complexity=0")).toMatchObject({
       tier: "free",
-      delta: { target: 0 },
+      delta: { complexity: 0 },
     });
     expect(parseDirectivePayload("complexity=25")).toMatchObject({
       tier: "amplifying",
-      delta: { target: 25 },
+      delta: { complexity: 25 },
     });
     expect(parseDirectivePayload("complexity=8 strings.encode=on")).toMatchObject({
       tier: "amplifying",
-      delta: { target: 8, floor: true },
+      delta: { complexity: 8, strings: { encode: true } },
     });
   });
 
@@ -59,7 +59,7 @@ describe("scanDirectives — line-scoped", () => {
     const src = 'const one = "A";\nconst two = /* @afterpack strings.encode=off */ "KEEP";\n';
     const { regions, directives } = scanDirectives(src);
     expect(regions).toHaveLength(1);
-    expect(regions[0].floor).toBe(false);
+    expect(regions[0].strings?.encode).toBe(false);
     expect(directives[0].form).toBe("line");
     const kept = src.indexOf('"KEEP"');
     expect(regions[0].start).toBeLessThanOrEqual(kept);
@@ -85,7 +85,7 @@ describe("scanDirectives — block-scoped", () => {
     const { regions, directives } = scanDirectives(src);
     const block = directives.find((d) => d.form === "block");
     expect(block?.keyword).toBe("preset");
-    expect(block?.region.target).toBe(80);
+    expect(block?.region.complexity).toBe(80);
     const inner = directives.find((d) => d.keyword === "skip");
     const outer = block as NonNullable<typeof block>;
     expect(
@@ -181,7 +181,7 @@ describe("scanDirectives — recognised keys with no per-region engine channel",
     const src = "const s = /* @afterpack complexity=40 async.preserve */ 1;\n";
     const { regions, diagnostics } = scanDirectives(src);
     expect(regions).toHaveLength(1);
-    expect(regions[0].target).toBe(40);
+    expect(regions[0].complexity).toBe(40);
     expect(diagnostics.map((d) => d.code)).toEqual(["DIAG_DIRECTIVE_NOT_IMPLEMENTED"]);
   });
 });
@@ -191,15 +191,23 @@ describe("parseDirectivePayload — the documented dotted vocabulary", () => {
     expect(parseDirectivePayload("preset=extreme")).toMatchObject({
       keyword: "preset",
       tier: "amplifying",
-      delta: { target: 80, floor: true },
+      delta: { complexity: 80, strings: { encode: true } },
     });
-    expect(parseDirectivePayload("preset=minify").delta).toEqual({ target: 0, floor: false });
+    expect(parseDirectivePayload("preset=minify").delta).toEqual({
+      complexity: 0,
+      strings: { encode: false },
+    });
     expect(parseDirectivePayload("preset=nope").error).toBeDefined();
   });
 
   it("accepts the spec's bool sugar — a bare bool key means `=on`", () => {
-    expect(parseDirectivePayload("skip")).toMatchObject({ delta: { target: 0, floor: false } });
-    expect(parseDirectivePayload("skip=on").delta).toEqual({ target: 0, floor: false });
+    expect(parseDirectivePayload("skip")).toMatchObject({
+      delta: { complexity: 0, strings: { encode: false } },
+    });
+    expect(parseDirectivePayload("skip=on").delta).toEqual({
+      complexity: 0,
+      strings: { encode: false },
+    });
     expect(parseDirectivePayload("skip=off").noop).toBe(true);
   });
 
@@ -215,18 +223,18 @@ describe("parseDirectivePayload — the documented dotted vocabulary", () => {
   it("lowers `controlFlow.enabled=false` to a deny mask, and stays FREE", () => {
     expect(parseDirectivePayload("controlFlow.enabled=false")).toMatchObject({
       tier: "free",
-      delta: { deny: ["controlFlowFlatten"] },
+      delta: { transforms: { deny: ["controlFlowFlatten"] } },
     });
     expect(parseDirectivePayload("controlFlow.enabled=true").noop).toBe(true);
   });
 
   it("carries inflation.max and the transform masks", () => {
-    expect(parseDirectivePayload("inflation.max=5").delta).toEqual({ max: 5 });
+    expect(parseDirectivePayload("inflation.max=5").delta).toEqual({ inflation: { max: 5 } });
     expect(parseDirectivePayload("transforms.deny=integerBytecode").delta).toEqual({
-      deny: ["integerBytecode"],
+      transforms: { deny: ["integerBytecode"] },
     });
     expect(parseDirectivePayload("transforms.only=stringencoding").delta).toEqual({
-      only: ["stringEncoding"],
+      transforms: { only: ["stringEncoding"] },
     });
   });
 
@@ -245,11 +253,11 @@ describe("parseDirectivePayload — the documented dotted vocabulary", () => {
 describe("captureDirectiveRegions — the channel bridge", () => {
   it("SINGLE-file merges captured regions after hand-authored ones", () => {
     const source = 'const two = /* @afterpack strings.encode=off */ "KEEP";\n';
-    const handAuthored = [{ start: 0, end: 4, target: 0 }];
+    const handAuthored = [{ start: 0, end: 4, complexity: 0 }];
     const out = captureDirectiveRegions([{ source }], handAuthored);
     expect(out.applied).toBe(1);
     expect(out.regions?.[0]).toEqual(handAuthored[0]);
-    expect(out.regions?.[1].floor).toBe(false);
+    expect(out.regions?.[1].strings?.encode).toBe(false);
   });
 
   it("SINGLE-file with no directives forwards hand-authored regions verbatim (byte-identical)", () => {
@@ -277,16 +285,22 @@ describe("captureDirectiveRegions — the channel bridge", () => {
 });
 
 describe("parseDirectivePayload — multi-key composition", () => {
+  it("keeps transforms.only and transforms.deny side by side in one region", () => {
+    expect(
+      parseDirectivePayload("transforms.deny=integerBytecode transforms.only=stringEncoding").delta,
+    ).toEqual({ transforms: { deny: ["integerBytecode"], only: ["stringEncoding"] } });
+  });
+
   it("ACCUMULATES deny lists across keys instead of letting the last one win", () => {
     const parsed = parseDirectivePayload("controlFlow.enabled=off transforms.deny=integerBytecode");
-    expect(parsed.delta.deny).toEqual(["controlFlowFlatten", "integerBytecode"]);
+    expect(parsed.delta.transforms?.deny).toEqual(["controlFlowFlatten", "integerBytecode"]);
   });
 
   it("de-duplicates a kind named twice", () => {
     const parsed = parseDirectivePayload(
       "controlFlow.enabled=off transforms.deny=controlFlowFlatten",
     );
-    expect(parsed.delta.deny).toEqual(["controlFlowFlatten"]);
+    expect(parsed.delta.transforms?.deny).toEqual(["controlFlowFlatten"]);
   });
 });
 
@@ -346,7 +360,7 @@ describe("identifiers.globals.rename — the file-wide escape hatch", () => {
     const { regions, renameGlobals, diagnostics } = scanDirectives(src);
     expect(renameGlobals).toBe(true);
     expect(regions).toHaveLength(1);
-    expect(regions[0].target).toBe(40);
+    expect(regions[0].complexity).toBe(40);
     expect(diagnostics.map((d) => d.code)).toEqual(["DIAG_DIRECTIVE_REGION_TO_FILE"]);
   });
 

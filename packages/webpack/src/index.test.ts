@@ -174,7 +174,7 @@ describe("AfterpackWebpackPlugin processAssets", () => {
   });
 
   it("forwards a hand-authored regions array into the shared engine config", async () => {
-    const regions = [{ start: 0, end: 12, floor: false }];
+    const regions = [{ start: 0, end: 12, strings: { encode: false } }];
     const invoke = applyPlugin(new AfterpackWebpackPlugin({ regions }));
     await invoke(fixture({ "main.js": "export const a = 1;" }, ["main.js"]));
     expect(engineCalls[0].config.regions).toEqual(regions);

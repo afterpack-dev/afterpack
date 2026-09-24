@@ -375,9 +375,9 @@ describe("runObfuscationPass directive capture", () => {
       directivesEnabled: true,
       logger: silentLogger().logger,
     });
-    const regions = calls[0].config.regions as Array<{ floor?: boolean }>;
+    const regions = calls[0].config.regions as Array<{ strings?: { encode?: boolean } }>;
     expect(regions).toHaveLength(1);
-    expect(regions[0].floor).toBe(false);
+    expect(regions[0].strings?.encode).toBe(false);
   });
 
   it("ignores directives by default (omitted from config)", async () => {
@@ -507,7 +507,9 @@ describe("runObfuscationPass post-minify (sourcesContent) directive capture", ()
     });
 
     const regions = calls[0].inputs[0].regions ?? [];
-    expect(regions).toEqual([{ start: 6, end: 19, target: 0, floor: false, label: "skip" }]);
+    expect(regions).toEqual([
+      { start: 6, end: 19, complexity: 0, strings: { encode: false }, label: "skip" },
+    ]);
     expect("regions" in calls[0].config).toBe(false);
   });
 

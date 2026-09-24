@@ -2,7 +2,7 @@ import { splitAssignment } from "./config-parse.js";
 import { PRESETS, presetTarget, type RegionConfig, type TransformKind } from "./policy.js";
 import { TRANSFORM_KIND_VALUES } from "./registry.js";
 
-type RegionDelta = Pick<RegionConfig, "target" | "max" | "floor" | "only" | "deny">;
+type RegionDelta = Pick<RegionConfig, "complexity" | "inflation" | "strings" | "transforms">;
 
 const KIND_BY_LOWER = new Map<string, TransformKind>(
   TRANSFORM_KIND_VALUES.map((k) => [k.toLowerCase(), k]),
@@ -136,10 +136,11 @@ function unsupportedForm(kind: Marker["kind"], payload: string): string | undefi
 }
 
 function classifyTier(delta: RegionDelta): "free" | "amplifying" {
-  const decreaseTarget = delta.target === undefined || delta.target === 0;
-  const decreaseFloor = delta.floor === undefined || delta.floor === false;
-  const noMask = delta.only === undefined && delta.deny === undefined;
-  return decreaseTarget && decreaseFloor && delta.max === undefined && noMask
+  const decreaseComplexity = delta.complexity === undefined || delta.complexity === 0;
+  const encode = delta.strings?.encode;
+  const decreaseEncode = encode === undefined || encode === false;
+  const noMask = delta.transforms?.only === undefined && delta.transforms?.deny === undefined;
+  return decreaseComplexity && decreaseEncode && delta.inflation?.max === undefined && noMask
     ? "free"
     : "amplifying";
 }
@@ -151,9 +152,9 @@ function boolValue(value: string): boolean | undefined {
 }
 
 function pushDeny(delta: RegionDelta, kinds: readonly TransformKind[]): void {
-  const merged = new Set<TransformKind>(delta.deny ?? []);
+  const merged = new Set<TransformKind>(delta.transforms?.deny ?? []);
   for (const k of kinds) merged.add(k);
-  delta.deny = [...merged];
+  delta.transforms = { ...delta.transforms, deny: [...merged] };
 }
 
 interface KeySpec {
@@ -179,8 +180,8 @@ const DIRECTIVE_KEYS: readonly KeySpec[] = [
       if (on === undefined) return "`skip` must be `on` or `off`";
       if (!on) notes.push("`skip=off` has no effect — omit the directive instead");
       else {
-        delta.target = 0;
-        delta.floor = false;
+        delta.complexity = 0;
+        delta.strings = { encode: false };
       }
       return undefined;
     },
@@ -207,8 +208,8 @@ const DIRECTIVE_KEYS: readonly KeySpec[] = [
     apply: (delta, value) => {
       const preset = PRESETS.find((p) => p === value);
       if (!preset) return `unknown preset \`${value}\` (one of ${PRESETS.join(", ")})`;
-      delta.target = presetTarget(preset);
-      delta.floor = delta.target > 0;
+      delta.complexity = presetTarget(preset);
+      delta.strings = { encode: delta.complexity > 0 };
       return undefined;
     },
   },
@@ -218,7 +219,7 @@ const DIRECTIVE_KEYS: readonly KeySpec[] = [
     apply: (delta, value) => {
       const n = Number(value);
       if (!Number.isFinite(n) || n < 0) return "`complexity` needs a non-negative number";
-      delta.target = n;
+      delta.complexity = n;
       return undefined;
     },
   },
@@ -228,7 +229,7 @@ const DIRECTIVE_KEYS: readonly KeySpec[] = [
     apply: (delta, value) => {
       const n = Number(value);
       if (!Number.isFinite(n) || n < 0) return "`inflation.max` needs a non-negative number";
-      delta.max = n;
+      delta.inflation = { max: n };
       return undefined;
     },
   },
@@ -239,7 +240,7 @@ const DIRECTIVE_KEYS: readonly KeySpec[] = [
     apply: (delta, value) => {
       const on = boolValue(value);
       if (on === undefined) return "`strings.encode` must be `on` or `off`";
-      delta.floor = on;
+      delta.strings = { encode: on };
       return undefined;
     },
   },
@@ -249,7 +250,7 @@ const DIRECTIVE_KEYS: readonly KeySpec[] = [
     apply: (delta, value) => {
       const { kinds, error } = parseKindList(value);
       if (error) return error;
-      delta.only = kinds;
+      delta.transforms = { ...delta.transforms, only: kinds };
       return undefined;
     },
   },
