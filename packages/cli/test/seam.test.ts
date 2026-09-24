@@ -7,40 +7,17 @@ import type { CoreConfig, ObfuscationEngine } from "@afterpack/integration-utils
 import { afterEach, describe, expect, it } from "vitest";
 import { run } from "../src/run.js";
 
-const { processBatch: legacyProcessBatch, version } = createRequire(import.meta.url)(
-  "@afterpack/core",
-) as {
+const { processBatch, version } = createRequire(import.meta.url)("@afterpack/core") as {
   processBatch: typeof ProcessBatch;
   version: typeof Version;
 };
 
-function bridgeToLegacyEngine(onConfig: (config: CoreConfig) => void): ObfuscationEngine {
+function recordingEngine(onConfig: (config: CoreConfig) => void): ObfuscationEngine {
   return {
     version,
-    processBatch: async (files, config, buildContext) => {
+    processBatch: (files, config, buildContext) => {
       onConfig(config);
-      const legacyFiles = files.map((f) => ({
-        filePath: f.filePath,
-        source: f.source,
-        inputSourceMap: f.inputSourceMap,
-        regions: f.regions ? JSON.stringify(f.regions) : undefined,
-      }));
-      const result = await legacyProcessBatch(
-        legacyFiles,
-        JSON.stringify(config),
-        buildContext ? JSON.stringify(buildContext) : undefined,
-      );
-      return {
-        ...result,
-        source: result.source as "local" | "cloud",
-        files: result.files.map((f) => ({
-          ...f,
-          status: f.status as "success" | "failure",
-          unobfuscated: f.unobfuscated === true,
-          protectionMap: f.protectionMap != null ? JSON.parse(f.protectionMap) : undefined,
-          diagnostics: f.diagnostics != null ? JSON.parse(f.diagnostics) : undefined,
-        })),
-      };
+      return processBatch(files, config, buildContext);
     },
   };
 }
@@ -78,7 +55,7 @@ async function build(configFile: object | null, env: Record<string, string>, fla
   const code = await run({
     argv: ["dist", "--telemetry.enabled=false", "--protectionMap.enabled=false", ...flags],
     cwd: root,
-    engine: bridgeToLegacyEngine((config) => configs.push(config)),
+    engine: recordingEngine((config) => configs.push(config)),
     logger: { log: () => {}, error: (m) => errors.push(m), warn: () => {} },
     version: "9.9.9",
     env,

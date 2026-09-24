@@ -840,11 +840,13 @@ export function nest(path: string, value: unknown): Record<string, unknown> {
   >;
 }
 
+export type ReflectionAllow = (typeof REFLECTION_ALLOW_VALUES)[number];
+
 export interface CoreConfigSubset {
   seed?: number | string;
-  preset?: string;
+  preset?: Preset;
   complexity?: number;
-  inflation?: { max?: number | string };
+  inflation?: { max?: number | "unlimited" };
   strings?: {
     encode?: boolean;
     minLength?: number;
@@ -858,7 +860,7 @@ export interface CoreConfigSubset {
     globals?: { rename?: boolean };
     methods?: { rename?: boolean };
   };
-  reflection?: { allow?: string[] };
+  reflection?: { allow?: ReflectionAllow[] };
   sourceMap?: { enabled?: boolean; sourcesContent?: boolean };
   protectionMap?: { enabled?: boolean; detailed?: boolean };
   regions?: RegionConfig[];
