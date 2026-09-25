@@ -134,7 +134,7 @@ export default new Optimizer<ParcelConfig, void>({
       client: resolveClientIdentity(import.meta.url),
       telemetry: createTelemetryReporter(),
       label: "afterpack-parcel",
-      gitignoreDir: options.projectRoot,
+      cwd: options.projectRoot,
       startedAt,
       combinedProtectionMap: {
         buildDir: bundle.target.distDir,

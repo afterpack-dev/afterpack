@@ -64,8 +64,8 @@ unknown or misspelled key fails the build and names the right spelling.
 [paths.include]: https://www.afterpack.dev/docs/config#paths-include
 
 The plugin writes one [Protection Map](https://www.afterpack.dev/docs/protection-map) per bundle to
-`.afterpack/` and adds it to your `.gitignore`. It contains your original source, so never deploy
-or commit it.
+`.afterpack/`, which carries its own `.gitignore` and self-ignores. It contains your original
+source, so never deploy or commit it.
 
 ## Things to know
 

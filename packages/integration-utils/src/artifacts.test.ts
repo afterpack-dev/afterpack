@@ -3,12 +3,11 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { gunzipSync } from "node:zlib";
 import type { ProtectionMap } from "@afterpack/protection-map";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   buildProjectFileTree,
   cleanSourcePath,
-  ensureGitignore,
-  GITIGNORE_ENTRIES,
+  ensureAfterpackGitignore,
   isRuntimeSource,
   type Logger,
   warnIfPublicPath,
@@ -127,7 +126,7 @@ describe("writeArtifacts — production policy", () => {
     expect(result.backupPath).not.toBeNull();
   });
 
-  it("force-enabling PM in prod redirects it to gitignored .afterpack/ + warns loudly", () => {
+  it("force-enabling PM in prod redirects it to the self-ignoring .afterpack/ and logs calmly", () => {
     const policy = resolveReportPolicy(
       { NODE_ENV: "production" },
       { protectionMap: { enabled: true } },
@@ -149,8 +148,10 @@ describe("writeArtifacts — production policy", () => {
     expect(result.protectionMapPath).toBe(join(dir, ".afterpack", "main.protectionMap.html"));
     expect(existsSync(result.protectionMapPath as string)).toBe(true);
     expect(existsSync(join(dir, "main.protectionMap.html"))).toBe(false);
-    expect(cap.warns.join("\n")).toMatch(/PRODUCTION build/i);
-    expect(cap.warns.join("\n")).toMatch(/ORIGINAL SOURCE/i);
+    expect(readFileSync(join(dir, ".afterpack", ".gitignore"), "utf8")).toBe("*\n");
+    expect(cap.warns).toEqual([]);
+    expect(cap.logs.join("\n")).toMatch(/Protection Map/);
+    expect(cap.logs.join("\n")).toMatch(/local only, not deployed/);
   });
 });
 
@@ -198,7 +199,7 @@ describe("writeCombinedProtectionMap — directory / framework build", () => {
     expect(writeCombinedProtectionMap({ buildDir: dir, docs: [], policy: on })).toBeNull();
   });
 
-  it("redirects a prod-forced combined PM into .afterpack/ + warns", () => {
+  it("redirects a prod-forced combined PM into .afterpack/ and logs calmly", () => {
     const policy = resolveReportPolicy(
       { NODE_ENV: "production" },
       { protectionMap: { enabled: true } },
@@ -212,7 +213,10 @@ describe("writeCombinedProtectionMap — directory / framework build", () => {
       logger: cap.logger,
     });
     expect(out).toBe(join(dir, ".afterpack", "protectionMap.html"));
-    expect(cap.warns.join("\n")).toMatch(/PRODUCTION build/i);
+    expect(readFileSync(join(dir, ".afterpack", ".gitignore"), "utf8")).toBe("*\n");
+    expect(cap.warns).toEqual([]);
+    expect(cap.logs.join("\n")).toMatch(/Protection Map/);
+    expect(cap.logs.join("\n")).toMatch(/local only, not deployed/);
   });
 
   function v3Doc(backend: string, paths: string[]): ProtectionMap {
@@ -550,58 +554,44 @@ describe("buildProjectFileTree — project-source tree normalization", () => {
   });
 });
 
-describe("ensureGitignore", () => {
-  function repoWithGitignore(contents = ""): string {
-    const repo = join(dir, "repo");
-    mkdirSync(join(repo, ".git"), { recursive: true });
-    writeFileSync(join(repo, ".gitignore"), contents);
-    return repo;
-  }
+describe("ensureAfterpackGitignore", () => {
+  it("creates .afterpack/.gitignore with the self-ignoring `*` pattern", () => {
+    const afterpackDir = join(dir, ".afterpack");
+    mkdirSync(afterpackDir, { recursive: true });
 
-  it("adds every guard glob to the nearest .gitignore above the target, once", () => {
-    const repo = repoWithGitignore();
-    const target = join(repo, "dist", "assets");
-    mkdirSync(target, { recursive: true });
+    ensureAfterpackGitignore(afterpackDir);
 
-    expect([...ensureGitignore(target)].sort()).toEqual([...GITIGNORE_ENTRIES].sort());
-    const content = readFileSync(join(repo, ".gitignore"), "utf8");
-    for (const entry of GITIGNORE_ENTRIES) expect(content).toContain(entry);
-
-    expect(ensureGitignore(target)).toEqual([]);
-    expect(readFileSync(join(repo, ".gitignore"), "utf8")).toBe(content);
+    expect(readFileSync(join(afterpackDir, ".gitignore"), "utf8")).toBe("*\n");
   });
 
-  it("only appends the MISSING entries to an existing .gitignore, preserving content", () => {
-    const repo = repoWithGitignore("node_modules/\n*.map\n");
-    const added = ensureGitignore(repo);
-    expect(added).not.toContain("*.map");
-    expect(added).toContain(".afterpack/");
-    const content = readFileSync(join(repo, ".gitignore"), "utf8");
-    expect(content).toContain("node_modules/");
-    expect((content.match(/\*\.map/g) || []).length).toBe(1);
+  it("never overwrites an existing .afterpack/.gitignore", () => {
+    const afterpackDir = join(dir, ".afterpack");
+    mkdirSync(afterpackDir, { recursive: true });
+    writeFileSync(join(afterpackDir, ".gitignore"), "custom\n");
+
+    ensureAfterpackGitignore(afterpackDir);
+
+    expect(readFileSync(join(afterpackDir, ".gitignore"), "utf8")).toBe("custom\n");
   });
 
-  it("never touches the working directory's repository when the target lives outside it", () => {
-    const repo = repoWithGitignore("node_modules/\n");
-    const outside = join(dir, "elsewhere", "bundle");
-    mkdirSync(outside, { recursive: true });
-    vi.spyOn(process, "cwd").mockReturnValue(repo);
+  it("places the .gitignore at the top-level .afterpack/, even for a nested writer", () => {
+    const leg = join(dir, ".afterpack", "preload");
+    mkdirSync(leg, { recursive: true });
 
-    expect(ensureGitignore(outside)).toEqual([]);
-    expect(readFileSync(join(repo, ".gitignore"), "utf8")).toBe("node_modules/\n");
-    expect(existsSync(join(outside, ".gitignore"))).toBe(false);
-    expect(existsSync(join(dir, "elsewhere", ".gitignore"))).toBe(false);
+    ensureAfterpackGitignore(leg);
+
+    expect(readFileSync(join(dir, ".afterpack", ".gitignore"), "utf8")).toBe("*\n");
+    expect(existsSync(join(leg, ".gitignore"))).toBe(false);
   });
 
-  it("stops at the repository root rather than climbing into an outer .gitignore", () => {
-    writeFileSync(join(dir, ".gitignore"), "outer\n");
-    const inner = join(dir, "inner");
-    mkdirSync(join(inner, ".git"), { recursive: true });
-    const target = join(inner, "dist");
-    mkdirSync(target, { recursive: true });
+  it("never touches the user's own .gitignore anywhere in the tree", () => {
+    writeFileSync(join(dir, ".gitignore"), "node_modules/\n");
+    const afterpackDir = join(dir, ".afterpack");
+    mkdirSync(afterpackDir, { recursive: true });
 
-    expect(ensureGitignore(target)).toEqual([]);
-    expect(readFileSync(join(dir, ".gitignore"), "utf8")).toBe("outer\n");
+    ensureAfterpackGitignore(afterpackDir);
+
+    expect(readFileSync(join(dir, ".gitignore"), "utf8")).toBe("node_modules/\n");
   });
 });
 

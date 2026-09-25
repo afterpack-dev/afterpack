@@ -197,7 +197,7 @@ export class AfterpackWebpackPlugin {
       client: resolveClientIdentity(import.meta.url),
       telemetry: createTelemetryReporter(),
       label: "afterpack-webpack",
-      gitignoreDir: context,
+      cwd: context,
       startedAt,
       capturedByFile: capturedByFile.size > 0 ? capturedByFile : undefined,
       combinedProtectionMap: {

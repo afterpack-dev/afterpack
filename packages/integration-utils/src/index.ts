@@ -1,4 +1,5 @@
 export {
+  ensureAfterpackGitignore,
   type Logger,
   type WriteArtifactsInput,
   type WriteArtifactsResult,

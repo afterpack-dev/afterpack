@@ -57,7 +57,7 @@ export async function afterpackAngular(options: AfterpackAngularOptions = {}): P
     client: resolveClientIdentity(import.meta.url),
     telemetry: createTelemetryReporter(),
     label: "afterpack-angular",
-    gitignoreDir: cwd,
+    cwd,
     startedAt: startedBeforeDirDiscovery,
     combinedProtectionMap: { buildDir: browserDir, afterpackDir: gitignoredNonServedAfterpackDir },
     ...passSettings(resolved),

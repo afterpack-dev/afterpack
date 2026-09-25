@@ -61,7 +61,7 @@ other option is in the [configuration reference](https://www.afterpack.dev/docs/
 the plugin skips them and tells you.
 
 The [Protection Map](https://www.afterpack.dev/docs/protection-map) is written to `.afterpack/`,
-outside your output directory, and the plugin adds its local artifacts to your `.gitignore`. It
+outside your output directory; that directory carries its own `.gitignore` and self-ignores. It
 contains your original source, so never publish or commit it.
 
 Options can also live in `afterpack.json` or in `AFTERPACK_*` environment variables. The options

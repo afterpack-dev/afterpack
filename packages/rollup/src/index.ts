@@ -120,7 +120,7 @@ export function afterpackRollup(options: AfterpackRollupOptions = {}): Plugin {
           client: resolveClientIdentity(import.meta.url),
           telemetry: createTelemetryReporter(),
           label: "afterpack-rollup",
-          gitignoreDir: cwd,
+          cwd,
           startedAt: startedBeforeBundleWalk,
           capturedByFile: capturedByFile.size > 0 ? capturedByFile : undefined,
           combinedProtectionMap: {

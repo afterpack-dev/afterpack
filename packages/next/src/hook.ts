@@ -137,7 +137,7 @@ export async function runAfterpackHook(input: AfterpackHookInput): Promise<void>
     client: resolveClientIdentity(import.meta.url),
     telemetry: createTelemetryReporter(),
     label: LABEL,
-    gitignoreDir: projectDir,
+    cwd: projectDir,
     startedAt,
     combinedProtectionMap: { buildDir: distDir, afterpackDir: join(projectDir, ".afterpack") },
     ...passSettings(resolved),

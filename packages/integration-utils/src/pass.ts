@@ -4,7 +4,6 @@ import { basename } from "node:path";
 import type { ProtectionMap } from "@afterpack/protection-map";
 import {
   DEFAULT_LOGGER,
-  ensureGitignore,
   type Logger,
   warnIfPublicPath,
   writeArtifacts,
@@ -135,7 +134,7 @@ export interface ObfuscationPassOptions {
   emitToCaller?: boolean;
   engine: ObfuscationEngine;
   label: string;
-  gitignoreDir: string;
+  cwd: string;
   combinedProtectionMap: CombinedProtectionMapTarget;
   artifactOptions?: AfterpackArtifactOptions;
   hasBundlerSourcemap?: boolean;
@@ -249,7 +248,7 @@ export async function runObfuscationPass(
     files,
     engine,
     label,
-    gitignoreDir,
+    cwd,
     combinedProtectionMap,
     artifactOptions = {},
     env = process.env,
@@ -291,7 +290,7 @@ export async function runObfuscationPass(
 
   const resolvedSeed = resolveBuildSeed(
     options.seed,
-    { root: gitignoreDir, leg: options.buildLeg ?? combinedProtectionMap.buildDir },
+    { root: cwd, leg: options.buildLeg ?? combinedProtectionMap.buildDir },
     { env, warn: (m) => logger.warn(m) },
   );
   const seed = resolvedSeed.seed;
@@ -374,7 +373,6 @@ export async function runObfuscationPass(
     hasBundlerSourcemap,
     inPlaceOutput: true,
   });
-  ensureGitignore(combinedProtectionMap.buildDir);
   if (policy.autoEnableBundlerSourcemap && options.messages?.autoEnableBundlerSourcemap) {
     logger.warn(prefix(options.messages.autoEnableBundlerSourcemap));
   }
@@ -456,7 +454,7 @@ export async function runObfuscationPass(
   const git =
     artifactOptions.git === false
       ? null
-      : detectGitContext(artifactOptions.git ?? null, { env, cwd: gitignoreDir });
+      : detectGitContext(artifactOptions.git ?? null, { env, cwd });
 
   const engineConfig = buildEngineConfig({
     policy,
@@ -519,7 +517,7 @@ export async function runObfuscationPass(
   if (telemetry && telemetryEnabled) {
     const facts: TelemetryFacts = {
       label,
-      projectRoot: gitignoreDir,
+      projectRoot: cwd,
       diagnostics: collected.diagnostics,
       fileCount: files.length,
       durationMs: engineEndedAt - passStartedAt,

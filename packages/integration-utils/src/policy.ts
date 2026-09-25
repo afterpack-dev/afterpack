@@ -60,8 +60,9 @@ export function resolveReportPolicy(
 ): ReportPolicy {
   const isProduction = detectProduction(env, userOpts);
   const hasBundlerSourcemap = signals.hasBundlerSourcemap ?? false;
+  const isCI = env.CI === "true" || env.CI === "1";
 
-  const protectionMap = userOpts.protectionMap?.enabled ?? hasBundlerSourcemap;
+  const protectionMap = userOpts.protectionMap?.enabled ?? (hasBundlerSourcemap && !isCI);
   const autoEnableBundlerSourcemap =
     userOpts.protectionMap?.enabled === true && !hasBundlerSourcemap;
 

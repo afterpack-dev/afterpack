@@ -69,8 +69,8 @@ other option is in the [configuration reference](https://www.afterpack.dev/docs/
 `/* @afterpack */` [directives](https://www.afterpack.dev/docs/directives) and a readable
 [Protection Map](https://www.afterpack.dev/docs/protection-map) both need
 `productionBrowserSourceMaps: true` in your Next config. The Protection Map is written to
-`.afterpack/`, which the plugin adds to your `.gitignore`. It contains your original source, so
-never deploy or commit it.
+`.afterpack/`, which carries its own `.gitignore` and self-ignores. It contains your original
+source, so never deploy or commit it.
 
 Options can also live in `afterpack.json` or in `AFTERPACK_*` environment variables. The options
 object wins over the environment, which wins over the file. An unknown or misspelled key fails the

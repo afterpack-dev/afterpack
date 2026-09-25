@@ -69,7 +69,21 @@ describe("afterpackAngular", () => {
       "export const a = 1;",
       "export const b = 2;",
     ]);
-    expect(readFileSync(join(root, ".gitignore"), "utf8")).toContain("*.protectionMap.html");
+    expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe("");
+  });
+
+  it("writes .afterpack/.gitignore when a Protection Map lands there, and never touches the project's own .gitignore", async () => {
+    writeFileSync(join(browserDir, "main.js"), "export const a = 1;");
+    __setProcessResult((input) => ({
+      code: `OBF:${input}`,
+      sourceMap: null,
+      protectionMap: { schemaVersion: 4, files: [] },
+    }));
+
+    await afterpackAngular({ cwd: root, protectionMap: { enabled: true } });
+
+    expect(readFileSync(join(root, ".afterpack", ".gitignore"), "utf8")).toBe("*\n");
+    expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe("");
   });
 
   it("honors an explicit browserDir (skips auto-location)", async () => {

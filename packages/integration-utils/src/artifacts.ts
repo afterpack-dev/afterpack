@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { basename, join, relative, resolve, sep } from "node:path";
 import {
   type ProtectionMap,
   type ProtectionMapFile,
@@ -8,7 +8,6 @@ import {
 import {
   type ArtifactMode,
   combinedProtectionMapPath,
-  findUpward,
   resolveArtifactPaths,
   shortHash,
 } from "./paths.js";
@@ -16,17 +15,7 @@ import type { ReportPolicy } from "./policy.js";
 
 const AFTERPACK_DIR = ".afterpack";
 
-export const GITIGNORE_ENTRIES = [
-  ".afterpack/",
-  "*.protectionMap.html",
-  "protectionMap.html",
-  "*.backup.*",
-  "*.map",
-];
-
-const GITIGNORE_FILE = ".gitignore";
-
-const GITIGNORE_BLOCK_HEADER = "# AfterPack artifacts (auto-added)";
+const AFTERPACK_GITIGNORE_CONTENT = "*\n";
 
 const PUBLIC_SEGMENTS = new Set([
   "public",
@@ -115,9 +104,10 @@ export function writeArtifacts(input: WriteArtifactsInput): WriteArtifactsResult
 
   if (mode === "single" && policy.protectionMap && protectionMapJson != null) {
     mkdirSync(afterpackDir, { recursive: true });
+    ensureAfterpackGitignore(afterpackDir);
     const pmPath = join(afterpackDir, basename(paths.protectionMapPath as string));
     if (policy.protectionMapInProd) {
-      warnProtectionMapInProd(pmPath, logger);
+      logProtectionMapInProd(pmPath, logger);
     } else {
       logger.log(
         `[afterpack] wrote Protection Map -> ${pmPath} (gitignored; set protectionMap.enabled:false to skip)`,
@@ -485,12 +475,13 @@ export function writeCombinedProtectionMap(input: WriteCombinedProtectionMapInpu
   if (!policy.protectionMap || docs.length === 0) return null;
 
   mkdirSync(afterpackDir, { recursive: true });
+  ensureAfterpackGitignore(afterpackDir);
   const outPath = join(
     afterpackDir,
     input.fileName ?? basename(combinedProtectionMapPath(buildDir)),
   );
   if (policy.protectionMapInProd) {
-    warnProtectionMapInProd(outPath, logger);
+    logProtectionMapInProd(outPath, logger);
   } else {
     logger.log(
       `[afterpack] wrote Protection Map -> ${outPath} (gitignored; set protectionMap.enabled:false to skip)`,
@@ -519,38 +510,25 @@ export function writeCombinedProtectionMap(input: WriteCombinedProtectionMapInpu
   return outPath;
 }
 
-function warnProtectionMapInProd(pmPath: string, logger: Logger): void {
-  logger.warn(
-    `[afterpack] WARNING: the Protection Map is ENABLED in a PRODUCTION build. ` +
-      `This LOCAL file embeds your ORIGINAL SOURCE and surviving-literal samples -- NEVER serve or commit it. ` +
-      `Writing it to the gitignored "${pmPath}" instead of alongside the build output.`,
-  );
+function logProtectionMapInProd(pmPath: string, logger: Logger): void {
+  const rel = relative(process.cwd(), pmPath);
+  const display = rel.startsWith("..") ? pmPath : rel;
+  logger.log(`[afterpack] Protection Map -> ${display} (local only, not deployed)`);
 }
 
-function nearestGitignore(startDir: string): string | null {
-  return findUpward(startDir, GITIGNORE_FILE, {
-    stopAtDir: (dir) => existsSync(join(dir, ".git")),
-  });
+function afterpackRoot(dir: string): string {
+  const resolved = resolve(dir);
+  const segments = resolved.split(sep);
+  const index = segments.lastIndexOf(AFTERPACK_DIR);
+  return index === -1 ? resolved : segments.slice(0, index + 1).join(sep);
 }
 
-export function ensureGitignore(targetDir: string): string[] {
-  const gitignorePath = nearestGitignore(targetDir);
-  if (gitignorePath === null) return [];
-  let existing = "";
-  try {
-    existing = readFileSync(gitignorePath, "utf8");
-  } catch {
-    existing = "";
-  }
-
-  const present = new Set(existing.split(/\r?\n/).map((l) => l.trim()));
-  const missing = GITIGNORE_ENTRIES.filter((e) => !present.has(e));
-  if (missing.length === 0) return [];
-
-  const prefix = existing.length > 0 && !existing.endsWith("\n") ? "\n" : "";
-  const block = `${prefix}\n${GITIGNORE_BLOCK_HEADER}\n${missing.join("\n")}\n`;
-  writeFileSync(gitignorePath, existing + block);
-  return missing;
+export function ensureAfterpackGitignore(afterpackDir: string): void {
+  const root = afterpackRoot(afterpackDir);
+  const gitignorePath = join(root, ".gitignore");
+  if (existsSync(gitignorePath)) return;
+  mkdirSync(root, { recursive: true });
+  writeFileSync(gitignorePath, AFTERPACK_GITIGNORE_CONTENT);
 }
 
 export function warnIfPublicPath(artifactPath: string, logger: Logger = DEFAULT_LOGGER): boolean {

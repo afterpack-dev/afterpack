@@ -12,7 +12,8 @@ or off, and [`protectionMap.detailed`](https://www.afterpack.dev/docs/config#pro
 set to `false` leaves out the per-region list of transformations for a smaller file.
 
 The Protection Map contains your original source. Keep it local: never deploy, publish or commit
-it. The AfterPack tools add `.afterpack/` to your `.gitignore` for you.
+it. AfterPack tools write it under `.afterpack/`, which carries its own `.gitignore` and
+self-ignores.
 
 ## Render one yourself
 

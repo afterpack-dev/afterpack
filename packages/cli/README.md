@@ -38,8 +38,8 @@ Each run writes:
 - `.map` files next to the output, when your build has source maps and the run is not a production
   build.
 
-The backup and the Protection Map contain your original source. AfterPack adds `.afterpack/` to the
-nearest `.gitignore`. Never deploy or commit them.
+The backup and the Protection Map contain your original source. `.afterpack/` carries its own
+`.gitignore` and self-ignores. Never deploy or commit them.
 
 With no path, `afterpack` looks at your project first. If it finds a framework, it prints the plugin
 to install (or tells you the one you have already covers the build) and exits `1`. Otherwise it

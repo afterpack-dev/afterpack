@@ -49,7 +49,7 @@ describe("afterpack-next post-minify directive capture (the original survives on
       files: targets,
       engine: { processBatch },
       label: "afterpack-next",
-      gitignoreDir: dir,
+      cwd: dir,
       combinedProtectionMap: { buildDir: join(dir, ".next") },
       directivesEnabled: true,
       postMinify: true,
@@ -80,7 +80,7 @@ describe("afterpack-next post-minify directive capture (the original survives on
       files: collectJsFiles(chunks),
       engine: { processBatch },
       label: "afterpack-next",
-      gitignoreDir: dir,
+      cwd: dir,
       combinedProtectionMap: { buildDir: join(dir, ".next") },
     });
 

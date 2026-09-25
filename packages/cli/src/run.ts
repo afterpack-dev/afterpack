@@ -461,7 +461,7 @@ async function runObfuscationAndBackup(input: {
           files: input.files,
           engine: observeEngine(input.engine, captured),
           label: "afterpack",
-          gitignoreDir: input.cwd,
+          cwd: input.cwd,
           startedAt: input.startedAt,
           combinedProtectionMap: {
             buildDir: input.buildDir,

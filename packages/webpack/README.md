@@ -63,7 +63,7 @@ other option is in the [configuration reference](https://www.afterpack.dev/docs/
 tells you.
 
 The [Protection Map](https://www.afterpack.dev/docs/protection-map) is written to `.afterpack/`,
-outside webpack's output, and the plugin adds its local artifacts to your `.gitignore`. It contains
+outside webpack's output; that directory carries its own `.gitignore` and self-ignores. It contains
 your original source, so never deploy or commit it.
 
 Options can also live in `afterpack.json` or in `AFTERPACK_*` environment variables. The options

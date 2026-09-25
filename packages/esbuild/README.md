@@ -68,8 +68,8 @@ other option is in the [configuration reference](https://www.afterpack.dev/docs/
 source map. Without it, the plugin skips them and tells you.
 
 The [Protection Map](https://www.afterpack.dev/docs/protection-map) is written to `.afterpack/`,
-and the plugin adds its local artifacts to your `.gitignore`. The Protection Map and any backups
-contain your original source, so never deploy or commit them.
+which carries its own `.gitignore` and self-ignores. The Protection Map and any backups contain
+your original source, so never deploy or commit them.
 
 Options can also live in `afterpack.json` or in `AFTERPACK_*` environment variables. The options
 object wins over the environment, which wins over the file. An unknown or misspelled key fails the

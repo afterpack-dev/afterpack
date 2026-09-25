@@ -36,8 +36,29 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-describe("the .gitignore auto-add is anchored on the target, never on the working directory", () => {
-  it("leaves the working directory's repository alone when the target lives outside it", async () => {
+describe("AfterPack never edits the user's own .gitignore", () => {
+  it("leaves the project's .gitignore byte-for-byte untouched by a normal build", async () => {
+    const project = repo("project", "node_modules/\n");
+    buildOutput(project);
+
+    expect(await invoke(project, ["dist", "--protectionMap.enabled=false"])).toBe(0);
+    expect(readFileSync(join(project, ".gitignore"), "utf8")).toBe("node_modules/\n");
+
+    writeFileSync(join(project, "dist", "app.js"), "export const a = 2;");
+    expect(await invoke(project, ["dist", "--protectionMap.enabled=false"])).toBe(0);
+    expect(readFileSync(join(project, ".gitignore"), "utf8")).toBe("node_modules/\n");
+  });
+
+  it("never writes a .gitignore anywhere under the build output", async () => {
+    const project = repo("project", "node_modules/\n");
+    const out = buildOutput(project);
+
+    expect(await invoke(project, ["dist", "--protectionMap.enabled=false"])).toBe(0);
+
+    expect(existsSync(join(out, ".gitignore"))).toBe(false);
+  });
+
+  it("leaves the working directory's own .gitignore alone when the target lives elsewhere", async () => {
     const here = repo("here", "node_modules/\n");
     const elsewhere = join(root, "elsewhere");
     const target = buildOutput(elsewhere);
@@ -48,19 +69,26 @@ describe("the .gitignore auto-add is anchored on the target, never on the workin
     expect(existsSync(join(elsewhere, ".gitignore"))).toBe(false);
     expect(existsSync(join(target, ".gitignore"))).toBe(false);
   });
+});
 
-  it("adds the block once to the .gitignore above the target, then leaves it alone", async () => {
+describe(".afterpack/ self-ignores instead of the project's .gitignore", () => {
+  it("writes .afterpack/.gitignore with the self-ignoring `*` pattern once a run writes into .afterpack/", async () => {
     const project = repo("project", "node_modules/\n");
     buildOutput(project);
 
     expect(await invoke(project, ["dist", "--protectionMap.enabled=false"])).toBe(0);
-    const afterFirst = readFileSync(join(project, ".gitignore"), "utf8");
-    expect(afterFirst).toContain("node_modules/");
-    expect(afterFirst).toContain(".afterpack/");
-    expect(afterFirst).toContain("*.backup.*");
 
-    writeFileSync(join(project, "dist", "app.js"), "export const a = 2;");
+    expect(readFileSync(join(project, ".afterpack", ".gitignore"), "utf8")).toBe("*\n");
+  });
+
+  it("never overwrites an existing .afterpack/.gitignore", async () => {
+    const project = repo("project", "node_modules/\n");
+    buildOutput(project);
+    mkdirSync(join(project, ".afterpack"), { recursive: true });
+    writeFileSync(join(project, ".afterpack", ".gitignore"), "custom\n");
+
     expect(await invoke(project, ["dist", "--protectionMap.enabled=false"])).toBe(0);
-    expect(readFileSync(join(project, ".gitignore"), "utf8")).toBe(afterFirst);
+
+    expect(readFileSync(join(project, ".afterpack", ".gitignore"), "utf8")).toBe("custom\n");
   });
 });

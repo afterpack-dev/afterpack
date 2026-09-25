@@ -57,7 +57,7 @@ export function afterpackEsbuild(options: AfterpackEsbuildOptions = {}): Plugin 
           client: resolveClientIdentity(import.meta.url),
           telemetry: createTelemetryReporter(),
           label: "afterpack-esbuild",
-          gitignoreDir: cwd,
+          cwd,
           startedAt: startedBeforeOutputWalk,
           combinedProtectionMap: { buildDir, afterpackDir: gitignoredNonServedAfterpackDir },
           ...passSettings(resolved),

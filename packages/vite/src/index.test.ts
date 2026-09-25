@@ -123,7 +123,8 @@ describe("afterpackVite generateBundle (dev policy)", () => {
     const pm = readFileSync(join(root, ".afterpack", "protectionMap.html"), "utf8");
     expect(pm).not.toMatch(/https?:\/\//i);
     expect((sharedConfig().protectionMap as { enabled: boolean }).enabled).toBe(true);
-    expect(readFileSync(join(root, ".gitignore"), "utf8")).toContain("*.protectionMap.html");
+    expect(readFileSync(join(root, ".afterpack", ".gitignore"), "utf8")).toBe("*\n");
+    expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe("");
   });
 
   it("passes Vite's live chunk map on the FileInput and replaces its bundle entry", async () => {

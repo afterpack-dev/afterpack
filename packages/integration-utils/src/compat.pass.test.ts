@@ -65,7 +65,7 @@ function options(extra: Partial<ObfuscationPassOptions> = {}): ObfuscationPassOp
     files: [file],
     engine: { processBatch, version },
     label: "afterpack-test",
-    gitignoreDir: root,
+    cwd: root,
     env: {},
     artifactOptions: { git: false },
     combinedProtectionMap: { buildDir: outDir, afterpackDir: join(root, ".afterpack") },

@@ -46,6 +46,7 @@ const SURFACE = [
   "EngineSpan",
   "EnvLike",
   "EnvParseResult",
+  "ensureAfterpackGitignore",
   "GitBuildContext",
   "findUpward",
   "GlobReserved",

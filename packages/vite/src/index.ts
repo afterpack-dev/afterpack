@@ -138,7 +138,7 @@ export function afterpackVite(options: AfterpackViteOptions = {}): Plugin {
           client: resolveClientIdentity(import.meta.url),
           telemetry: createTelemetryReporter(),
           label,
-          gitignoreDir: projectRoot,
+          cwd: projectRoot,
           buildLeg: leg,
           startedAt,
           capturedByFile: capturedByFile.size > 0 ? capturedByFile : undefined,

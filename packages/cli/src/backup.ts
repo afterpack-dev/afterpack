@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
-import { findUpward, sha256Of } from "@afterpack/integration-utils";
+import { ensureAfterpackGitignore, findUpward, sha256Of } from "@afterpack/integration-utils";
 
 const BACKUP_MANIFEST_FILE = "manifest.json";
 const BACKUP_MANIFEST_RELATIVE = join(".afterpack", "backup", BACKUP_MANIFEST_FILE);
@@ -110,6 +110,7 @@ export function writeBackups(input: WriteBackupsInput): WriteBackupsResult {
   const dir = backupDir(input.projectRoot);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
+  ensureAfterpackGitignore(dir);
   const files: BackupManifestFile[] = [];
   for (const pending of input.pending) {
     const dest = absoluteFilePath(dir, pending.relPath);

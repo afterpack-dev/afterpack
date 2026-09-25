@@ -99,6 +99,26 @@ describe("resolveReportPolicy — PM couples to sourcemap presence, not dev/prod
     expect(resolveReportPolicy({}, {}).backup).toBe(true);
   });
 
+  it("CI defaults PM OFF even with a bundler sourcemap present, but an explicit enabled:true still wins", () => {
+    expect(
+      resolveReportPolicy({ CI: "true" }, {}, { hasBundlerSourcemap: true }).protectionMap,
+    ).toBe(false);
+    expect(resolveReportPolicy({ CI: "1" }, {}, { hasBundlerSourcemap: true }).protectionMap).toBe(
+      false,
+    );
+    expect(
+      resolveReportPolicy({ CI: "false" }, {}, { hasBundlerSourcemap: true }).protectionMap,
+    ).toBe(true);
+    expect(resolveReportPolicy({}, {}, { hasBundlerSourcemap: true }).protectionMap).toBe(true);
+    expect(
+      resolveReportPolicy(
+        { CI: "true" },
+        { protectionMap: { enabled: true } },
+        { hasBundlerSourcemap: true },
+      ).protectionMap,
+    ).toBe(true);
+  });
+
   it("force-enabling PM in prod flags the loud-warning path", () => {
     const p = resolveReportPolicy(
       { NODE_ENV: "production" },

@@ -135,7 +135,7 @@ const baseOptions = (files: string[], engine: ObfuscationEngine) =>
     files,
     engine,
     label: "afterpack-test",
-    gitignoreDir: root,
+    cwd: root,
     env: {},
     combinedProtectionMap: { buildDir: outDir, afterpackDir: join(root, ".afterpack") },
   }) as const;
@@ -164,7 +164,8 @@ describe("runObfuscationPass (dev policy)", () => {
     expect(result.policy.backup).toBe(false);
     expect(existsSync(join(outDir, "protectionMap.html"))).toBe(false);
     expect(existsSync(join(root, ".afterpack", "protectionMap.html"))).toBe(true);
-    expect(readFileSync(join(root, ".gitignore"), "utf8")).toContain("*.protectionMap.html");
+    expect(readFileSync(join(root, ".afterpack", ".gitignore"), "utf8")).toBe("*\n");
+    expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe("");
     expect(result.fileCount).toBe(2);
     expect(result.protectionMapPath).toContain("protectionMap.html");
     expect(result.policy.protectionMap).toBe(true);
@@ -1147,7 +1148,7 @@ describe("runObfuscationPass — the cross-bundle build seed", () => {
       files: [file],
       engine,
       label: `afterpack-test:${name}`,
-      gitignoreDir: root,
+      cwd: root,
       buildLeg: name,
       seed,
       diagnostics: "all",
@@ -1292,7 +1293,7 @@ describe("runObfuscationPass in-memory seam (inputs + emitToCaller)", () => {
     ).rejects.toThrow(/would ship\s+as cleartext/);
   });
 
-  it("still writes the project-root artifacts: gitignore + the combined Protection Map", async () => {
+  it("still writes the project-root artifacts: the self-ignoring .afterpack/ + the combined Protection Map", async () => {
     const path = virtual();
     const { engine } = makeEngine((s) => ({ protectionMap: pmDoc(s, "chunk") }));
 
@@ -1309,7 +1310,8 @@ describe("runObfuscationPass in-memory seam (inputs + emitToCaller)", () => {
       logger: silentLogger().logger,
     });
 
-    expect(readFileSync(join(root, ".gitignore"), "utf8")).toContain(".afterpack/");
+    expect(readFileSync(join(root, ".afterpack", ".gitignore"), "utf8")).toBe("*\n");
+    expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe("");
     expect(result.protectionMapPath).toBe(
       join(root, ".afterpack", "one-bundle.protectionMap.html"),
     );

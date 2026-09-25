@@ -304,6 +304,7 @@ describe("per-bundle Protection Map", () => {
     });
 
     expect(readdirSync(join(root, ".afterpack")).sort()).toEqual([
+      ".gitignore",
       "app.js.aaa.protectionMap.html",
       "lazy.js.bbb.protectionMap.html",
     ]);
@@ -457,9 +458,17 @@ describe("loadConfig", () => {
   });
 });
 
-describe("the shared gitignore guard still runs on the in-memory path", () => {
-  it("writes the artifact globs into the project root", async () => {
-    await run();
-    expect(readFileSync(join(root, ".gitignore"), "utf8")).toContain(".afterpack/");
+describe("the shared .afterpack/ self-ignore still runs on the in-memory path", () => {
+  it("writes .afterpack/.gitignore when it writes a Protection Map there, and never touches the project's own .gitignore", async () => {
+    __setProcessResult(() => ({
+      code: "OBF",
+      sourceMap: null,
+      protectionMap: { schemaVersion: 4, files: [] },
+    }));
+
+    await run({ config: { protectionMap: { enabled: true } } });
+
+    expect(readFileSync(join(root, ".afterpack", ".gitignore"), "utf8")).toBe("*\n");
+    expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe("");
   });
 });

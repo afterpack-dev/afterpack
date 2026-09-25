@@ -73,8 +73,8 @@ Rules:
 - `.afterpack/protectionMap.html`: the Protection Map report, when the build has source maps.
 - `.map` files beside the output, when an input map exists and the run is not a production build.
 
-The backup and the Protection Map contain the original source. AfterPack adds `.afterpack/` to the
-nearest `.gitignore`. Never deploy, publish or commit them.
+The backup and the Protection Map contain the original source. `.afterpack/` carries its own
+`.gitignore` and self-ignores. Never deploy, publish or commit them.
 
 ## Configuration
 

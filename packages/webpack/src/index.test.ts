@@ -153,7 +153,20 @@ describe("AfterpackWebpackPlugin processAssets", () => {
       "export const a = 1;",
       "export const b = 2;",
     ]);
-    expect(readFileSync(join(root, ".gitignore"), "utf8")).toContain("*.protectionMap.html");
+    expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe("");
+  });
+
+  it("writes .afterpack/.gitignore when a Protection Map lands there, and never touches the project's own .gitignore", async () => {
+    __setProcessResult((input) => ({
+      code: `OBF:${input}`,
+      sourceMap: null,
+      protectionMap: { schemaVersion: 4, files: [] },
+    }));
+    const invoke = applyPlugin(new AfterpackWebpackPlugin({ protectionMap: { enabled: true } }));
+    await invoke(fixture({ "main.js": "export const a = 1;" }, ["main.js"]));
+
+    expect(readFileSync(join(root, ".afterpack", ".gitignore"), "utf8")).toBe("*\n");
+    expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe("");
   });
 
   it("leaves an asset no chunk claims alone (a manifest another plugin emitted)", async () => {
