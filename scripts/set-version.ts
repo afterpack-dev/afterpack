@@ -19,7 +19,7 @@ function parse(version: string): number[] {
 function isDowngrade(next: string, current: string): boolean {
   const a = parse(next);
   const b = parse(current);
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 3; i++) {
     if (a[i] !== b[i]) return a[i] < b[i];
   }
   return false;
