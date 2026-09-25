@@ -285,14 +285,22 @@ jobs:
         with:
           node-version: 22
 
+      # The registry takes minutes to serve a fresh publish everywhere, and
+      # afterpack pins its sibling packages exactly, so retry for up to 10 minutes.
       - name: Install from npm and run it
+        env:
+          WANT: ${{ needs.promote.outputs.version }}
         run: |
-          INSTALLED=$(npx --yes afterpack@latest --version)
-          echo "afterpack@latest reports $INSTALLED"
-          if [ "$INSTALLED" != "${{ needs.promote.outputs.version }}" ]; then
-            echo "::error::expected ${{ needs.promote.outputs.version }}, got $INSTALLED"
-            exit 1
-          fi
+          for attempt in $(seq 1 20); do
+            INSTALLED=$(npx --yes --prefer-online afterpack@latest --version 2>/dev/null || true)
+            echo "attempt $attempt: afterpack@latest reports '$INSTALLED'"
+            if [ "$INSTALLED" = "$WANT" ]; then
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "::error::expected $WANT, got '$INSTALLED' after 10 minutes"
+          exit 1
 
   bump-engine:
     name: Bump the engine pin
