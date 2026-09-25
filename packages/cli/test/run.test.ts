@@ -95,7 +95,7 @@ describe("run", () => {
     const text = out.join("\n");
     expect(text).toContain("Protected 1 file");
     expect(text).toContain("receipt  dist/.afterpack-protection.json");
-    expect(text).toContain("next  afterpack verify   before you deploy");
+    expect(text).toContain("next  afterpack verify dist   before you deploy");
     expect(text).not.toContain("detected Vite");
   });
 

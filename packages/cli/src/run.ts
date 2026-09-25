@@ -527,7 +527,9 @@ function renderNextSteps(input: {
     report.log("");
   }
   if (receiptPath) {
-    report.log(alignRow("next", "afterpack verify   before you deploy"));
+    const verifyDir = documentPath(cwd, dirname(receiptPath));
+    const verifyCommand = verifyDir === "." ? "afterpack verify" : `afterpack verify ${verifyDir}`;
+    report.log(alignRow("next", `${verifyCommand}   before you deploy`));
   }
   if (backupWritten !== null && backupWritten.count > 0) {
     report.log(alignRow("undo", "afterpack restore"));
