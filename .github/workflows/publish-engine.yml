@@ -3,9 +3,11 @@ name: Publish engine
 # Publishes a stable engine release (@afterpack/core, its platform packages
 # and @afterpack/wasm) to npmjs with trusted publishing. The engine's source
 # is not in this repository, so these packages carry no provenance. The
-# release arrives as a repository_dispatch naming each tarball's integrity;
-# a manual run retries a version and checks it against the integrity the
-# source registry reports instead.
+# release arrives as a repository_dispatch naming each tarball's integrity
+# and the dist-tag (`latest` when absent, or `rc` to publish without moving
+# `latest`); a manual run retries a version and checks it against the
+# integrity the source registry reports instead. Only a `latest` publish
+# hands the engine on to the CLI and plugins.
 on:
   repository_dispatch:
     types: [engine-release]
@@ -15,8 +17,14 @@ on:
         description: "The stable engine version to publish, e.g. 0.1.1"
         required: true
         type: string
+      tag:
+        description: "The npm dist-tag to publish under"
+        required: true
+        default: latest
+        type: choice
+        options: [latest, rc]
 
-run-name: "Publish engine ${{ github.event.client_payload.version || inputs.version }}"
+run-name: "Publish engine ${{ github.event.client_payload.version || inputs.version }} (${{ github.event.client_payload.tag || inputs.tag || 'latest' }})"
 
 concurrency:
   group: ${{ github.workflow }}
@@ -56,20 +64,29 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           PAYLOAD_VERSION: ${{ github.event.client_payload.version }}
+          PAYLOAD_TAG: ${{ github.event.client_payload.tag }}
           INPUT_VERSION: ${{ inputs.version }}
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
           if [ "$EVENT" = "repository_dispatch" ]; then
             VERSION="$PAYLOAD_VERSION"
+            DIST_TAG="${PAYLOAD_TAG:-latest}"
           else
             VERSION="$INPUT_VERSION"
+            DIST_TAG="${INPUT_TAG:-latest}"
           fi
           VERSION="${VERSION#v}"
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error::'$VERSION' is not a stable version"
             exit 1
           fi
+          if [ "$DIST_TAG" != "latest" ] && [ "$DIST_TAG" != "rc" ]; then
+            echo "::error::dist-tag '$DIST_TAG' is not latest or rc"
+            exit 1
+          fi
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "DIST_TAG=$DIST_TAG" >> "$GITHUB_ENV"
           npm --version
           node --version
 
@@ -147,15 +164,22 @@ jobs:
               echo "skip: ${name}@${VERSION} already on npmjs"
               continue
             fi
-            npm publish "./$file" --access public --tag rc --provenance=false
+            npm publish "./$file" --access public --tag "$DIST_TAG" --provenance=false
           done < files.txt
           {
-            echo "Published engine \`$VERSION\` to the \`rc\` dist-tag, without provenance."
-            echo ""
-            echo "Move \`latest\` by hand once it has been tried."
+            echo "Published engine \`$VERSION\` to the \`$DIST_TAG\` dist-tag, without provenance."
+            if [ "$DIST_TAG" = "rc" ]; then
+              echo ""
+              echo "\`latest\` did not move, and the CLI and plugins were not bumped. Once it has been tried,"
+              echo "move \`latest\` by hand, then run this workflow again for \`$VERSION\` with tag \`latest\`:"
+              echo "every package is already there, so it only hands the engine on to the CLI and plugins."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # A version already on npmjs is skipped above without touching its
+      # dist-tags, so a `latest` run over an rc publish only does this step.
       - name: Bump the engine pin
+        if: env.DIST_TAG == 'latest'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

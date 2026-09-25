@@ -54,17 +54,23 @@ full suite runs on push to `main`.
 
 ## Release channels
 
-- **`rc`** — the `Release` workflow publishes every package as `X.Y.Z-rc.<utc>` under the `rc`
-  dist-tag, with provenance: on every push to `main` while the repository variable `RC_ON_PUSH` is
-  `true`, or when run by hand with `lane: rc`. Try it with `npx afterpack@rc`.
-- **`latest`** — a maintainer promotes one RC by hand (the `Release` workflow with `lane: promote`
-  and that RC's version). The same tree is republished as the clean `X.Y.Z` and tagged `vX.Y.Z`.
+- **`latest`** — the `Release` workflow publishes a new patch of every package on a push to `main`
+  that changes what a package ships: it packs each package and compares the tarball with the one
+  npm serves as `latest`, so tests, fixtures, CI and the root readme never cause a release. It runs
+  the full checks and e2e suite first, only while the repository variable `AUTO_RELEASE` is `true`,
+  and every publish waits for a maintainer's approval. A minor or major release is manual: run
+  the workflow with `lane: release` and a `bump`. An engine bump releases the same way.
+- **`rc`** — run the workflow with `lane: rc` to publish the next version as `X.Y.Z-rc.<utc>` under
+  the `rc` dist-tag without moving `latest`, e.g. a fix for one user to try with `npx afterpack@rc`.
+  `lane: promote` with that `rc_version` republishes the same tree as `X.Y.Z` under `latest`.
 - **engine** — `@afterpack/core`, its platform packages and `@afterpack/wasm` are built outside this
   repository and published to npm by the `Publish engine` workflow, without provenance, because
   their source is not here.
 
-Every package in this repository carries **one version**. `pnpm version:set --version X.Y.Z` writes
-it everywhere; never bump a single package on its own.
+Every package in this repository carries **one version**, stamped at publish time and never
+committed: the root `package.json` version is a floor, and the next version is one bump above the
+last `vX.Y.Z` tag or the npm `latest`, whichever is higher. `node scripts/release-plan.mjs changed`
+shows what a push would release; never bump a single package on its own.
 
 ## Pull requests
 

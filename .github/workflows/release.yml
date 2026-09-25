@@ -1,29 +1,43 @@
 name: Release
 
 # The one workflow that publishes the CLI and the plugins to npm, so each
-# package needs a single trusted publisher.
+# package needs a single trusted publisher. Every package carries one version.
 #
-#  * RC lane: a push to main publishes every package as a timestamp release
-#    candidate under the `rc` dist-tag, installable as `npx afterpack@rc`,
-#    but only while the repo variable RC_ON_PUSH is `true`. A manual run
-#    with lane=rc always publishes one.
+#  * Release lane: a push to main publishes a new patch of every package to
+#    `latest`, but only when a file that ships in a package's npm tarball
+#    changed, and only while the repo variable AUTO_RELEASE is `true`. A
+#    manual run with lane=release always publishes one, with the bump it
+#    names (patch, minor or major).
+#  * RC lane: a manual run with lane=rc publishes the next patch as a
+#    timestamp release candidate under the `rc` dist-tag, installable as
+#    `npx afterpack@rc`, without moving `latest`.
 #  * Promote lane: a manual run with lane=promote and an rc_version
-#    republishes that RC's tree as the clean version under `latest`. The
-#    manual dispatch IS the gate.
-#  * `repository_dispatch` type `core-published` reacts to a STABLE engine
+#    republishes that RC's tree as the clean version under `latest`.
+#  * `repository_dispatch` type `core-published` reacts to a stable engine
 #    release by bumping the `@afterpack/core` pin across every package, then
-#    cuts an RC through the RC lane.
+#    runs the release lane.
+#
+# Every publish waits for approval on the `npm` environment. The version is
+# stamped at publish time and never committed: the root package.json version
+# is a floor, and the next version is one bump above the higher of the last
+# vX.Y.Z tag and the npm `latest` of `afterpack`.
 on:
   push:
     branches: [main]
   workflow_dispatch:
     inputs:
       lane:
-        description: "rc publishes a release candidate; promote moves rc_version to latest"
+        description: "release publishes to latest; rc publishes a release candidate; promote moves rc_version to latest"
         required: true
         default: rc
         type: choice
-        options: [rc, promote]
+        options: [release, rc, promote]
+      bump:
+        description: "Release and rc lanes: the part of the version to raise"
+        required: false
+        default: patch
+        type: choice
+        options: [patch, minor, major]
       rc_version:
         description: "Promote lane only: the release candidate to promote, e.g. 0.1.0-rc.20260908T1530"
         required: false
@@ -33,11 +47,20 @@ on:
 
 run-name: >-
   ${{ github.event_name == 'repository_dispatch' && format('Bump engine to {0}', github.event.client_payload.version)
-  || (github.event_name == 'workflow_dispatch' && inputs.lane == 'promote') && format('Promote {0}', inputs.rc_version)
+  || github.event_name == 'push' && 'Release on a shipped change'
+  || inputs.lane == 'promote' && format('Promote {0}', inputs.rc_version)
+  || inputs.lane == 'release' && format('Release ({0})', inputs.bump)
   || 'Release candidate' }}
 
+# Releases to `latest` run one at a time. A push while AUTO_RELEASE is off
+# gets a group of its own, so it never displaces a queued release.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'repository_dispatch' && 'bump' || (github.event_name == 'workflow_dispatch' && inputs.lane == 'promote') && 'promote' || 'rc' }}
+  group: >-
+    ${{ github.workflow }}-${{ github.event_name == 'repository_dispatch' && 'bump'
+    || github.event_name == 'push' && (vars.AUTO_RELEASE == 'true' && 'latest' || github.run_id)
+    || inputs.lane == 'promote' && 'promote'
+    || inputs.lane == 'release' && 'latest'
+    || 'rc' }}
   cancel-in-progress: false
 
 permissions:
@@ -45,10 +68,159 @@ permissions:
   id-token: write
 
 jobs:
+  plan:
+    name: Decide what to release
+    if: >-
+      (github.event_name == 'push' && vars.AUTO_RELEASE == 'true')
+      || (github.event_name == 'workflow_dispatch' && (inputs.lane == 'release' || inputs.lane == 'rc'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      lane: ${{ steps.lane.outputs.lane }}
+      bump: ${{ steps.lane.outputs.bump }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+        if: github.event_name == 'push'
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: github.event_name == 'push'
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        if: github.event_name == 'push'
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        if: github.event_name == 'push'
+        run: pnpm build
+
+      # Packs every package from this commit and compares each tarball with
+      # the one npm serves as `latest`, ignoring the version. Only what a user
+      # would install counts: tests, fixtures and CI never reach a tarball.
+      - name: Compare every package with its npm latest
+        id: shipped
+        if: github.event_name == 'push'
+        run: node scripts/release-plan.mjs changed
+
+      - name: Choose the lane
+        id: lane
+        env:
+          EVENT: ${{ github.event_name }}
+          SHIPPED: ${{ steps.shipped.outputs.changed }}
+          PACKAGES: ${{ steps.shipped.outputs.packages }}
+          INPUT_LANE: ${{ inputs.lane }}
+          INPUT_BUMP: ${{ inputs.bump }}
+        run: |
+          if [ "$EVENT" = "push" ]; then
+            if [ "$SHIPPED" = "true" ]; then LANE="release"; else LANE="none"; fi
+            BUMP="patch"
+          else
+            LANE="$INPUT_LANE"
+            BUMP="${INPUT_BUMP:-patch}"
+          fi
+          echo "lane=$LANE" >> "$GITHUB_OUTPUT"
+          echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
+          {
+            if [ "$LANE" = "none" ]; then
+              echo "No shipped file changed since the npm \`latest\`; nothing to release."
+            elif [ "$EVENT" = "push" ]; then
+              echo "Shipped change in: \`$PACKAGES\`. Releasing a new patch of every package."
+            else
+              echo "Lane \`$LANE\`, bump \`$BUMP\`."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  checks:
+    name: Hygiene, lint, build, typecheck, test
+    needs: plan
+    if: needs.plan.outputs.lane == 'release' || needs.plan.outputs.lane == 'rc'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Repo hygiene
+        run: pnpm hygiene
+
+      - name: Comment ban
+        run: pnpm check:comments
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+  e2e:
+    name: End-to-end (Playwright, full suite)
+    needs: plan
+    if: needs.plan.outputs.lane == 'release' || needs.plan.outputs.lane == 'rc'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build every package
+        run: pnpm -r build
+
+      - name: Install the e2e fixtures
+        run: pnpm e2e:install
+
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run the end-to-end suite
+        run: pnpm e2e
+
+      - name: Upload the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playwright-report
+          path: |
+            .afterpack/e2e/playwright-report/**
+            .afterpack/e2e/test-results/**
+          if-no-files-found: ignore
+          retention-days: 7
+
   pro-path:
     name: Pro cloud path (staging)
-    if: (github.event_name == 'push' && vars.RC_ON_PUSH == 'true') || (github.event_name == 'workflow_dispatch' && inputs.lane == 'rc')
+    needs: plan
+    if: needs.plan.outputs.lane == 'release' || needs.plan.outputs.lane == 'rc'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     # The key lives in an environment, so it reaches this job and nothing else.
     # A pull request from a fork is never given secrets at all, which is why
     # this check is here and not in the contributor lane.
@@ -115,11 +287,13 @@ jobs:
           fi
 
   publish:
-    name: Test and publish a release candidate
-    if: (github.event_name == 'push' && vars.RC_ON_PUSH == 'true') || (github.event_name == 'workflow_dispatch' && inputs.lane == 'rc')
+    name: Publish ${{ needs.plan.outputs.lane == 'rc' && 'a release candidate' || 'a release' }}
+    needs: [plan, checks, e2e, pro-path]
     runs-on: ubuntu-latest
-    needs: pro-path
     environment: npm
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      dist_tag: ${{ steps.version.outputs.dist_tag }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -137,54 +311,68 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Repo hygiene
-        run: pnpm hygiene
+      # Computed after the approval, so a release that waited reads the tags
+      # and the npm `latest` as they are now.
+      - name: Compute the version
+        id: version
+        env:
+          LANE: ${{ needs.plan.outputs.lane }}
+          BUMP: ${{ needs.plan.outputs.bump }}
+        run: |
+          set -euo pipefail
+          if [ "$LANE" = "rc" ]; then
+            VERSION=$(node scripts/release-plan.mjs version --bump "$BUMP" --rc)
+            DIST_TAG=rc
+            GIT_TAG="rc-$VERSION"
+          else
+            VERSION=$(node scripts/release-plan.mjs version --bump "$BUMP")
+            DIST_TAG=latest
+            GIT_TAG="v$VERSION"
+          fi
+          {
+            echo "VERSION=$VERSION"
+            echo "DIST_TAG=$DIST_TAG"
+            echo "GIT_TAG=$GIT_TAG"
+          } >> "$GITHUB_ENV"
+          {
+            echo "version=$VERSION"
+            echo "dist_tag=$DIST_TAG"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Lint
-        run: pnpm lint
+      - name: Set the version across every package
+        run: pnpm version:set --version "$VERSION"
 
       - name: Build
         run: pnpm build
 
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Test
-        run: pnpm test
-
-      - name: Compute the release-candidate version
-        run: |
-          BASE=$(node -p "require('./package.json').version")
-          BASE=${BASE%%-*}
-          echo "RC_VERSION=${BASE}-rc.$(date -u +%Y%m%dT%H%M)" >> "$GITHUB_ENV"
-
-      - name: Set the version across every package
-        run: pnpm version:set --version "$RC_VERSION"
-
       # `pnpm -r publish` skips every package marked private, so the workspace
       # root is never published.
-      - name: Publish to the rc dist-tag
-        run: pnpm -r publish --tag rc --provenance --access public --no-git-checks
+      - name: Publish to the ${{ steps.version.outputs.dist_tag }} dist-tag
+        run: pnpm -r publish --tag "$DIST_TAG" --provenance --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ vars.NPM_TRUSTED_PUBLISHING != 'true' && secrets.NPM_TOKEN || '' }}
 
       # The tag names the SOURCE commit, not the version bump, which is never
-      # committed. The promote lane checks this tag out and re-derives a
+      # committed. The promote lane checks an rc- tag out and re-derives a
       # clean version from it.
-      - name: Tag the release candidate
+      - name: Tag the source commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag "rc-$RC_VERSION"
-          git push origin "rc-$RC_VERSION"
+          git tag "$GIT_TAG"
+          git push origin "$GIT_TAG"
 
       - name: Summary
         run: |
           {
-            echo "Published \`$RC_VERSION\` to the \`rc\` dist-tag."
+            echo "Published \`$VERSION\` to the \`$DIST_TAG\` dist-tag and tagged \`$GIT_TAG\`."
             echo ""
-            echo "Try it: \`npx afterpack@rc --version\`"
-            echo "Promote it: run the Release workflow with \`lane: promote\` and \`rc_version: $RC_VERSION\`."
+            if [ "$DIST_TAG" = "rc" ]; then
+              echo "Try it: \`npx afterpack@rc --version\`"
+              echo "Promote it: run the Release workflow with \`lane: promote\` and \`rc_version: $VERSION\`."
+            else
+              echo "Try it: \`npx afterpack@latest --version\`"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
   promote:
@@ -256,7 +444,11 @@ jobs:
 
   release:
     name: Create the GitHub Release
-    needs: promote
+    needs: [promote, publish]
+    if: >-
+      !cancelled()
+      && (needs.promote.result == 'success'
+      || (needs.publish.result == 'success' && needs.publish.outputs.dist_tag == 'latest'))
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -265,7 +457,7 @@ jobs:
       - name: Create the release if it does not exist yet
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.promote.outputs.version }}
+          VERSION: ${{ needs.promote.outputs.version || needs.publish.outputs.version }}
           REPO: ${{ github.repository }}
         run: |
           if gh release view "v$VERSION" --repo "$REPO" >/dev/null 2>&1; then
@@ -276,8 +468,14 @@ jobs:
 
   verify:
     name: Verify the published release
-    needs: promote
+    needs: [promote, publish]
+    if: >-
+      !cancelled()
+      && (needs.promote.result == 'success'
+      || (needs.publish.result == 'success' && needs.publish.outputs.dist_tag == 'latest'))
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       # A clean runner with nothing from this repository checked out: the only
       # thing under test is what a user gets from npm.
@@ -289,7 +487,7 @@ jobs:
       # afterpack pins its sibling packages exactly, so retry for up to 10 minutes.
       - name: Install from npm and run it
         env:
-          WANT: ${{ needs.promote.outputs.version }}
+          WANT: ${{ needs.promote.outputs.version || needs.publish.outputs.version }}
         run: |
           for attempt in $(seq 1 20); do
             INSTALLED=$(npx --yes --prefer-online afterpack@latest --version 2>/dev/null || true)
@@ -358,9 +556,6 @@ jobs:
           NODE
           echo "ENGINE_VERSION=$NEXT" >> "$GITHUB_ENV"
 
-      # A push made with GITHUB_TOKEN never triggers another workflow, so the
-      # RC lane is dispatched explicitly; workflow_dispatch is the documented
-      # exception. It follows the same RC_ON_PUSH switch as a push to main.
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
@@ -375,12 +570,17 @@ jobs:
           git push origin main
           echo "BUMPED=1" >> "$GITHUB_ENV"
 
-      - name: Cut the RC against the new engine
-        if: env.BUMPED == '1' && vars.RC_ON_PUSH == 'true'
+      # The new pin ships in every package.json, so it is a shipped change.
+      # A push made with GITHUB_TOKEN never triggers another workflow, so the
+      # release lane is dispatched explicitly; workflow_dispatch is the
+      # documented exception. It follows the same AUTO_RELEASE switch as a
+      # push to main.
+      - name: Release against the new engine
+        if: env.BUMPED == '1' && vars.AUTO_RELEASE == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run release.yml --ref main -f lane=rc
+        run: gh workflow run release.yml --ref main -f lane=release -f bump=patch
 
-      - name: Say how to cut the RC by hand
-        if: env.BUMPED == '1' && vars.RC_ON_PUSH != 'true'
-        run: echo "::notice::RC_ON_PUSH is off, so no RC was cut. Run the Release workflow with lane=rc."
+      - name: Say how to release by hand
+        if: env.BUMPED == '1' && vars.AUTO_RELEASE != 'true'
+        run: echo "::notice::AUTO_RELEASE is off, so nothing was released. Run the Release workflow with lane=release."
