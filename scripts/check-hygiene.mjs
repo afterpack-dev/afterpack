@@ -144,12 +144,27 @@ function scanLine(relFile, dir, lineNo, line, skipAbsolute) {
   }
 }
 
+const LOCK_IMPORTER = /^ {2}(\S[^:]*):\s*$/;
+
 function scanFile(relFile, text) {
-  const dir = path.dirname(path.join(ROOT, relFile));
+  const fileDir = path.dirname(path.join(ROOT, relFile));
+  const isLockfile = path.basename(relFile) === "pnpm-lock.yaml";
   const skipAbsolute = isTestZone(relFile);
   const lines = text.split("\n");
+  let section = "";
+  let dir = fileDir;
   for (let i = 0; i < lines.length; i++) {
-    scanLine(relFile, dir, i + 1, lines[i], skipAbsolute);
+    const line = lines[i];
+    if (isLockfile) {
+      if (/^\S/.test(line)) {
+        section = line.trim();
+        dir = fileDir;
+      } else if (section === "importers:") {
+        const importer = LOCK_IMPORTER.exec(line);
+        if (importer) dir = path.resolve(fileDir, importer[1]);
+      }
+    }
+    scanLine(relFile, dir, i + 1, line, skipAbsolute);
   }
 }
 
