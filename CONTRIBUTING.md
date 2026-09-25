@@ -54,10 +54,14 @@ full suite runs on push to `main`.
 
 ## Release channels
 
-- **`rc`** — every push to `main` publishes every package as `X.Y.Z-rc.<utc>` under the `rc`
-  dist-tag, with provenance. Try it with `npx afterpack@rc`.
-- **`latest`** — a maintainer promotes one RC by hand (the `Promote` workflow, with that RC's
-  version). The same tree is republished as the clean `X.Y.Z` and tagged `vX.Y.Z`.
+- **`rc`** — the `Release` workflow publishes every package as `X.Y.Z-rc.<utc>` under the `rc`
+  dist-tag, with provenance: on every push to `main` while the repository variable `RC_ON_PUSH` is
+  `true`, or when run by hand with `lane: rc`. Try it with `npx afterpack@rc`.
+- **`latest`** — a maintainer promotes one RC by hand (the `Release` workflow with `lane: promote`
+  and that RC's version). The same tree is republished as the clean `X.Y.Z` and tagged `vX.Y.Z`.
+- **engine** — `@afterpack/core`, its platform packages and `@afterpack/wasm` are built outside this
+  repository and published to npm by the `Publish engine` workflow, without provenance, because
+  their source is not here.
 
 Every package in this repository carries **one version**. `pnpm version:set --version X.Y.Z` writes
 it everywhere; never bump a single package on its own.

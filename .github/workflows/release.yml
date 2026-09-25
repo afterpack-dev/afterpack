@@ -1,0 +1,378 @@
+name: Release
+
+# The one workflow that publishes the CLI and the plugins to npm, so each
+# package needs a single trusted publisher.
+#
+#  * RC lane: a push to main publishes every package as a timestamp release
+#    candidate under the `rc` dist-tag, installable as `npx afterpack@rc`,
+#    but only while the repo variable RC_ON_PUSH is `true`. A manual run
+#    with lane=rc always publishes one.
+#  * Promote lane: a manual run with lane=promote and an rc_version
+#    republishes that RC's tree as the clean version under `latest`. The
+#    manual dispatch IS the gate.
+#  * `repository_dispatch` type `core-published` reacts to a STABLE engine
+#    release by bumping the `@afterpack/core` pin across every package, then
+#    cuts an RC through the RC lane.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      lane:
+        description: "rc publishes a release candidate; promote moves rc_version to latest"
+        required: true
+        default: rc
+        type: choice
+        options: [rc, promote]
+      rc_version:
+        description: "Promote lane only: the release candidate to promote, e.g. 0.1.0-rc.20260908T1530"
+        required: false
+        type: string
+  repository_dispatch:
+    types: [core-published]
+
+run-name: >-
+  ${{ github.event_name == 'repository_dispatch' && format('Bump engine to {0}', github.event.client_payload.version)
+  || (github.event_name == 'workflow_dispatch' && inputs.lane == 'promote') && format('Promote {0}', inputs.rc_version)
+  || 'Release candidate' }}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'repository_dispatch' && 'bump' || (github.event_name == 'workflow_dispatch' && inputs.lane == 'promote') && 'promote' || 'rc' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  pro-path:
+    name: Pro cloud path (staging)
+    if: (github.event_name == 'push' && vars.RC_ON_PUSH == 'true') || (github.event_name == 'workflow_dispatch' && inputs.lane == 'rc')
+    runs-on: ubuntu-latest
+    # The key lives in an environment, so it reaches this job and nothing else.
+    # A pull request from a fork is never given secrets at all, which is why
+    # this check is here and not in the contributor lane.
+    environment: staging-pro
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      # A throwaway project rather than an e2e fixture: this is the paid path,
+      # and it should not break because a fixture's layout moved.
+      - name: A build with a key runs on the Pro engine
+        env:
+          AFTERPACK_KEY: ${{ secrets.AFTERPACK_KEY }}
+          AFTERPACK_API_URL: ${{ vars.AFTERPACK_API_URL }}
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/pro" && mkdir -p "$RUNNER_TEMP/pro/dist"
+          echo '{"name":"pro-path-check","private":true}' > "$RUNNER_TEMP/pro/package.json"
+          echo 'export const k="paid";export function f(a){return a*2}' > "$RUNNER_TEMP/pro/dist/app.js"
+          node packages/cli/dist/cli.js "$RUNNER_TEMP/pro/dist" \
+            --protectionMap.enabled=false --telemetry.enabled=false
+          ENGINE=$(node -p "require('$RUNNER_TEMP/pro/dist/.afterpack-protection.json').engine")
+          echo "receipt records engine: $ENGINE"
+          if [ "$ENGINE" != "cloud" ]; then
+            echo "a build with a Pro key did not run on the cloud engine (receipt says '$ENGINE')" >&2
+            exit 1
+          fi
+
+      # The guarantee that matters: a key that the API refuses must FAIL the
+      # build, never quietly produce free-tier output.
+      - name: A build with a rejected key fails closed
+        env:
+          AFTERPACK_KEY: ap_v1_0000000000000000000000000000000000000000
+          AFTERPACK_API_URL: ${{ vars.AFTERPACK_API_URL }}
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/closed" && mkdir -p "$RUNNER_TEMP/closed/dist"
+          echo '{"name":"fail-closed-check","private":true}' > "$RUNNER_TEMP/closed/package.json"
+          SOURCE='export const k="paid";export function f(a){return a*2}'
+          printf '%s' "$SOURCE" > "$RUNNER_TEMP/closed/dist/app.js"
+          if node packages/cli/dist/cli.js "$RUNNER_TEMP/closed/dist" \
+            --protectionMap.enabled=false --telemetry.enabled=false; then
+            echo "a rejected key produced a successful build" >&2
+            exit 1
+          fi
+          if [ "$(cat "$RUNNER_TEMP/closed/dist/app.js")" != "$SOURCE" ]; then
+            echo "a rejected key rewrote the input" >&2
+            exit 1
+          fi
+          if [ -f "$RUNNER_TEMP/closed/dist/.afterpack-protection.json" ]; then
+            echo "a rejected key still wrote a protection receipt" >&2
+            exit 1
+          fi
+
+  publish:
+    name: Test and publish a release candidate
+    if: (github.event_name == 'push' && vars.RC_ON_PUSH == 'true') || (github.event_name == 'workflow_dispatch' && inputs.lane == 'rc')
+    runs-on: ubuntu-latest
+    needs: pro-path
+    environment: npm
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          registry-url: ${{ vars.NPM_TRUSTED_PUBLISHING != 'true' && 'https://registry.npmjs.org' || '' }}
+
+      # Trusted publishing needs npm 11.5.1 or newer; pnpm publish runs this npm.
+      - name: Update npm
+        run: npm install -g npm@^11.5.1
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Repo hygiene
+        run: pnpm hygiene
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Compute the release-candidate version
+        run: |
+          BASE=$(node -p "require('./package.json').version")
+          BASE=${BASE%%-*}
+          echo "RC_VERSION=${BASE}-rc.$(date -u +%Y%m%dT%H%M)" >> "$GITHUB_ENV"
+
+      - name: Set the version across every package
+        run: pnpm version:set --version "$RC_VERSION"
+
+      # `pnpm -r publish` skips every package marked private, so the workspace
+      # root is never published.
+      - name: Publish to the rc dist-tag
+        run: pnpm -r publish --tag rc --provenance --access public --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ vars.NPM_TRUSTED_PUBLISHING != 'true' && secrets.NPM_TOKEN || '' }}
+
+      # The tag names the SOURCE commit, not the version bump, which is never
+      # committed. The promote lane checks this tag out and re-derives a
+      # clean version from it.
+      - name: Tag the release candidate
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "rc-$RC_VERSION"
+          git push origin "rc-$RC_VERSION"
+
+      - name: Summary
+        run: |
+          {
+            echo "Published \`$RC_VERSION\` to the \`rc\` dist-tag."
+            echo ""
+            echo "Try it: \`npx afterpack@rc --version\`"
+            echo "Promote it: run the Release workflow with \`lane: promote\` and \`rc_version: $RC_VERSION\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  promote:
+    name: Promote a release candidate to latest
+    if: github.event_name == 'workflow_dispatch' && inputs.lane == 'promote'
+    runs-on: ubuntu-latest
+    environment: npm
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Require an rc_version
+        env:
+          RC: ${{ inputs.rc_version }}
+        run: |
+          if [ -z "$RC" ]; then
+            echo "::error::the promote lane needs rc_version"
+            exit 1
+          fi
+
+      # Promote-by-republish: the tree that publishes to `latest` is byte for
+      # byte the tree that was published as the RC, not a fresh build of main.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: rc-${{ inputs.rc_version }}
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          registry-url: ${{ vars.NPM_TRUSTED_PUBLISHING != 'true' && 'https://registry.npmjs.org' || '' }}
+
+      # Trusted publishing needs npm 11.5.1 or newer; pnpm publish runs this npm.
+      - name: Update npm
+        run: npm install -g npm@^11.5.1
+
+      - name: Derive the stable version
+        id: version
+        run: |
+          RC="${{ inputs.rc_version }}"
+          VERSION="${RC%%-rc.*}"
+          if [ -z "$RC" ] || [ "$VERSION" = "$RC" ]; then
+            echo "::error::'$RC' is not a release-candidate version"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Set the version across every package
+        run: pnpm version:set --version "$VERSION"
+
+      - name: Build
+        run: pnpm build
+
+      - name: Publish to the latest dist-tag
+        run: pnpm -r publish --tag latest --provenance --access public --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ vars.NPM_TRUSTED_PUBLISHING != 'true' && secrets.NPM_TOKEN || '' }}
+
+      - name: Tag the release
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "v$VERSION"
+          git push origin "v$VERSION"
+
+  release:
+    name: Create the GitHub Release
+    needs: promote
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    continue-on-error: true
+    steps:
+      - name: Create the release if it does not exist yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.promote.outputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          if gh release view "v$VERSION" --repo "$REPO" >/dev/null 2>&1; then
+            echo "v$VERSION already has a release"
+            exit 0
+          fi
+          gh release create "v$VERSION" --repo "$REPO" --title "v$VERSION" --generate-notes
+
+  verify:
+    name: Verify the published release
+    needs: promote
+    runs-on: ubuntu-latest
+    steps:
+      # A clean runner with nothing from this repository checked out: the only
+      # thing under test is what a user gets from npm.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Install from npm and run it
+        run: |
+          INSTALLED=$(npx --yes afterpack@latest --version)
+          echo "afterpack@latest reports $INSTALLED"
+          if [ "$INSTALLED" != "${{ needs.promote.outputs.version }}" ]; then
+            echo "::error::expected ${{ needs.promote.outputs.version }}, got $INSTALLED"
+            exit 1
+          fi
+
+  bump-engine:
+    name: Bump the engine pin
+    if: github.event_name == 'repository_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: main
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      # A breaking engine bump is a deliberate migration, never an automatic
+      # commit: it fails here so a human does it. Under major 0 a minor
+      # change is breaking, exactly like a major.
+      - name: Repin @afterpack/core across every package
+        run: |
+          NEXT="${{ github.event.client_payload.version }}"
+          NEXT="${NEXT#v}"
+          node - "$NEXT" <<'NODE'
+          const fs = require("node:fs");
+          const next = process.argv[2];
+          if (!/^\d+\.\d+\.\d+$/.test(next)) {
+            console.error(`::error::'${next}' is not a stable version`);
+            process.exit(1);
+          }
+          const breakingLine = (v) => {
+            const [major, minor] = v.split(".");
+            return major === "0" ? `0.${minor}` : major;
+          };
+          const nextLine = breakingLine(next);
+          let changed = 0;
+          for (const dir of fs.readdirSync("packages")) {
+            const file = `packages/${dir}/package.json`;
+            const pkg = JSON.parse(fs.readFileSync(file, "utf8"));
+            const current = pkg.dependencies?.["@afterpack/core"];
+            if (!current) continue;
+            const currentLine = breakingLine(current.replace(/^[~^]/, ""));
+            if (currentLine !== nextLine) {
+              console.error(`::error::${file} pins ${current}; ${next} is a breaking change`);
+              process.exit(1);
+            }
+            pkg.dependencies["@afterpack/core"] = `~${next}`;
+            fs.writeFileSync(file, `${JSON.stringify(pkg, null, 2)}\n`);
+            changed++;
+          }
+          console.log(`repinned ${changed} package(s) to ~${next}`);
+          NODE
+          echo "ENGINE_VERSION=$NEXT" >> "$GITHUB_ENV"
+
+      # A push made with GITHUB_TOKEN never triggers another workflow, so the
+      # RC lane is dispatched explicitly; workflow_dispatch is the documented
+      # exception. It follows the same RC_ON_PUSH switch as a push to main.
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "::notice::already pinned to $ENGINE_VERSION"
+            exit 0
+          fi
+          pnpm install --lockfile-only
+          git add packages/*/package.json pnpm-lock.yaml
+          git commit -m "chore(deps): bump @afterpack/core to $ENGINE_VERSION"
+          git push origin main
+          echo "BUMPED=1" >> "$GITHUB_ENV"
+
+      - name: Cut the RC against the new engine
+        if: env.BUMPED == '1' && vars.RC_ON_PUSH == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run release.yml --ref main -f lane=rc
+
+      - name: Say how to cut the RC by hand
+        if: env.BUMPED == '1' && vars.RC_ON_PUSH != 'true'
+        run: echo "::notice::RC_ON_PUSH is off, so no RC was cut. Run the Release workflow with lane=rc."

@@ -1,0 +1,165 @@
+name: Publish engine
+
+# Publishes a stable engine release (@afterpack/core, its platform packages
+# and @afterpack/wasm) to npmjs with trusted publishing. The engine's source
+# is not in this repository, so these packages carry no provenance. The
+# release arrives as a repository_dispatch naming each tarball's integrity;
+# a manual run retries a version and checks it against the integrity the
+# source registry reports instead.
+on:
+  repository_dispatch:
+    types: [engine-release]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "The stable engine version to publish, e.g. 0.1.1"
+        required: true
+        type: string
+
+run-name: "Publish engine ${{ github.event.client_payload.version || inputs.version }}"
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+
+env:
+  ENGINE_PACKAGES: >-
+    @afterpack/core-darwin-arm64
+    @afterpack/core-darwin-x64
+    @afterpack/core-linux-x64-gnu
+    @afterpack/core-linux-arm64-gnu
+    @afterpack/core-linux-x64-musl
+    @afterpack/core-linux-arm64-musl
+    @afterpack/core-win32-x64-msvc
+    @afterpack/wasm
+    @afterpack/core
+  EXPECTED_REPOSITORY: git+https://github.com/afterpack-dev/afterpack.git
+
+jobs:
+  publish:
+    name: Publish the engine packages
+    runs-on: ubuntu-latest
+    environment: npm
+    steps:
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+
+      - name: Update npm
+        run: npm install -g npm@latest
+
+      - name: Resolve the version
+        env:
+          EVENT: ${{ github.event_name }}
+          PAYLOAD_VERSION: ${{ github.event.client_payload.version }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "repository_dispatch" ]; then
+            VERSION="$PAYLOAD_VERSION"
+          else
+            VERSION="$INPUT_VERSION"
+          fi
+          VERSION="${VERSION#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::'$VERSION' is not a stable version"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          npm --version
+          node --version
+
+      - name: Download and verify the tarballs
+        env:
+          EVENT: ${{ github.event_name }}
+          PAYLOAD: ${{ toJSON(github.event.client_payload) }}
+          ENGINE_REGISTRY: ${{ secrets.ENGINE_REGISTRY }}
+          ENGINE_REGISTRY_TOKEN: ${{ secrets.ENGINE_REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ENGINE_REGISTRY:-}" ] || [ -z "${ENGINE_REGISTRY_TOKEN:-}" ]; then
+            echo "::error::ENGINE_REGISTRY and ENGINE_REGISTRY_TOKEN must be set in the npm environment"
+            exit 1
+          fi
+          host="${ENGINE_REGISTRY#https://}"
+          host="${host%/}"
+          echo "::add-mask::$host"
+          source_registry="https://${host}/"
+          npmrc="$RUNNER_TEMP/engine-source.npmrc"
+          echo "//${host}/:_authToken=${ENGINE_REGISTRY_TOKEN}" > "$npmrc"
+          trap 'rm -f "$npmrc"' EXIT
+          out="$RUNNER_TEMP/engine"
+          rm -rf "$out" && mkdir -p "$out"
+          if [ "$EVENT" = "repository_dispatch" ]; then
+            echo "Verifying against the integrity in the release dispatch."
+          else
+            echo "::notice::Manual retry: verifying against the integrity the source registry reports, not a release dispatch."
+          fi
+          : > "$out/files.txt"
+          for name in $ENGINE_PACKAGES; do
+            if [ "$EVENT" = "repository_dispatch" ]; then
+              want=$(printf '%s' "$PAYLOAD" | jq -r --arg n "$name" '[.packages[]? | select(.name == $n) | .integrity] | first // empty')
+            else
+              want=$(NPM_CONFIG_USERCONFIG="$npmrc" npm view "${name}@${VERSION}" dist.integrity --registry "$source_registry")
+            fi
+            if [ -z "$want" ]; then
+              echo "::error::no integrity for ${name}@${VERSION}"
+              exit 1
+            fi
+            file=$(NPM_CONFIG_USERCONFIG="$npmrc" npm pack "${name}@${VERSION}" --registry "$source_registry" --pack-destination "$out" --json | jq -r '.[0].filename')
+            have="sha512-$(openssl dgst -sha512 -binary "$out/$file" | base64 -w0)"
+            if [ "$have" != "$want" ]; then
+              echo "::error::${name}@${VERSION} integrity mismatch: got $have, expected $want"
+              exit 1
+            fi
+            manifest=$(tar -xOzf "$out/$file" package/package.json)
+            got_name=$(printf '%s' "$manifest" | jq -r '.name')
+            got_version=$(printf '%s' "$manifest" | jq -r '.version')
+            got_repo=$(printf '%s' "$manifest" | jq -r '.repository.url // empty')
+            if [ "$got_name" != "$name" ] || [ "$got_version" != "$VERSION" ]; then
+              echo "::error::$file is ${got_name}@${got_version}, expected ${name}@${VERSION}"
+              exit 1
+            fi
+            if [ "$got_repo" != "$EXPECTED_REPOSITORY" ]; then
+              echo "::error::${name}@${VERSION} repository.url is '$got_repo', expected '$EXPECTED_REPOSITORY'"
+              exit 1
+            fi
+            echo "verified ${name}@${VERSION} $have"
+            echo "$name $file $have" >> "$out/files.txt"
+          done
+
+      - name: Publish to npmjs
+        env:
+          NPM_CONFIG_PROVENANCE: "false"
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/engine"
+          while read -r name file want; do
+            if npm view "${name}@${VERSION}" version --registry https://registry.npmjs.org >/dev/null 2>&1; then
+              live=$(npm view "${name}@${VERSION}" dist.integrity --registry https://registry.npmjs.org)
+              if [ "$live" != "$want" ]; then
+                echo "::warning::${name}@${VERSION} is already on npmjs with different bytes ($live)"
+              fi
+              echo "skip: ${name}@${VERSION} already on npmjs"
+              continue
+            fi
+            npm publish "./$file" --access public --tag rc --provenance=false
+          done < files.txt
+          {
+            echo "Published engine \`$VERSION\` to the \`rc\` dist-tag, without provenance."
+            echo ""
+            echo "Move \`latest\` by hand once it has been tried."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Bump the engine pin
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/dispatches" \
+            -f event_type=core-published \
+            -f "client_payload[version]=v${VERSION}"
