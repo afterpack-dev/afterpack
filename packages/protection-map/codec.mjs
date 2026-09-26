@@ -41,7 +41,15 @@ const SPOTLIGHT_COLUMNS = [
   "proHint",
   "reversalClass",
 ];
-const LINEAGE_COLUMNS = ["transform", "category", "phase", "entropyGain", "sizeDeltaEst", "label"];
+const LINEAGE_COLUMNS = [
+  "transform",
+  "category",
+  "phase",
+  "entropyGain",
+  "credit",
+  "sizeDeltaEst",
+  "label",
+];
 
 function regionScalar(r, col) {
   switch (col) {
@@ -163,6 +171,7 @@ export function encodeCompact(data, { includeLineage = true } = {}) {
           intern("category", st.category),
           intern("phase", st.phase),
           st.entropyGain,
+          st.credit == null ? 0 : st.credit,
           st.sizeDeltaEst,
           st.label == null ? null : st.label,
         ]);
@@ -207,6 +216,7 @@ export function encodeCompact(data, { includeLineage = true } = {}) {
     ...(data && data.spanUnits !== undefined ? { spanUnits: data.spanUnits } : {}),
     generatedAt: data && data.generatedAt !== undefined ? data.generatedAt : null,
     engine: data && data.engine !== undefined ? data.engine : null,
+    ...(data && data.totals !== undefined ? { totals: data.totals } : {}),
     legend,
     dict: prunedDict,
     columns: { region: REGION_COLUMNS, spotlight: SPOTLIGHT_COLUMNS, lineage: LINEAGE_COLUMNS },
@@ -285,6 +295,7 @@ function afterpackDecodeDocument(c) {
     ...(c.spanUnits !== undefined ? { spanUnits: c.spanUnits } : {}),
     generatedAt: c.generatedAt !== undefined ? c.generatedAt : null,
     engine: c.engine !== undefined ? c.engine : null,
+    ...(c.totals !== undefined ? { totals: c.totals } : {}),
     files,
   };
 }

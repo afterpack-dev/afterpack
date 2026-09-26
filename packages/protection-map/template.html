@@ -365,6 +365,24 @@ body.is-resizing .pane-resizer::before { transition: none; }
   transition: color 0.3s ease, border-color 0.3s ease;
 }
 .tag-size:hover, .tag-size:focus-visible { color: var(--brand); border-color: var(--brand); }
+.tag-split {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  padding: 2px 7px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: help;
+}
+.tag-split .ts-em { color: var(--text-primary); }
+.tag-split:hover, .tag-split:focus-visible { color: var(--brand); border-color: var(--brand); }
+.chain-credit { color: var(--brand); font-weight: 700; font-family: var(--font-mono); font-size: 10px; white-space: nowrap; }
 .topbar .spacer { flex: 1 1 auto; min-width: 8px; }
 
 .brand-logo {
@@ -1158,6 +1176,7 @@ details[open] > .details-summary::before { transform: rotate(90deg); }
     </div>
     <h1>Protection Map</h1>
     <span class="tag-size" id="map-size" tabindex="0" role="note" data-tip="Measuring…">— </span>
+    <span class="tag-split" id="build-split" tabindex="0" role="note" hidden></span>
     <div class="spacer"></div>
     <button type="button" class="top-btn" id="legend-toggle" aria-expanded="false" aria-controls="build-popover"><span class="top-btn-glyph" aria-hidden="true">ⓘ</span> Legend &amp; build</button>
     <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle color theme">🌙 Dark</button>
@@ -1402,6 +1421,7 @@ function afterpackDecodeDocument(c) {
     ...(c.spanUnits !== undefined ? { spanUnits: c.spanUnits } : {}),
     generatedAt: c.generatedAt !== undefined ? c.generatedAt : null,
     engine: c.engine !== undefined ? c.engine : null,
+    ...(c.totals !== undefined ? { totals: c.totals } : {}),
     files,
   };
 }
@@ -3095,6 +3115,39 @@ async function afterpackInflateBase64Gzip(b64) {
       ". The viewer itself is not counted. This artifact is a DEV-ONLY build output — it carries your original source, so keep it out of anything you publish.");
   }
 
+  function buildSplitTotals() {
+    if (DATA && DATA.totals && DATA.totals.userCode && DATA.totals.machinery) return DATA.totals;
+    var user = { regions: 0, transforms: 0, protectedRegions: 0 };
+    var mach = { regions: 0, transforms: 0 };
+    (DATA && DATA.files ? DATA.files : []).forEach(function (f) {
+      var isMachFile = f.file && f.file.sourceOrigin === "machinery";
+      (f.regions || []).forEach(function (r) {
+        var steps = r.transformCount || (r.lineage ? r.lineage.length : 0) || 0;
+        var machinery = isMachFile || r.nodeKind === "Program";
+        if (machinery) { mach.regions++; mach.transforms += steps; }
+        else { user.regions++; user.transforms += steps; if ((r.score || 0) > 0) user.protectedRegions++; }
+      });
+    });
+    if (user.regions === 0 && mach.regions === 0) return null;
+    return { userCode: user, machinery: mach };
+  }
+
+  function renderBuildSplit() {
+    var el = document.getElementById("build-split");
+    if (!el) return;
+    var t = buildSplitTotals();
+    if (!t) { el.hidden = true; return; }
+    el.hidden = false;
+    el.innerHTML = "your code <span class=\"ts-em\">" + fmtNum(t.userCode.transforms) +
+      "</span> · engine machinery <span class=\"ts-em\">" + fmtNum(t.machinery.transforms) + "</span>";
+    el.setAttribute("data-tip",
+      "Transform passes the engine spent on your authored code (" + fmtNum(t.userCode.transforms) +
+      " across " + fmtNum(t.userCode.regions) + " region" + (t.userCode.regions === 1 ? "" : "s") + ", " +
+      fmtNum(t.userCode.protectedRegions) + " carrying real protection) versus on the whole-file " +
+      "scaffolding it wraps every build in (" + fmtNum(t.machinery.transforms) + "). Advisory: the machinery " +
+      "is shared bootstrap, string pool and helpers, not protection of your code.");
+  }
+
   function renderClassDist(file) {
     var raw = (file.doc.aggregate && file.doc.aggregate.classSummary) || {};
     var adjustedPreserved = Math.max(0, (raw.preserved || 0) - (file.machinery ? 1 : 0));
@@ -3263,10 +3316,16 @@ async function afterpackInflateBase64Gzip(b64) {
         last.entropyGain += step.entropyGain || 0;
         last.sizeDeltaEst += step.sizeDeltaEst || 0;
       } else {
-        groups.push({ transform: step.transform, category: step.category, phase: step.phase, count: 1, entropyGain: step.entropyGain || 0, sizeDeltaEst: step.sizeDeltaEst || 0 });
+        groups.push({ transform: step.transform, category: step.category, phase: step.phase, count: 1, entropyGain: step.entropyGain || 0, sizeDeltaEst: step.sizeDeltaEst || 0, credit: step.credit });
       }
     });
     return groups;
+  }
+
+  function creditLabel(permille) {
+    if (permille == null || isNaN(permille)) return null;
+    var pct = permille / 10;
+    return (pct >= 10 ? Math.round(pct) : Math.round(pct * 10) / 10) + "% survives";
   }
 
   var CHAIN_VISIBLE_CAP = 5;
@@ -3275,12 +3334,14 @@ async function afterpackInflateBase64Gzip(b64) {
     var caption = [cat, g.phase].filter(Boolean).join(" · ");
     var delta = [];
     if (g.sizeDeltaEst) delta.push((g.sizeDeltaEst >= 0 ? "+" : "") + g.sizeDeltaEst + "B");
+    var credit = creditLabel(g.credit);
     return '<div class="chain-step">' +
       '<div class="chain-rail"><span class="chain-dot"></span><span class="chain-line"></span></div>' +
       '<div class="chain-body">' +
         '<div class="chain-head">' +
           '<span class="chain-transform">' + escapeHtml(g.transform || "?") + "</span>" +
           (g.count > 1 ? '<span class="chain-count">×' + g.count + "</span>" : "") +
+          (credit ? '<span class="chain-credit">' + escapeHtml(credit) + "</span>" : "") +
           (delta.length ? '<span class="chain-delta">' + escapeHtml(delta.join(" ")) + "</span>" : "") +
         "</div>" +
         (caption ? '<div class="chain-caption">' + escapeHtml(caption) + "</div>" : "") +
@@ -4249,6 +4310,7 @@ async function afterpackInflateBase64Gzip(b64) {
     renderDirectiveLegend();
     renderWorkspaceSummary();
     renderMapSize();
+    renderBuildSplit();
     var markedBtn = document.getElementById("filter-marked");
     if (markedBtn && !FILES.some(isMarkedFile)) markedBtn.remove();
     var weakBtn = document.getElementById("filter-weak");

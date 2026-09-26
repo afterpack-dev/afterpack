@@ -11,6 +11,10 @@ export interface ProtectionMap {
     complexity: number;
     [key: string]: unknown;
   };
+  totals?: {
+    userCode: { regions: number; transforms: number; protectedRegions: number };
+    machinery: { regions: number; transforms: number };
+  };
   files: ProtectionMapFile[];
 }
 

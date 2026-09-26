@@ -3,7 +3,8 @@ import { createRequire } from "node:module";
 import { gzipSync } from "node:zlib";
 import { encodeCompact } from "./codec.mjs";
 
-export const LINEAGE_EMBED_CAP = 20;
+export const LINEAGE_EMBED_CAP = 200;
+export const LINEAGE_TOTAL_BUDGET = 20000;
 export const PLACEHOLDER = "__AFTERPACK_DATA__";
 
 export function defaultTemplatePath() {
@@ -22,15 +23,19 @@ export function normalizeToFiles(raw) {
 export function capLineage(data) {
   let cappedRegions = 0;
   let totalLineageStepsRemoved = 0;
+  let remaining = LINEAGE_TOTAL_BUDGET;
   for (const fileDoc of data.files || []) {
     for (const region of fileDoc?.regions || []) {
-      if (Array.isArray(region.lineage) && region.lineage.length > LINEAGE_EMBED_CAP) {
-        const originalLength = region.lineage.length;
-        region.lineage = region.lineage.slice(0, LINEAGE_EMBED_CAP);
+      if (!Array.isArray(region.lineage)) continue;
+      const originalLength = region.lineage.length;
+      const allow = Math.min(LINEAGE_EMBED_CAP, Math.max(0, remaining));
+      if (originalLength > allow) {
+        region.lineage = region.lineage.slice(0, allow);
         region.lineageCapped = originalLength;
         cappedRegions += 1;
-        totalLineageStepsRemoved += originalLength - LINEAGE_EMBED_CAP;
+        totalLineageStepsRemoved += originalLength - allow;
       }
+      remaining -= region.lineage.length;
     }
   }
   return { cappedRegions, totalLineageStepsRemoved };
