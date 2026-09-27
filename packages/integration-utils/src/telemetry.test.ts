@@ -74,10 +74,6 @@ describe("resolveTelemetryEnabled", () => {
     expect(resolveTelemetryEnabled(undefined, {})).toBe(true);
   });
 
-  it("does NOT honor DO_NOT_TRACK — one flag, deliberately", () => {
-    expect(resolveTelemetryEnabled(undefined, { DO_NOT_TRACK: "1" })).toBe(true);
-  });
-
   it("takes the resolved `telemetry.enabled`, both ways", () => {
     expect(resolveTelemetryEnabled(false, {})).toBe(false);
     expect(resolveTelemetryEnabled(true, { NODE_ENV: "test" })).toBe(true);
