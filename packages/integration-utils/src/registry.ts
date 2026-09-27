@@ -97,7 +97,7 @@ export const CONFIG_KEYS = [
     tier: "free",
     surface: "engine",
     item: { kind: "number", min: 0 },
-    default: "the preset's value; light is 2",
+    default: "the preset's value; light is 5",
     namedValuesOf: "preset",
   },
   {
@@ -107,7 +107,7 @@ export const CONFIG_KEYS = [
     tier: "free",
     surface: "engine",
     item: { kind: "unbounded", min: 0, unlimited: UNLIMITED },
-    default: "the preset's output-size ladder: 1.2 / 2 / 2.5 / 4 / 7",
+    default: "unset",
   },
   {
     path: "strings.encode",
