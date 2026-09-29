@@ -216,6 +216,8 @@ function richDoc() {
         ],
         extractedSpans: [12, 17, 0, 51, 58, 1],
         complexitySpans: [6, 7, 11, 0, 27, 5],
+        declarationKinds: ["LowerVarToLet"],
+        declarationSpans: [3, 7, 0],
       },
       vendorFileWithNoRegionsOrSpotlights(),
     ],
@@ -240,6 +242,8 @@ function vendorFileWithNoRegionsOrSpotlights() {
     renamedSpans: [],
     extractedSpans: [],
     complexitySpans: [],
+    declarationKinds: [],
+    declarationSpans: [],
   };
 }
 
@@ -335,6 +339,29 @@ test("the per-token complexity lane rides through the compact form, and a map wi
   for (const f of older.files) delete f.complexitySpans;
   const back = decodeCompact(older);
   for (const f of back.files) assert.deepEqual(f.complexitySpans, []);
+});
+
+test("the declaration lane rides through the compact form, and a map without it decodes to an empty lane", () => {
+  const rich = richDoc();
+  rich.files[0].declarationKinds = ["LowerVarToLet", "DeclarationChaining"];
+  rich.files[0].declarationSpans = [6, 7, 0, 6, 7, 1];
+  const compact = encodeCompact(rich);
+  assert.deepEqual(compact.files[0].declarationKinds, ["LowerVarToLet", "DeclarationChaining"]);
+  assert.deepEqual(compact.files[0].declarationSpans, [6, 7, 0, 6, 7, 1]);
+  assert.ok(!("declarationSpans" in compact.files[1]), "an empty lane costs no bytes");
+  assert.ok(!("declarationKinds" in compact.files[1]));
+  const back = decodeCompact(compact);
+  assert.deepEqual(back.files[0].declarationKinds, rich.files[0].declarationKinds);
+  assert.deepEqual(back.files[0].declarationSpans, rich.files[0].declarationSpans);
+  const older = structuredClone(compact);
+  for (const f of older.files) {
+    delete f.declarationKinds;
+    delete f.declarationSpans;
+  }
+  for (const f of decodeCompact(older).files) {
+    assert.deepEqual(f.declarationKinds, []);
+    assert.deepEqual(f.declarationSpans, []);
+  }
 });
 
 test("encodeCompact omits spanUnits rather than nulling it when the input predates the key", () => {

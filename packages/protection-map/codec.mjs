@@ -204,6 +204,9 @@ export function encodeCompact(data, { includeLineage = true } = {}) {
       ...(fdoc.renamedSpans?.length ? { renamedSpans: fdoc.renamedSpans } : {}),
       ...(fdoc.extractedSpans?.length ? { extractedSpans: fdoc.extractedSpans } : {}),
       ...(fdoc.complexitySpans?.length ? { complexitySpans: fdoc.complexitySpans } : {}),
+      ...(fdoc.declarationSpans?.length
+        ? { declarationKinds: fdoc.declarationKinds, declarationSpans: fdoc.declarationSpans }
+        : {}),
     };
   });
 
@@ -289,6 +292,8 @@ function afterpackDecodeDocument(c) {
       renamedSpans: fc.renamedSpans || [],
       extractedSpans: fc.extractedSpans || [],
       complexitySpans: fc.complexitySpans || [],
+      declarationKinds: fc.declarationKinds || [],
+      declarationSpans: fc.declarationSpans || [],
     };
   });
 

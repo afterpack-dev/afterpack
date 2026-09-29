@@ -1176,3 +1176,120 @@ test("R. a weak spot the map cannot place offers no jump, and says so", async ()
   assert.ok(!/data-jump-spotlight="1"/.test(html), "no button that does nothing");
   assert.match(html, /can't point to where this sits in your source/);
 });
+
+const DECL_SRC = "var total = 1;\nconst k = total;\nlog(k);\n";
+
+function docWithDeclarationLane({ lane = true } = {}) {
+  const at = (text, from = 0) => {
+    const i = DECL_SRC.indexOf(text, from);
+    return [i, i + text.length];
+  };
+  const total = at("total");
+  const k = at("k");
+  return {
+    schemaVersion: 5,
+    spanUnits: "utf16",
+    engine: { version: "9.9.9", seed: 7, preset: "light", complexity: 5 },
+    files: [
+      {
+        file: {
+          path: "src/decl.ts",
+          sourceOrigin: "original",
+          vendor: false,
+          originalSource: DECL_SRC,
+          inputSize: DECL_SRC.length,
+          outputSize: 90,
+          outputSizeEstimated: false,
+          inflationRatio: 2,
+        },
+        regions: [region({ span: at("1"), score: 78 })],
+        spotlights: [],
+        renamedSpans: [total],
+        extractedSpans: [],
+        ...(lane
+          ? {
+              declarationKinds: ["LowerVarToLet", "LowerBindingToParameter", "DeclarationChaining"],
+              declarationSpans: [...total, 0, ...total, 2, ...k, 1],
+            }
+          : {}),
+        aggregate: { weakRegions: 0, leakCount: 0, renamedCount: 1, extractedCount: 0 },
+      },
+    ],
+  };
+}
+
+test("S. a declaration reshape adds one quiet line to the card and changes nothing else", async () => {
+  const withLane = await loadViewer(docWithDeclarationLane());
+  const without = await loadViewer(docWithDeclarationLane({ lane: false }));
+  const a = withLane.FILES[0];
+  const b = without.FILES[0];
+  assert.equal(JSON.stringify(a.coverage), JSON.stringify(b.coverage));
+  for (let pos = 0; pos < DECL_SRC.length; pos++) {
+    const ra = a.mergedRuns.find((r) => r.start <= pos && r.end > pos);
+    const rb = b.mergedRuns.find((r) => r.start <= pos && r.end > pos);
+    const pa = withLane.runPaint(ra, ra.regionIdx == null ? null : a.regions[ra.regionIdx]);
+    const pb = without.runPaint(rb, rb.regionIdx == null ? null : b.regions[rb.regionIdx]);
+    assert.deepEqual(
+      [pa.cls, pa.bucket, ra.regionIdx, ra.renamedIdx],
+      [pb.cls, pb.bucket, rb.regionIdx, rb.renamedIdx],
+      `char ${pos}`,
+    );
+  }
+
+  withLane.paintCode(a);
+  const painted = withLane.byId("code-body").innerHTML;
+  const tok = painted.match(/<span class="tok[^"]*tok-hot[^"]*"[^>]*data-renamed-idx="0"[^>]*>/)[0];
+  const data = (name) => (tok.match(new RegExp(`data-${name}="([^"]*)"`)) || [])[1];
+  withLane.handleTokActivate({
+    classList: { contains: (c) => c === "tok-hot" },
+    dataset: {
+      regionIdx: data("region-idx"),
+      spotlightIdx: data("spotlight-idx"),
+      renamedIdx: data("renamed-idx"),
+      declIdx: data("decl-idx"),
+    },
+  });
+  const insp = withLane.byId("inspector").innerHTML;
+  assert.match(insp, />Renamed</, "the card it already showed stays");
+  assert.match(
+    insp,
+    /<p class="insp-note insp-also">Also rewritten: Lower<wbr>Var<wbr>To<wbr>Let, Declaration<wbr>Chaining<\/p>/,
+  );
+  assert.equal(withLane.inspectorSummary(a, withLane.state.selection), "renamed");
+
+  const kAt = DECL_SRC.indexOf("k");
+  withLane.selectUnlit(kAt, "i", kAt + 1);
+  assert.match(withLane.byId("inspector").innerHTML, /Nothing recorded/);
+  assert.match(
+    withLane.byId("inspector").innerHTML,
+    /Also rewritten: Lower<wbr>Binding<wbr>To<wbr>Parameter</,
+  );
+
+  withLane.selectUnlit(DECL_SRC.indexOf("log"), "i", DECL_SRC.indexOf("log") + 3);
+  assert.ok(
+    !withLane.byId("inspector").innerHTML.includes("Also rewritten"),
+    "only a reshaped name gets the line",
+  );
+});
+
+test("S2. a map from an engine without the declaration lane renders exactly as before", async () => {
+  const v = await loadViewer(docWithDeclarationLane({ lane: false }));
+  const f = v.FILES[0];
+  assert.equal(f.declRanges.length, 0);
+  assert.ok(f.mergedRuns.every((r) => r.declIdx == null));
+  v.paintCode(f);
+  assert.ok(!v.byId("code-body").innerHTML.includes("data-decl-idx"));
+  const run = f.mergedRuns.find((r) => r.renamedIdx === 0);
+  v.state.selection = {
+    regionIdx: null,
+    spotlightIdx: null,
+    renamedIdx: 0,
+    extractedIdx: null,
+    cx: run.cx,
+    unlit: null,
+  };
+  v.renderInspector();
+  assert.ok(!v.byId("inspector").innerHTML.includes("Also rewritten"));
+  v.selectUnlit(DECL_SRC.indexOf("k"), "i", DECL_SRC.indexOf("k") + 1);
+  assert.ok(!v.byId("inspector").innerHTML.includes("Also rewritten"));
+});

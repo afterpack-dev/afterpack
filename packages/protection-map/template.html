@@ -1311,6 +1311,8 @@ function afterpackDecodeDocument(c) {
       renamedSpans: fc.renamedSpans || [],
       extractedSpans: fc.extractedSpans || [],
       complexitySpans: fc.complexitySpans || [],
+      declarationKinds: fc.declarationKinds || [],
+      declarationSpans: fc.declarationSpans || [],
     };
   });
 
@@ -2133,6 +2135,22 @@ async function afterpackInflateBase64Gzip(b64) {
       }
     }
     cxRanges.sort(function (a, b) { return a.startChar - b.startChar || b.endChar - a.endChar || b.c - a.c; });
+
+    var declKinds = Array.isArray(fdoc.declarationKinds) ? fdoc.declarationKinds : [];
+    var declFlat = Array.isArray(fdoc.declarationSpans) ? fdoc.declarationSpans : [];
+    var declRanges = [], declByKey = {};
+    for (var dk = 0; dk + 2 < declFlat.length; dk += 3) {
+      var dsc = byteToChar(declFlat[dk]);
+      var dec = Math.max(byteToChar(declFlat[dk + 1]), dsc);
+      var dname = declKinds[declFlat[dk + 2]];
+      if (dec <= dsc || typeof dname !== "string") continue;
+      var dr = declByKey[dsc + ":" + dec];
+      if (!dr) {
+        dr = declByKey[dsc + ":" + dec] = { startChar: dsc, endChar: dec, names: [] };
+        declRanges.push(dr);
+      }
+      if (dr.names.indexOf(dname) < 0) dr.names.push(dname);
+    }
     var cxSum = 0;
     cxRanges.forEach(function (r) { cxSum += r.c; });
 
@@ -2156,6 +2174,7 @@ async function afterpackInflateBase64Gzip(b64) {
     extractedRanges.forEach(function (r) { addB(r.startChar); addB(r.endChar); });
     directives.forEach(function (d) { addB(d.startChar); addB(d.endChar); });
     cxRanges.forEach(function (r) { addB(r.startChar); addB(r.endChar); });
+    declRanges.forEach(function (r) { addB(r.startChar); addB(r.endChar); });
     var boundaries = Object.keys(boundarySet).map(Number).sort(function (a, b) { return a - b; });
 
     function winnerFor(start, end) {
@@ -2192,6 +2211,7 @@ async function afterpackInflateBase64Gzip(b64) {
     }
     var renamedAt = coverSweep(renamedRanges);
     var extractedAt = coverSweep(extractedRanges);
+    var declarationAt = coverSweep(declRanges);
     function directiveForRange(start, end) {
       var best = -1, bestW = Infinity;
       for (var i = 0; i < directives.length; i++) {
@@ -2234,6 +2254,7 @@ async function afterpackInflateBase64Gzip(b64) {
       var extIdx = winner ? -1 : extAt;
       var renIdx = winner || extIdx >= 0 ? -1 : renAt;
       var dirIdx = directiveForRange(segStart, segEnd);
+      var declIdx = declarationAt(segStart, segEnd);
       runs.push({
         start: segStart, end: segEnd,
         regionIdx: winner ? winner.idx : null,
@@ -2242,6 +2263,7 @@ async function afterpackInflateBase64Gzip(b64) {
         extractedIdx: extIdx >= 0 ? extIdx : null,
         named: extAt >= 0 ? "hidden" : renAt >= 0 ? "renamed" : null,
         directiveIdx: dirIdx >= 0 ? dirIdx : null,
+        declIdx: declIdx >= 0 ? declIdx : null,
         cx: cx,
         isSpotlightStart: !!(spot && spot.startChar === segStart)
       });
@@ -2249,7 +2271,7 @@ async function afterpackInflateBase64Gzip(b64) {
     var mergedRuns = [];
     runs.forEach(function (run) {
       var last = mergedRuns[mergedRuns.length - 1];
-      if (last && last.regionIdx === run.regionIdx && last.spotlightIdx === run.spotlightIdx && last.renamedIdx === run.renamedIdx && last.extractedIdx === run.extractedIdx && (!CX_LANE || last.named === run.named) && last.directiveIdx === run.directiveIdx && last.cx === run.cx && last.end === run.start) {
+      if (last && last.regionIdx === run.regionIdx && last.spotlightIdx === run.spotlightIdx && last.renamedIdx === run.renamedIdx && last.extractedIdx === run.extractedIdx && (!CX_LANE || last.named === run.named) && last.directiveIdx === run.directiveIdx && last.declIdx === run.declIdx && last.cx === run.cx && last.end === run.start) {
         last.end = run.end;
       } else {
         mergedRuns.push(run);
@@ -2282,7 +2304,7 @@ async function afterpackInflateBase64Gzip(b64) {
       fileIdx: fileIdx, doc: fdoc, source: source, sourceLen: sourceLen,
       regions: regions, realRegions: realRegions, machinery: machinery,
       spotlights: spotlights, mergedRuns: mergedRuns,
-      renamedRanges: renamedRanges, extractedRanges: extractedRanges, directives: directives,
+      renamedRanges: renamedRanges, extractedRanges: extractedRanges, directives: directives, declRanges: declRanges,
       renamedCount: (fdoc.aggregate && fdoc.aggregate.renamedCount != null) ? fdoc.aggregate.renamedCount : renamedRanges.length,
       extractedCount: (fdoc.aggregate && fdoc.aggregate.extractedCount != null) ? fdoc.aggregate.extractedCount : extractedRanges.length,
       leakCount: leakCount, weakSpotCount: weakSpotCount,
@@ -2689,6 +2711,7 @@ async function afterpackInflateBase64Gzip(b64) {
         (run.renamedIdx == null ? "" : ' data-renamed-idx="' + run.renamedIdx + '"') +
         (run.extractedIdx == null ? "" : ' data-extracted-idx="' + run.extractedIdx + '"') +
         (run.cx == null ? "" : ' data-cx="' + run.cx + '"') +
+        (run.declIdx == null ? "" : ' data-decl-idx="' + run.declIdx + '"') +
         (attributed ? "" : ' data-unlit="' + run.start + '" data-ue="' + run.end + '" data-ut="?"') +
         (directive ? ' data-directive="' + directive.kind + '"' : "") +
         (paint.band ? ' data-band="' + paint.band + '"' : "") +
@@ -3514,7 +3537,20 @@ async function afterpackInflateBase64Gzip(b64) {
       : sel.renamedIdx != null ? cardRenamed(file, sel.renamedIdx, sel)
       : typeof sel.cx === "number" ? cardComplexityOnly(file, sel)
       : "";
-    el.innerHTML = '<div class="insp">' + html + "</div>";
+    el.innerHTML = '<div class="insp">' + html + declarationNote(file, sel) + "</div>";
+  }
+
+  function declarationNote(file, sel) {
+    var idx = sel.declIdx;
+    if (idx == null && sel.unlit) {
+      var end = sel.unlit.end != null ? sel.unlit.end : sel.unlit.pos + 1;
+      file.declRanges.forEach(function (r, i) {
+        if (idx == null && r.startChar <= sel.unlit.pos && r.endChar >= end) idx = i;
+      });
+    }
+    var decl = idx != null ? file.declRanges[idx] : null;
+    if (!decl) return "";
+    return '<p class="insp-note insp-also">Also rewritten: ' + decl.names.map(breakCamel).join(", ") + "</p>";
   }
 
   function highlightSelectionRing() {
@@ -3546,13 +3582,14 @@ async function afterpackInflateBase64Gzip(b64) {
     if (syntaxToggleText) syntaxToggleText.textContent = g ? "Syntax · " + g.label : "Syntax";
   }
 
-  function selectFromRun(regionIdx, spotlightIdx, renamedIdx, extractedIdx, cx) {
+  function selectFromRun(regionIdx, spotlightIdx, renamedIdx, extractedIdx, cx, declIdx) {
     state.selection = {
       regionIdx: regionIdx == null || isNaN(regionIdx) ? null : regionIdx,
       spotlightIdx: spotlightIdx == null || isNaN(spotlightIdx) ? null : spotlightIdx,
       renamedIdx: renamedIdx == null || isNaN(renamedIdx) ? null : renamedIdx,
       extractedIdx: extractedIdx == null || isNaN(extractedIdx) ? null : extractedIdx,
       cx: typeof cx === "number" && !isNaN(cx) ? cx : null,
+      declIdx: declIdx == null || isNaN(declIdx) ? null : declIdx,
       unlit: null
     };
     revealInspectorSection();
@@ -3583,7 +3620,8 @@ async function afterpackInflateBase64Gzip(b64) {
     var rn = tokEl.dataset.renamedIdx == null || tokEl.dataset.renamedIdx === "" ? null : Number(tokEl.dataset.renamedIdx);
     var ex = tokEl.dataset.extractedIdx == null || tokEl.dataset.extractedIdx === "" ? null : Number(tokEl.dataset.extractedIdx);
     var cx = tokEl.dataset.cx == null || tokEl.dataset.cx === "" ? null : Number(tokEl.dataset.cx);
-    selectFromRun(r, s, rn, ex, cx);
+    var dl = tokEl.dataset.declIdx == null || tokEl.dataset.declIdx === "" ? null : Number(tokEl.dataset.declIdx);
+    selectFromRun(r, s, rn, ex, cx, dl);
   }
   function jumpToSpotlight(idx) {
     var file = activeFile();
@@ -3593,7 +3631,7 @@ async function afterpackInflateBase64Gzip(b64) {
       target.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
       target.focus({ preventScroll: true });
     }
-    selectFromRun(run ? run.regionIdx : null, idx, null, null, run ? run.cx : null);
+    selectFromRun(run ? run.regionIdx : null, idx, null, null, run ? run.cx : null, run ? run.declIdx : null);
   }
 
   function copyText(text, btn) {

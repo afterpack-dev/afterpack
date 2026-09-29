@@ -175,6 +175,7 @@ export async function loadViewer(doc, { hash = "", storage = makeStorage() } = {
     "INSP_COPY",
     "tokenAt",
     "selectUnlit",
+    "handleTokActivate",
     "renderInspector",
     "inspectorSummary",
     "renderWeakSpots",
