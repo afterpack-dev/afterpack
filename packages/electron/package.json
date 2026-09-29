@@ -1,6 +1,6 @@
 {
   "name": "@afterpack/electron",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Electron integration for AfterPack: obfuscate the main, preload and renderer bundles of an app with one seed",
   "type": "module",
   "main": "./dist/index.cjs",

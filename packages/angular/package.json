@@ -1,6 +1,6 @@
 {
   "name": "@afterpack/angular",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Angular 17+ integration for AfterPack: obfuscate the browser bundle after ng build",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -33,7 +33,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@afterpack/core": "~0.1.0",
+    "@afterpack/core": "~0.2.0",
     "@afterpack/integration-utils": "workspace:*"
   },
   "devDependencies": {

@@ -1,6 +1,6 @@
 {
   "name": "@afterpack/esbuild",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "esbuild plugin for AfterPack: obfuscate your JavaScript output when the esbuild build finishes",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -36,7 +36,7 @@
     "esbuild": ">=0.17.0"
   },
   "dependencies": {
-    "@afterpack/core": "~0.1.0",
+    "@afterpack/core": "~0.2.0",
     "@afterpack/integration-utils": "workspace:*"
   },
   "devDependencies": {

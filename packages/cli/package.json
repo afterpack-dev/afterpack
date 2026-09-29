@@ -1,6 +1,6 @@
 {
   "name": "afterpack",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "AfterPack CLI: obfuscate the JavaScript in any build output, verify a build before deploy, and scan a live site",
   "type": "module",
   "bin": {
@@ -22,7 +22,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@afterpack/core": "~0.1.0",
+    "@afterpack/core": "~0.2.0",
     "@afterpack/integration-utils": "workspace:*"
   },
   "devDependencies": {

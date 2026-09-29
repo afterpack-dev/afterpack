@@ -1,6 +1,6 @@
 {
   "name": "@afterpack/sveltekit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "SvelteKit plugin for AfterPack: obfuscate a SvelteKit app's JavaScript during the Vite build",
   "type": "module",
   "main": "./dist/index.cjs",

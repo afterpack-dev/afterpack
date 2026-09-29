@@ -1,6 +1,6 @@
 {
   "name": "@afterpack/protection-map",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "AfterPack Protection Map viewer: render protection data into a self-contained HTML report",
   "type": "module",
   "main": "./index.mjs",

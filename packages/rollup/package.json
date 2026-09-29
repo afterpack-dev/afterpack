@@ -1,6 +1,6 @@
 {
   "name": "@afterpack/rollup",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Rollup plugin for AfterPack: obfuscate your JavaScript output during the Rollup build",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -36,7 +36,7 @@
     "rollup": "^3.0.0 || ^4.0.0"
   },
   "dependencies": {
-    "@afterpack/core": "~0.1.0",
+    "@afterpack/core": "~0.2.0",
     "@afterpack/integration-utils": "workspace:*"
   },
   "devDependencies": {

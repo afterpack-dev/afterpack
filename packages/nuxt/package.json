@@ -1,6 +1,6 @@
 {
   "name": "@afterpack/nuxt",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Nuxt 3 module for AfterPack: obfuscate a Nuxt app's production JavaScript during the build",
   "type": "module",
   "main": "./dist/index.cjs",

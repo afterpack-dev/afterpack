@@ -1,6 +1,6 @@
 {
   "name": "@afterpack/next",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Next.js integration for AfterPack: obfuscate the client JavaScript of a Next.js build inside next build",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -36,7 +36,7 @@
     "next": ">=15.4.0"
   },
   "dependencies": {
-    "@afterpack/core": "~0.1.0",
+    "@afterpack/core": "~0.2.0",
     "@afterpack/integration-utils": "workspace:*"
   },
   "devDependencies": {

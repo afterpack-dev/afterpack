@@ -1,6 +1,6 @@
 {
   "name": "@afterpack/vue",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Vue 3 plugin for AfterPack: obfuscate a Vue app's production JavaScript during the Vite build",
   "type": "module",
   "main": "./dist/index.cjs",

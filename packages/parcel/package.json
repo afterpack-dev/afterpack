@@ -1,6 +1,6 @@
 {
   "name": "@afterpack/parcel-optimizer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Parcel 2 optimizer for AfterPack: obfuscate each JavaScript bundle in memory during parcel build",
   "type": "module",
   "main": "./dist/index.js",
@@ -29,7 +29,7 @@
     "@parcel/core": ">=2.9.0"
   },
   "dependencies": {
-    "@afterpack/core": "~0.1.0",
+    "@afterpack/core": "~0.2.0",
     "@afterpack/integration-utils": "workspace:*",
     "@parcel/diagnostic": "^2.9.0",
     "@parcel/plugin": "^2.9.0",
