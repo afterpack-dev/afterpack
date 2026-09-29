@@ -29,7 +29,7 @@ const ESC = String.fromCharCode(0x1b);
 const IDENTITY: ClientIdentity = {
   packageName: "@afterpack/vite",
   packageVersion: "0.1.4",
-  coreVersion: "0.1.2-rc.9",
+  coreVersion: "0.2.2-rc.9",
 };
 
 beforeEach(() => {
@@ -89,7 +89,7 @@ describe("the build context carries the client identity", () => {
     expect(batchCalls[0].buildContext).toEqual({
       commitSha: "abcdef1",
       ref: "main",
-      clientVersion: "0.1.2-rc.9",
+      clientVersion: "0.2.2-rc.9",
       client: "@afterpack/vite/0.1.4",
     });
   });
@@ -320,7 +320,7 @@ describe("cloud refusals thrown by processBatch", () => {
       cloudRefusal("AFTERPACK_CLOUD_UPGRADE_REQUIRED", {
         apiCode: "DIAG_CLIENT_UPGRADE_REQUIRED",
         message: "this core is too old",
-        details: { minVersion: "0.2.0" },
+        details: { minVersion: "0.3.0" },
         notices: [
           {
             severity: "warning",
@@ -339,13 +339,13 @@ describe("cloud refusals thrown by processBatch", () => {
     const cloud = error as CloudApiError;
     expect(cloud.kind).toBe("upgradeRequired");
     expect(cloud.code).toBe("AFTERPACK_CLOUD_UPGRADE_REQUIRED");
-    expect(cloud.minVersion).toBe("0.2.0");
-    expect(cloud.installed).toBe("0.1.2-rc.9");
+    expect(cloud.minVersion).toBe("0.3.0");
+    expect(cloud.installed).toBe("0.2.2-rc.9");
     expect(cloud.message).toContain("[afterpack-test]");
     expect(cloud.message).toContain(
-      "Installed @afterpack/core 0.1.2-rc.9 · required 0.2.0 or newer",
+      "Installed @afterpack/core 0.2.2-rc.9 · required 0.3.0 or newer",
     );
-    expect(cloud.fix).toBe("npm install @afterpack/vite@latest @afterpack/core@0.2.0");
+    expect(cloud.fix).toBe("npm install @afterpack/vite@latest @afterpack/core@0.3.0");
     expect(cloud.message.split("\n")).toContain(cloud.fix);
     expect(cloud.message).not.toContain("npx");
     expect(cloud.message).toContain("this core is too old");
@@ -359,19 +359,19 @@ describe("cloud refusals thrown by processBatch", () => {
     __setBatchError(
       cloudRefusal("AFTERPACK_CLOUD_UPGRADE_REQUIRED", {
         apiCode: "DIAG_CLIENT_UPGRADE_REQUIRED",
-        message: "clients below 0.2.0 are no longer served",
-        details: { minVersion: "0.2.0" },
+        message: "clients below 0.3.0 are no longer served",
+        details: { minVersion: "0.3.0" },
       }),
     );
     const identity: ClientIdentity = {
       packageName: "@afterpack/next",
       packageVersion: "0.1.4",
-      coreVersion: "0.1.0",
+      coreVersion: "0.2.0",
     };
     const error = (await runObfuscationPass(
       options({ client: identity, logger: capture().logger }),
     ).catch((e: unknown) => e)) as CloudApiError;
-    expect(error.fix).toBe("npm install @afterpack/next@latest @afterpack/core@0.2.0");
+    expect(error.fix).toBe("npm install @afterpack/next@latest @afterpack/core@0.3.0");
     expect(error.message.split("\n")).toContain(error.fix);
     expect(error.message.split(error.fix)).toHaveLength(2);
     expect(error.message).not.toContain("npx");
