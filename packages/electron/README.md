@@ -117,10 +117,12 @@ Options can also live in `afterpack.json` or in `AFTERPACK_*` environment variab
 
 ## Pro
 
-Without a key, AfterPack runs on your machine and applies basic protection. Set
+Without a key, AfterPack runs on your machine with the full pipeline at any preset. Set
 [`AFTERPACK_KEY`](https://www.afterpack.dev/docs/config#key) in your environment and the same plugin
-sends the build to AfterPack's cloud, which applies much stronger protection. Keep the key out of
-your Vite config. See [AfterPack Pro](https://www.afterpack.dev/docs/pro).
+builds in AfterPack's cloud instead, which adds per-region
+[directives](https://www.afterpack.dev/docs/directives) and two hardening transforms you can turn
+on: self-integrity (anti-tamper) and comparison hardening. Keep the key out of your Vite config. See
+[AfterPack Pro](https://www.afterpack.dev/docs/pro).
 
 ## Links
 

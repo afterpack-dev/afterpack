@@ -28,8 +28,9 @@ Both `outdir` and `outfile` work. Builds with `write: false`, and builds that al
 skipped. If obfuscation fails, the build fails.
 
 esbuild has no hook to change output before it is written, so the plugin obfuscates the files right
-after esbuild writes them. For a few milliseconds the readable files are on disk, and a failed run
-leaves them there. If that matters to you, use a bundler with an in-memory plugin, such as
+after esbuild writes them. Until the pass finishes (about a quarter of a second for 185 KB at the
+default preset, longer at higher presets) the readable files are on disk, and a failed run leaves
+them there. If that matters to you, use a bundler with an in-memory plugin, such as
 [`@afterpack/vite`](https://www.npmjs.com/package/@afterpack/vite) or
 [`@afterpack/rollup`](https://www.npmjs.com/package/@afterpack/rollup).
 
@@ -64,8 +65,10 @@ other option is in the [configuration reference](https://www.afterpack.dev/docs/
 [protectionMap.enabled]: https://www.afterpack.dev/docs/config#protectionMap-enabled
 [build.autorun]: https://www.afterpack.dev/docs/config#build-autorun
 
-`/* @afterpack */` directives need esbuild's `sourcemap: true`, since they are read back from the
-source map. Without it, the plugin skips them and tells you.
+`/* @afterpack */` [directives](https://www.afterpack.dev/docs/directives) that raise protection for
+a region are a [Pro](https://www.afterpack.dev/docs/pro) feature. They need esbuild's
+`sourcemap: true`, since they are read back from the source map. Without it, the plugin skips them
+and tells you.
 
 The [Protection Map](https://www.afterpack.dev/docs/protection-map) is written to `.afterpack/`,
 which carries its own `.gitignore` and self-ignores. The Protection Map and any backups contain
@@ -77,11 +80,12 @@ build and names the right spelling.
 
 ## Pro
 
-Without a key, AfterPack runs on your machine and applies basic protection. Set
+Without a key, AfterPack runs on your machine with the full pipeline at any preset. Set
 [`AFTERPACK_KEY`](https://www.afterpack.dev/docs/config#key) in your environment and the same plugin
-sends the build to AfterPack's cloud, which applies much stronger protection. Keep the key out of
-your build script: the plugin rejects it there. See [AfterPack
-Pro](https://www.afterpack.dev/docs/pro).
+builds in AfterPack's cloud instead, which adds per-region
+[directives](https://www.afterpack.dev/docs/directives) and two hardening transforms you can turn
+on: self-integrity (anti-tamper) and comparison hardening. Keep the key out of your build script:
+the plugin rejects it there. See [AfterPack Pro](https://www.afterpack.dev/docs/pro).
 
 ## Links
 

@@ -1,8 +1,8 @@
 # @afterpack/protection-map
 
 The viewer for the [AfterPack](https://www.afterpack.dev) Protection Map: a single HTML file that
-shows your original source, shaded by how strongly each part was protected, with the weak spots a
-build left readable.
+shows your original source, shaded by how much transformation each part went through, with the weak
+spots a build left readable.
 
 You usually do not need to install this package. The AfterPack CLI and every AfterPack plugin
 already use it to write `.afterpack/protectionMap.html` when your build has source maps. Open that

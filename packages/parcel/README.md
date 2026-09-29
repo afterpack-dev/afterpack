@@ -71,9 +71,10 @@ source, so never deploy or commit it.
 
 - **Seeds.** Parcel builds bundles in several worker processes. Set [`seed`][seed] (or `AFTERPACK_SEED`) to
   use one seed across the whole build.
-- **Directives.** `/* @afterpack */` comments are read back from the bundle's source map, so enable
-  source maps on the target. Directives in your entry module usually cannot be recovered; move that
-  code into an imported module.
+- **Directives.** `/* @afterpack */` [directives](https://www.afterpack.dev/docs/directives) that
+  raise protection for a region are a [Pro](https://www.afterpack.dev/docs/pro) feature. They are
+  read back from the bundle's source map, so enable source maps on the target. Directives in your
+  entry module usually cannot be recovered; move that code into an imported module.
 - **Content hashes.** When Parcel targets browsers without native ES modules, it can put
   content-hash placeholders in string literals, and obfuscation would break the lazy-chunk URLs. The
   plugin detects this and fails the build. Build with `parcel build --no-content-hash`, or use
@@ -87,10 +88,12 @@ source, so never deploy or commit it.
 
 ## Pro
 
-Without a key, AfterPack runs on your machine and applies basic protection. Set
+Without a key, AfterPack runs on your machine with the full pipeline at any preset. Set
 [`AFTERPACK_KEY`](https://www.afterpack.dev/docs/config#key) in your environment and the same
-optimizer sends the build to AfterPack's cloud, which applies much stronger protection. See
-[AfterPack Pro](https://www.afterpack.dev/docs/pro).
+optimizer builds in AfterPack's cloud instead, which adds per-region
+[directives](https://www.afterpack.dev/docs/directives) and two hardening transforms you can turn
+on: self-integrity (anti-tamper) and comparison hardening. See [AfterPack
+Pro](https://www.afterpack.dev/docs/pro).
 
 ## Links
 

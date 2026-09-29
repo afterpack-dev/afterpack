@@ -25,7 +25,8 @@ The plugin obfuscates each JavaScript asset your chunks produce at the last step
 writes to disk, so the readable bundle is never written. Hot-update chunks and assets other plugins
 copy in are left alone. If obfuscation fails, the build fails.
 
-Subresource integrity plugins keep working: they hash the obfuscated files.
+Subresource integrity plugins such as `webpack-subresource-integrity` are not supported: they hash
+each chunk before AfterPack rewrites it, so the recorded hashes would not match the files you ship.
 
 Each build writes a protection receipt, `.afterpack-protection.json`, into the output directory.
 Run `npx afterpack verify dist` in your deploy step to check that what you ship is what was
@@ -58,9 +59,9 @@ other option is in the [configuration reference](https://www.afterpack.dev/docs/
 [protectionMap.enabled]: https://www.afterpack.dev/docs/config#protectionMap-enabled
 [build.autorun]: https://www.afterpack.dev/docs/config#build-autorun
 
-`/* @afterpack */` [directives](https://www.afterpack.dev/docs/directives) in your source need a
-`devtool` that emits source maps, such as `"source-map"`. Without one, the plugin skips them and
-tells you.
+`/* @afterpack */` [directives](https://www.afterpack.dev/docs/directives) that raise protection for
+a region are a [Pro](https://www.afterpack.dev/docs/pro) feature. They need a `devtool` that emits
+source maps, such as `"source-map"`. Without one, the plugin skips them and tells you.
 
 The [Protection Map](https://www.afterpack.dev/docs/protection-map) is written to `.afterpack/`,
 outside webpack's output; that directory carries its own `.gitignore` and self-ignores. It contains
@@ -72,11 +73,12 @@ build and names the right spelling.
 
 ## Pro
 
-Without a key, AfterPack runs on your machine and applies basic protection. Set
+Without a key, AfterPack runs on your machine with the full pipeline at any preset. Set
 [`AFTERPACK_KEY`](https://www.afterpack.dev/docs/config#key) in your environment and the same plugin
-sends the build to AfterPack's cloud, which applies much stronger protection. Keep the key out of
-your webpack config: the plugin rejects it there. See [AfterPack
-Pro](https://www.afterpack.dev/docs/pro).
+builds in AfterPack's cloud instead, which adds per-region
+[directives](https://www.afterpack.dev/docs/directives) and two hardening transforms you can turn
+on: self-integrity (anti-tamper) and comparison hardening. Keep the key out of your webpack config:
+the plugin rejects it there. See [AfterPack Pro](https://www.afterpack.dev/docs/pro).
 
 ## Not supported here
 

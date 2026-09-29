@@ -17,8 +17,9 @@ Use `afterpack@latest` so `npx` does not pick up an old cached copy. `afterpack 
 common options and `afterpack --help --all` lists every one.
 
 If your project uses a framework with an AfterPack plugin (Vite, Next.js, webpack, Nuxt, Astro and
-others), the plugin is the better fit: it obfuscates inside the build, so the readable bundle never
-reaches disk. Run `afterpack` with no path and it tells you which plugin to install.
+others), the plugin is the better fit. Most plugins obfuscate inside the build, so the readable
+bundle never reaches disk; the Next.js, esbuild and Angular integrations run right after the tool
+writes its output. Run `afterpack` with no path and it tells you which plugin to install.
 
 ## `afterpack [path]`
 
@@ -122,11 +123,12 @@ and sends everything else to stderr. Use it in CI and scripts. `verify` and `aud
 
 ## Pro
 
-Without a key, AfterPack runs on your machine and applies basic protection. Set
+Without a key, AfterPack runs on your machine with the full pipeline at any preset. Set
 [`AFTERPACK_KEY`][key] in your environment (or [`key`][key] in `afterpack.json`) and the same
-command sends the build to AfterPack's cloud, which applies much stronger protection. If the cloud
-cannot be reached, the run fails; it never quietly ships weaker output. Never commit the key. See
-[AfterPack Pro](https://www.afterpack.dev/docs/pro).
+command builds in AfterPack's cloud instead, which adds two hardening transforms you can turn on:
+self-integrity (anti-tamper) and comparison hardening. If the cloud cannot be reached, the run
+fails; it never falls back to a local build. Never commit the key. See [AfterPack
+Pro](https://www.afterpack.dev/docs/pro).
 
 ## Exit codes
 

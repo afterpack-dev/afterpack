@@ -57,8 +57,9 @@ other option is in the [configuration reference](https://www.afterpack.dev/docs/
 [protectionMap.enabled]: https://www.afterpack.dev/docs/config#protectionMap-enabled
 [build.autorun]: https://www.afterpack.dev/docs/config#build-autorun
 
-`/* @afterpack */` directives in a multi-module bundle need `output.sourcemap: true`. Without it,
-the plugin skips them and tells you.
+`/* @afterpack */` [directives](https://www.afterpack.dev/docs/directives) that raise protection for
+a region are a [Pro](https://www.afterpack.dev/docs/pro) feature. In a multi-module bundle they need
+`output.sourcemap: true`. Without it, the plugin skips them and tells you.
 
 The [Protection Map](https://www.afterpack.dev/docs/protection-map) is written to `.afterpack/`,
 outside your output directory; that directory carries its own `.gitignore` and self-ignores. It
@@ -70,11 +71,12 @@ build and names the right spelling.
 
 ## Pro
 
-Without a key, AfterPack runs on your machine and applies basic protection. Set
+Without a key, AfterPack runs on your machine with the full pipeline at any preset. Set
 [`AFTERPACK_KEY`](https://www.afterpack.dev/docs/config#key) in your environment and the same plugin
-sends the build to AfterPack's cloud, which applies much stronger protection. Keep the key out of
-your Rollup config: the plugin rejects it there. See [AfterPack
-Pro](https://www.afterpack.dev/docs/pro).
+builds in AfterPack's cloud instead, which adds per-region
+[directives](https://www.afterpack.dev/docs/directives) and two hardening transforms you can turn
+on: self-integrity (anti-tamper) and comparison hardening. Keep the key out of your Rollup config:
+the plugin rejects it there. See [AfterPack Pro](https://www.afterpack.dev/docs/pro).
 
 ## Not supported here
 
@@ -88,7 +90,7 @@ Pro](https://www.afterpack.dev/docs/pro).
 - [Rollup setup guide](https://www.afterpack.dev/docs/frameworks/rollup)
 - [Presets and protection levels](https://www.afterpack.dev/docs/presets)
 - [How AfterPack compares to other obfuscators](https://www.afterpack.dev/docs/comparison)
-- [Keeping API keys shipped in a bundle out of plain sight](https://www.afterpack.dev/docs/use-cases/shipped-api-keys)
+- [JavaScript obfuscation best practices](https://www.afterpack.dev/docs/best-practices)
 
 ## License
 

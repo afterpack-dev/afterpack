@@ -66,11 +66,11 @@ other option is in the [configuration reference](https://www.afterpack.dev/docs/
 [protectionMap.enabled]: https://www.afterpack.dev/docs/config#protectionMap-enabled
 [build.autorun]: https://www.afterpack.dev/docs/config#build-autorun
 
-`/* @afterpack */` [directives](https://www.afterpack.dev/docs/directives) and a readable
-[Protection Map](https://www.afterpack.dev/docs/protection-map) both need
-`productionBrowserSourceMaps: true` in your Next config. The Protection Map is written to
-`.afterpack/`, which carries its own `.gitignore` and self-ignores. It contains your original
-source, so never deploy or commit it.
+`/* @afterpack */` [directives](https://www.afterpack.dev/docs/directives) that raise protection for
+a region are a [Pro](https://www.afterpack.dev/docs/pro) feature. They and a readable [Protection
+Map](https://www.afterpack.dev/docs/protection-map) both need `productionBrowserSourceMaps: true` in
+your Next config. The Protection Map is written to `.afterpack/`, which carries its own `.gitignore`
+and self-ignores. It contains your original source, so never deploy or commit it.
 
 Options can also live in `afterpack.json` or in `AFTERPACK_*` environment variables. The options
 object wins over the environment, which wins over the file. An unknown or misspelled key fails the
@@ -89,11 +89,12 @@ browser would block the obfuscated chunks. The build stops with an error that sa
 
 ## Pro
 
-Without a key, AfterPack runs on your machine and applies basic protection. Set
+Without a key, AfterPack runs on your machine with the full pipeline at any preset. Set
 [`AFTERPACK_KEY`](https://www.afterpack.dev/docs/config#key) in your environment and the same plugin
-sends the build to AfterPack's cloud, which applies much stronger protection. Keep the key out of
-`next.config.ts`: the plugin rejects it there. See [AfterPack
-Pro](https://www.afterpack.dev/docs/pro).
+builds in AfterPack's cloud instead, which adds per-region
+[directives](https://www.afterpack.dev/docs/directives) and two hardening transforms you can turn
+on: self-integrity (anti-tamper) and comparison hardening. Keep the key out of `next.config.ts`: the
+plugin rejects it there. See [AfterPack Pro](https://www.afterpack.dev/docs/pro).
 
 ## Links
 

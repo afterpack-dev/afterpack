@@ -23,14 +23,17 @@ and `hard` to `extreme`. Every option has one name everywhere: `--preset=hard` o
 a plugin's options. The [configuration reference](https://www.afterpack.dev/docs/config) lists
 every option.
 
-Without a key, AfterPack runs locally and applies basic protection. With a
-[Pro](https://www.afterpack.dev/docs/pro) key, the same packages send the build to AfterPack's
-cloud, which applies much stronger protection. To try it without installing anything, use the
+Without a key, AfterPack runs locally with the full pipeline at any preset.
+[`@afterpack/wasm`](https://www.npmjs.com/package/@afterpack/wasm) runs the same engine inside your
+own Cloudflare Worker, so a Worker can reshape JavaScript per request. With a
+[Pro](https://www.afterpack.dev/docs/pro) key, the same packages send the build to AfterPack's cloud
+for surgical per-region protection and anti-tamper. To try it without installing anything, use the
 [playground](https://www.afterpack.dev/playground).
 
 ## Framework plugins
 
-A plugin obfuscates inside the build, so the readable bundle never reaches disk. Use one where it
+Most plugins obfuscate inside the build, so the readable bundle never reaches disk. The Next.js,
+esbuild and Angular integrations run right after the tool writes its output. Use a plugin where one
 exists, and the CLI everywhere else.
 
 | Package | Works with | Entry point |

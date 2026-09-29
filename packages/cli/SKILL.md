@@ -11,8 +11,8 @@ the bundler. Never run it on source.
 ## Pick the right tool first
 
 If the project uses a framework or bundler with an AfterPack plugin, install the plugin instead of
-adding a CLI step. The plugin obfuscates inside the build, so the readable bundle never reaches
-disk:
+adding a CLI step. Most plugins obfuscate inside the build, so the readable bundle never reaches
+disk; the Next.js, esbuild and Angular ones run right after the tool writes its output:
 
 | Project uses | Install |
 | --- | --- |
@@ -80,16 +80,19 @@ The backup and the Protection Map contain the original source. `.afterpack/` car
 
 Every option has one dot-delimited camelCase name, used the same way in every place:
 
-1. `/* @afterpack key=value */` in source, for region-scoped keys such as `preset` and `complexity`
-2. `--key=value` on the command line
-3. `AFTERPACK_<key with dots as underscores>` in the environment, for example
+1. `--key=value` on the command line
+2. `AFTERPACK_<key with dots as underscores>` in the environment, for example
    `AFTERPACK_diagnostics_format=json`
-4. `afterpack.json`, the nearest one at or above the working directory
+3. `afterpack.json`, the nearest one at or above the working directory
 
 Higher in the list wins. A boolean flag on its own means `true`; `=false` turns it off. There is
 no `--no-` form and no space-separated value (`--seed git` is wrong, `--seed=git` is right). The
 only short flags are `-h` and `-v`. An unknown, kebab-cased or malformed key fails the run with
 exit `64` and names the right spelling.
+
+The CLI does not read `/* @afterpack */` source directives, and setting `directives.enabled` fails
+the run: built output no longer carries the comments. A bundler plugin reads them before
+minification.
 
 | Key | Meaning | Default |
 | --- | --- | --- |
@@ -178,15 +181,16 @@ Lists are sorted and there are no timestamps, so two runs of one build give iden
 
 ## The Pro key
 
-Without a key, builds run locally with basic protection. With a Pro key, the same command sends the
-build to AfterPack's cloud, which applies much stronger protection.
+Without a key, builds run locally with the full pipeline at any preset. With a Pro key, the same
+command builds in AfterPack's cloud instead, which adds two hardening transforms you can turn on:
+self-integrity (anti-tamper) and comparison hardening.
 
 - Set it as `AFTERPACK_KEY` in the environment (a CI secret), or [`key`][key] in an uncommitted
   `afterpack.json`.
 - Never put it in a plugin's options object. Plugins reject it there, because a bundler config is
   committed source.
 - Never commit it.
-- If the cloud cannot be reached, the run fails with exit `1`. It never falls back to weaker output.
+- If the cloud cannot be reached, the run fails with exit `1`. It never falls back to a local build.
 
 Details: https://www.afterpack.dev/docs/pro
 
