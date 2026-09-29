@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { loadViewer, makeStorage, readPrefs } from "./viewer-harness.mjs";
 
@@ -133,11 +134,11 @@ test("A. every derived char offset stays inside its own source (utf16 path)", as
     }
     const c = f.coverage;
     assert.equal(
-      c.region + c.extracted + c.renamed + c.plain,
+      c.protected + c.hidden + c.renamed + c.readable + c.plain,
       c.total,
       "buckets must sum to the file length",
     );
-    for (const k of ["region", "extracted", "renamed", "plain"]) {
+    for (const k of ["protected", "hidden", "renamed", "readable", "plain"]) {
       assert.ok(c[k] >= 0 && c[k] <= c.total, `coverage.${k}=${c[k]} outside [0,${c.total}]`);
     }
   }
@@ -158,30 +159,23 @@ test("A. every derived char offset stays inside its own source (utf16 path)", as
   );
 });
 
-test("B. the machinery entry is not labelled as the customer's original source", async () => {
+test("B. only the machinery entry carries a head note; your own files show none", async () => {
   const v = await loadViewer(docWithMachineryAsLastFile());
-  const note = v.byId("source-origin-note");
+  const note = v.byId("head-note");
 
   v.updateSourceOriginNote(v.FILES[1]);
   assert.equal(v.sourceOriginOf(v.FILES[1]), "machinery");
-  assert.match(note.textContent, /engine note \(not your source\)/);
-  assert.doesNotMatch(note.textContent, /original/i);
-  assert.doesNotMatch(note.textContent, /engine-input/i);
+  assert.equal(note.hidden, false);
+  assert.equal(note.textContent, "AfterPack runtime (not your code)");
   assert.match(note.getAttribute("data-tip"), /Not one of your files/);
 
   v.updateSourceOriginNote(v.FILES[0]);
-  assert.equal(
-    note.textContent,
-    "source: original (via source map)",
-    "the original-source origin keeps its existing wording",
-  );
+  assert.equal(note.hidden, true, "an original-source file needs no origin label");
+  assert.equal(note.textContent, "");
   const ei = { doc: { file: { sourceOrigin: "engineInput" } } };
   v.updateSourceOriginNote(ei);
-  assert.equal(
-    note.textContent,
-    "source: engine-input",
-    "the engine-input origin keeps its existing wording",
-  );
+  assert.equal(note.hidden, true, "'source: engine-input' is gone");
+  assert.doesNotMatch(note.textContent, /engine-input/);
 });
 
 test("C. buildByteStarts keeps a surrogate pair whole (legacy byte path)", async () => {
@@ -210,32 +204,22 @@ test("C. buildByteStarts keeps a surrogate pair whole (legacy byte path)", async
   for (let b = 0; b < 6; b++) assert.equal(toChar(b), b, `ASCII byte ${b} maps to itself`);
 });
 
-test("D. cardUnlit prints all four disjoint coverage buckets", async () => {
+test("D. cardUnlit says what the token is and why, with no location line and no padding rows", async () => {
   const v = await loadViewer(docWithMachineryAsLastFile());
   const file = v.FILES[0];
   const html = v.cardUnlit(file, { pos: 0, end: 5, type: "k" });
   const keys = [...html.matchAll(/<span class="k">([^<]*)<\/span>/g)].map((m) => m[1]);
-  for (const k of ["Ledger region", "Extracted only", "Renamed only", "Plain"]) {
-    assert.ok(keys.includes(k), `cardUnlit is missing the "${k}" row; got ${JSON.stringify(keys)}`);
-  }
-  assert.ok(!keys.includes("Grammar"), "the Grammar row duplicated the toolbar's own label");
-  assert.equal(keys.length, 6, "INSP_FACTS pins every card at exactly six rows");
-  assert.ok(!html.includes("is-pad"), "no padding row: the six facts fill the card exactly");
-  const c = file.coverage;
-  assert.equal(
-    c.region + c.extracted + c.renamed + c.plain,
-    c.total,
-    "the four printed percentages are the four disjoint coverage buckets",
+  assert.deepEqual(
+    keys,
+    ["What it is"],
+    "one fact; the file-level percentages live in the This-file band",
   );
-  const pct = (n) => `${Math.round((n / c.total) * 100)}%`;
-  for (const n of [c.region, c.extracted, c.renamed, c.plain])
-    assert.ok(html.includes(`>${pct(n)}<`));
-  for (const k of ["Ledger region", "Extracted only", "Renamed only", "Plain"]) {
-    assert.ok(
-      v.INSP_COPY.coverage.includes(k),
-      `the shared tooltip INSP_COPY.coverage names "${k}"`,
-    );
-  }
+  assert.match(html, />keyword</);
+  assert.match(html, /class="insp-line">A keyword such as if or return/);
+  assert.ok(!/chars \d/.test(html), "no 'kind · chars N–M' location line");
+  assert.ok(!html.includes("is-pad"), "no padding rows");
+  assert.ok(!html.includes("insp-actions"), "no empty action strip");
+  assert.ok(!html.includes("insp-chain"), "no transforms block on a card with no region");
 });
 
 function docWithTree() {
@@ -426,7 +410,8 @@ test("G. weak spots are named consistently and the Weak facet selects them", asy
     "2 weak spots",
     "the tree header counts weak spots build-wide, under that name",
   );
-  assert.match(v.byId("workspace-summary").getAttribute("data-tip"), /1 leaked literal/);
+  assert.match(v.byId("workspace-summary").getAttribute("data-tip"), /1 readable string/);
+  assert.match(v.byId("workspace-summary").getAttribute("data-tip"), /1 readable property name/);
   const band = v.byId("file-summary-metrics").innerHTML;
   assert.ok(band.includes(">Weak spots<"), "the open file's band counts them under the same name");
   assert.ok(!/leaks?<\/span>/i.test(band), "the band never labels the count 'leaks'");
@@ -495,23 +480,22 @@ function v4DocWithPreRenameEngineHeader() {
   };
 }
 
-test("I. a stored v4 blob still renders, and its two renamed rows degrade visibly", async () => {
+test("I. a stored v4 blob still renders, and its renamed complexity field degrades visibly", async () => {
   const { byId } = await loadViewer(v4DocWithPreRenameEngineHeader());
   const info = byId("engine-info").innerHTML;
-  assert.match(info, /IrAuthoritative/, "backend still renders");
-  assert.match(info, /<dt>seed<\/dt><dd>42<\/dd>/, "seed still renders");
-  assert.match(info, /<dt>materialize<\/dt><dd>on<\/dd>/, "materialize still renders");
-  assert.match(info, /<dt>schema<\/dt><dd>v4<\/dd>/, "the blob still declares its own version");
-  assert.match(
-    info,
-    /<dt>complexity<\/dt><dd>—<\/dd>/,
+  const row = (k) => new RegExp(`<dt[^>]*>${k}</dt><dd>([^<]*)</dd>`).exec(info)?.[1];
+  assert.equal(row("Seed"), "42", "seed still renders");
+  assert.equal(row("Engine version"), "0.0.10");
+  assert.equal(
+    row("Complexity target"),
+    "—",
     "a field renamed since v4 reads as unknown, never as a fabricated value or a throw that costs the reader the whole map",
   );
-  assert.match(
-    info,
-    /<dt>preset<\/dt><dd>Hard<\/dd>/,
-    "a field still spelled the same renders in its old case",
-  );
+  assert.equal(row("Preset"), "Hard", "a field still spelled the same renders in its old case");
+  for (const gone of ["backend", "materialize", "source origin", "schema"]) {
+    assert.ok(!info.includes(`>${gone}<`), `the internal "${gone}" row is gone`);
+  }
+  assert.equal(byId("build-cx").hidden, true, "no complexity chip without a known target");
 });
 
 test("J. both rail sections open collapsed, and a deliberate toggle persists", async () => {
@@ -537,7 +521,7 @@ test("J. both rail sections open collapsed, and a deliberate toggle persists", a
   v.selectUnlit(0, "k", 5);
   assert.equal(v.isSectionCollapsed("inspector-section"), false, "a token click opens the section");
   assert.equal(v.byId("inspector-head").getAttribute("aria-expanded"), "true");
-  assert.equal(v.byId("inspector-count").textContent, "unattributed token");
+  assert.equal(v.byId("inspector-count").textContent, "nothing recorded");
   assert.deepEqual(
     readPrefs(v.storage),
     {},
@@ -641,7 +625,7 @@ test("L. the weak-spots header states its count, at 0 and at N", async () => {
     "the always-visible header states its count even when it is 0",
   );
   assert.ok(clean.byId("weakspots-section").classList.contains("is-empty"));
-  assert.match(clean.byId("weakspots-list").innerHTML, /None recorded in this file/);
+  assert.match(clean.byId("weakspots-list").innerHTML, /None in this file\./);
   assert.ok(clean.byId("rail-right").classList.contains("weakspots-quiet"));
 
   const weak = await loadViewer(docWithTree(), { hash: "#file=src/lib/auth.ts" });
@@ -671,44 +655,524 @@ test("L. the weak-spots header states its count, at 0 and at N", async () => {
   assert.equal(weak.inspectorSummary(weak.FILES[1], null), "no selection");
 });
 
-test("M. heat is PER-FILE RELATIVE: a file's hottest region(s) paint red, its coolest positive region stays faint, score<=0/preserved never gets heat", async () => {
-  const v = await loadViewer(docWithMachineryAsLastFile());
+const CX_SRC = "const alpha = 1;\nconst beta = alpha + 2;\nlet gamma = 3;\n";
+
+function docWithComplexityLane({ lane = true } = {}) {
+  const at = (text, from = 0) => {
+    const i = CX_SRC.indexOf(text, from);
+    return [i, i + text.length];
+  };
+  const alpha = at("alpha");
+  const one = at("1");
+  const beta = at("beta");
+  const alpha2 = at("alpha", beta[1]);
+  const rhs = at("= alpha + 2");
+  const gamma = at("gamma");
+  const three = at("3");
+  return {
+    schemaVersion: 5,
+    spanUnits: "utf16",
+    engine: { version: "9.9.9", seed: 7, preset: "light", complexity: 5 },
+    files: [
+      {
+        file: {
+          path: "src/app.js",
+          sourceOrigin: "original",
+          vendor: false,
+          originalSource: CX_SRC,
+          inputSize: CX_SRC.length,
+          outputSize: 120,
+          outputSizeEstimated: false,
+          inflationRatio: 2.2,
+        },
+        regions: [
+          region({ span: alpha, score: 53 }),
+          region({ span: beta, score: 71, reversalClass: "flattened-fused" }),
+          region({ span: gamma, score: 20 }),
+          region({
+            span: three,
+            reversalClass: "preserved",
+            preservedReason: "position-blocked",
+            score: 0,
+            transformCount: 0,
+          }),
+        ],
+        spotlights: [],
+        renamedSpans: [],
+        extractedSpans: [],
+        ...(lane
+          ? {
+              complexitySpans: [...alpha, 5, ...one, 3, ...beta, 12, ...alpha2, 8, ...rhs, 6],
+            }
+          : {}),
+        aggregate: { weakRegions: 0, leakCount: 0, renamedCount: 0, extractedCount: 0 },
+      },
+      {
+        file: {
+          path: "(engine machinery — unattributable)",
+          sourceOrigin: "machinery",
+          vendor: false,
+          originalSource: MACHINERY_NOTE,
+          inputSize: 10,
+          outputSize: 10,
+          outputSizeEstimated: false,
+          inflationRatio: 1,
+        },
+        regions: [],
+        spotlights: [],
+        ...(lane ? { complexitySpans: [0, 10, 40] } : {}),
+        aggregate: { weakRegions: 0, leakCount: 0 },
+      },
+    ],
+  };
+}
+
+function runAt(file, text, from = 0) {
+  const pos = file.source.indexOf(text, from);
+  return file.mergedRuns.find((r) => r.start <= pos && r.end > pos);
+}
+
+test("M. the complexity bands: grey at 0, green under 4, yellow 4 to 7, red 7 to 10, dark red over 10", async () => {
+  const v = await loadViewer(docWithComplexityLane());
+  const cases = [
+    [0, "none"],
+    [0.5, "low"],
+    [3.9, "low"],
+    [4, "mid"],
+    [5, "mid"],
+    [6.99, "mid"],
+    [7, "high"],
+    [10, "high"],
+    [10.01, "max"],
+    [12, "max"],
+    [25, "max"],
+  ];
+  for (const [c, band] of cases) assert.equal(v.complexityBand(c), band, `complexity ${c}`);
+  assert.equal(v.complexityBand(null), null, "no value, no band");
+  assert.equal(v.complexityBand(Number.NaN), null);
+});
+
+test("M2. with a per-token complexity lane, each token paints by its own value, innermost wins", async () => {
+  const v = await loadViewer(docWithComplexityLane());
   const app = v.FILES[0];
-  assert.equal(app.regions[0].raw.score, 53);
-  assert.equal(app.regions[1].raw.score, 71);
+  const band = (text, from) => {
+    const run = runAt(app, text, from);
+    return v.runPaint(run, run.regionIdx == null ? null : app.regions[run.regionIdx]).band;
+  };
+  assert.equal(runAt(app, "alpha").cx, 5);
+  assert.equal(band("alpha"), "mid", "5 is yellow");
+  assert.equal(band("1"), "low", "3 is green, even with no region over it");
+  assert.equal(band("beta"), "max", "12 is dark red");
+  const second = app.source.indexOf("alpha", app.source.indexOf("beta"));
+  assert.equal(runAt(app, "alpha", second).cx, 8, "the inner token beats the enclosing expression");
+  assert.equal(band("alpha", second), "high");
   assert.equal(
-    app.regions[0].heatNorm,
-    1,
-    "the lowest positive score in the file normalizes to the faint floor, never to 0 (0 is reserved for score<=0/preserved so the two never look alike)",
+    runAt(app, "+", second).cx,
+    6,
+    "the operator takes its enclosing expression's value",
   );
   assert.equal(
-    app.regions[1].heatNorm,
-    100,
-    "the highest score in the file always normalizes to 100 (red), regardless of its absolute value",
+    band("gamma"),
+    "none",
+    "a region with no recorded value is grey, not a wash of its own",
   );
+  assert.equal(band("3"), "readable", "left-readable code is grey, never a complexity color");
 
   v.paintCode(app);
   const html = v.byId("code-body").innerHTML;
-  const bgFor = (idx) => {
-    const m = html.match(
-      new RegExp(`style="background:(rgba\\([^)]*\\))"[^>]*data-region-idx="${idx}"`),
-    );
-    return m ? m[1] : null;
+  for (const cls of ["cx-low", "cx-mid", "cx-high", "cx-max", "cx-none", "tok-preserved"]) {
+    assert.ok(html.includes(cls), `the pane paints ${cls}`);
+  }
+  assert.ok(!html.includes("cx-protected"), "no region-level wash competes with the heat scale");
+  assert.ok(!/style="background:/.test(html), "colors come from theme tokens, not inline styles");
+  assert.match(html, /data-cx="12"[^>]*title="Complexity 12 · Flattened &amp; fused"/);
+
+  assert.equal(app.cxCount, 5);
+  assert.equal(app.cxAvg, 34 / 5, "the file average is the mean over its tokens");
+  assert.equal(v.BUILD_CX.hasLane, true);
+  assert.equal(v.BUILD_CX.avg, 34 / 5, "the build average leaves the AfterPack runtime entry out");
+});
+
+const HEAT_SRC = 'const API = "x";\nfunction f(key) {\n  return key + 1;\n}\n';
+
+function docWithRealLaneShapes() {
+  const at = (text, from = 0) => {
+    const i = HEAT_SRC.indexOf(text, from);
+    return [i, i + text.length];
   };
-  assert.equal(bgFor(0), "rgba(255,242,191,0.104)", "the coolest region in this file paints faint");
+  const fn = [HEAT_SRC.indexOf("function"), HEAT_SRC.lastIndexOf("}") + 1];
+  const param = at("key");
+  const use = at("key", param[1]);
+  return {
+    schemaVersion: 5,
+    spanUnits: "utf16",
+    engine: { version: "0.1.1", seed: 7, preset: "medium", complexity: 7 },
+    files: [
+      {
+        file: {
+          path: "src/app.js",
+          sourceOrigin: "original",
+          vendor: false,
+          originalSource: HEAT_SRC,
+          inputSize: HEAT_SRC.length,
+          outputSize: 400,
+          outputSizeEstimated: false,
+          inflationRatio: 8,
+        },
+        regions: [
+          region({
+            span: [0, HEAT_SRC.indexOf(";") + 1],
+            reversalClass: "flattened-fused",
+            score: 90,
+          }),
+        ],
+        spotlights: [],
+        renamedSpans: [at("API"), param, use],
+        extractedSpans: [],
+        complexitySpans: [
+          ...at('"x"'),
+          10,
+          ...fn,
+          0,
+          ...use,
+          10,
+          ...at("key + 1"),
+          10,
+          ...at("1"),
+          5,
+        ],
+        aggregate: { weakRegions: 0, leakCount: 0, renamedCount: 3, extractedCount: 0 },
+      },
+    ],
+  };
+}
+
+test("M2b. with a lane, only the heat scale colors code: zero and unrecorded are grey, renamed names get an underline", async () => {
+  const v = await loadViewer(docWithRealLaneShapes());
+  const app = v.FILES[0];
+  const paintOf = (text, from) => {
+    const run = runAt(app, text, from);
+    return v.runPaint(run, run.regionIdx == null ? null : app.regions[run.regionIdx]);
+  };
+  assert.equal(runAt(app, "const").cx, null);
+  assert.equal(paintOf("const").band, "none", "a region with no lane value is grey, not indigo");
+  assert.equal(paintOf("function").band, "none", "complexity 0 is grey, not green");
+  assert.equal(paintOf("key").band, "none");
+  assert.equal(paintOf('"x"').band, "high");
+  assert.equal(paintOf("key", HEAT_SRC.indexOf("return")).band, "high");
+  assert.equal(paintOf("1", HEAT_SRC.indexOf("return")).band, "mid");
+
+  v.paintCode(app);
+  const html = v.byId("code-body").innerHTML;
+  for (const gone of ["cx-protected", "cx-names", "cx-low"]) {
+    assert.ok(!html.includes(gone), `no ${gone} wash`);
+  }
+  assert.match(
+    html,
+    /class="tok cx-none tok-named tok-hot"[^>]*title="Complexity not recorded · Flattened &amp; fused · Renamed">API</,
+  );
+  assert.match(
+    html,
+    /class="tok cx-none tok-named tok-hot"[^>]*title="Complexity 0 · Renamed">key</,
+  );
   assert.equal(
-    bgFor(1),
-    "rgba(182,32,32,0.500)",
-    "the hottest region in this file paints red, at the alpha cap",
+    (html.match(/tok-named/g) || []).length,
+    2,
+    "a renamed name with its own complexity color carries no underline",
   );
 
-  const mach = v.FILES[1];
-  assert.equal(mach.regions[0].raw.score, 0);
-  assert.equal(mach.regions[0].heatNorm, 0, "a score-0 region never carries a heat metric");
-  assert.equal(mach.regions[1].raw.score, 44);
-  assert.equal(
-    mach.regions[1].heatNorm,
-    100,
-    "a file with exactly one positive-score region treats it as that file's own max -- it paints red, not mid-ramp",
+  const heat = app.mergedRuns.filter((r) => r.cx > 0).reduce((n, r) => n + (r.end - r.start), 0);
+  assert.equal(app.coverage.protected, heat, "Protected counts the code the heat scale colors");
+
+  const legend = v.byId("cx-legend").innerHTML;
+  assert.ok(legend.includes("No complexity added"));
+  assert.ok(legend.includes("Name hidden, nothing more"));
+  assert.ok(!legend.includes("cx-protected") && !legend.includes("cx-names"));
+  assert.match(
+    v.byId("file-summary-metrics").innerHTML,
+    /<span class="k">Protected<\/span><span class="v">/,
   );
+});
+
+test("M3. the header, band, legend and inspector show complexity in --complexity units", async () => {
+  const v = await loadViewer(docWithComplexityLane());
+  const chip = v.byId("build-cx");
+  assert.equal(chip.hidden, false);
+  assert.match(chip.innerHTML, /Complexity <span class="tag-em">6\.8<\/span> · target 5/);
+  assert.equal(chip.getAttribute("data-doc"), "complexity");
+
+  const band = v.byId("file-summary-metrics").innerHTML;
+  assert.match(
+    band,
+    /<span class="k">Complexity<\/span><span class="v"><span class="cx-dot" data-band="mid"[^>]*><\/span>6\.8</,
+  );
+  for (const gone of ["Max class", "Attributed", ">Transforms<", ">Extracted<", ">Renamed<"]) {
+    assert.ok(!band.includes(gone), `"${gone}" is gone from the This-file band`);
+  }
+
+  const legend = v.byId("cx-legend").innerHTML;
+  for (const label of ["under 4", "4 to 7", "7 to 10", "over 10", "Left readable"]) {
+    assert.ok(legend.includes(label), `the legend names "${label}"`);
+  }
+  assert.match(v.byId("cx-legend-note").innerHTML, /Hotter means more complex/);
+
+  const app = v.FILES[0];
+  const betaRun = runAt(app, "beta");
+  v.state.selection = { regionIdx: betaRun.regionIdx, spotlightIdx: null, cx: betaRun.cx };
+  v.renderInspector();
+  const insp = v.byId("inspector").innerHTML;
+  assert.match(insp, /<b>12<\/b><small>complexity<\/small>/);
+  assert.match(insp, /data-band="max"/);
+  assert.match(insp, /class="meter-tick" style="left:/, "the meter marks the build target");
+  assert.ok(!insp.includes("/100"), "no score out of 100");
+  assert.equal(v.inspectorSummary(app, v.state.selection), "Flattened & fused · complexity 12");
+});
+
+test("M4. without the lane, the viewer shows the build target and invents no per-token number", async () => {
+  const v = await loadViewer(docWithComplexityLane({ lane: false }));
+  assert.equal(v.BUILD_CX.hasLane, false);
+  const app = v.FILES[0];
+  assert.equal(app.cxAvg, null);
+  assert.ok(app.mergedRuns.every((r) => r.cx == null));
+
+  v.paintCode(app);
+  const html = v.byId("code-body").innerHTML;
+  for (const cls of ["cx-low", "cx-mid", "cx-high", "cx-max"]) {
+    assert.ok(!html.includes(cls), `no ${cls} band without per-token data`);
+  }
+  assert.ok(html.includes("cx-protected"), "protected code shares one neutral color");
+  assert.ok(html.includes("tok-preserved"));
+
+  assert.match(
+    v.byId("build-cx").innerHTML,
+    /Complexity target <span class="tag-em">5<\/span> · light/,
+  );
+  const band = v.byId("file-summary-metrics").innerHTML;
+  assert.match(band, /<span class="k">Complexity target<\/span><span class="v">5</);
+  assert.match(v.byId("cx-legend-note").innerHTML, /doesn't record complexity per token/);
+  assert.ok(!v.byId("cx-legend").innerHTML.includes("over 10"), "no band scale to misread");
+
+  v.state.selection = { regionIdx: 1, spotlightIdx: null, cx: null };
+  v.renderInspector();
+  const insp = v.byId("inspector").innerHTML;
+  assert.ok(!insp.includes("<small>complexity</small>"), "no per-token number");
+  assert.match(insp, /<span class="k">Complexity target<\/span><span class="v">5</);
+  assert.match(insp, /<span class="k">Resists deobfuscators<\/span><span class="v">71%</);
+});
+
+function regionWithChain() {
+  const step = (transform, category, phase, credit, sizeDeltaEst = 10) => ({
+    transform,
+    category,
+    phase,
+    entropyGain: 5,
+    credit,
+    sizeDeltaEst,
+    label: null,
+  });
+  return region({
+    span: [6, 11],
+    score: 93,
+    reversalClass: "flattened-fused",
+    ceiling: { class: "destroyed-fused", directive: "preset=extreme" },
+    transformCount: 7,
+    lineage: [
+      step("LowerClass", "Structural", "Parse", 0, 0),
+      step("CommaSequenceWrapVariant", "Structural", "Inflate", 9),
+      step("CommaSequenceWrapVariant", "Structural", "Inflate", 9),
+      step("MaterializeAsRotatedString", "Data", "Inflate", 776, 48),
+      step("CommaSequenceWrapVariant", "Structural", "Inflate", 9),
+      step("OpaquePredicateVariantB", "AntiAnalysis", "Inflate", 926),
+      step("CommaSequenceWrapVariant", "Structural", "Inflate", 9),
+    ],
+  });
+}
+
+test("N. the region card drops location, Pro upsell, and the rows the transforms block repeats", async () => {
+  const doc = docWithMachineryAsLastFile();
+  doc.engine.complexity = 12;
+  doc.files[0].regions[0] = regionWithChain();
+  const v = await loadViewer(doc);
+  const file = v.FILES[0];
+  const html = v.cardRegion(file, file.regions[0], { cx: null });
+  const keys = [...html.matchAll(/<span class="k">([^<]*)<\/span>/g)].map((m) => m[1]);
+  assert.deepEqual(keys, ["Complexity target", "Resists deobfuscators", "Added size"]);
+  for (const gone of [
+    "chars ",
+    "Copy Pro directive",
+    "Ceiling",
+    "Entropy",
+    "Decode ops",
+    "tier-pill",
+    ">free<",
+    "insp-where",
+  ]) {
+    assert.ok(!html.includes(gone), `"${gone}" is gone from the region card`);
+  }
+  assert.match(
+    html,
+    /<summary class="details-summary"[^>]*>Transforms <span class="chip">4<\/span>/,
+    "the block counts distinct transforms, not steps",
+  );
+});
+
+test("N2. the transforms list groups by name and puts the measured rate on its own line", async () => {
+  const doc = docWithMachineryAsLastFile();
+  doc.files[0].regions[0] = regionWithChain();
+  const v = await loadViewer(doc);
+  const file = v.FILES[0];
+  const groups = v.groupLineage(file.regions[0].raw.lineage);
+  assert.equal(
+    JSON.stringify(groups.map((g) => [g.transform, g.count])),
+    JSON.stringify([
+      ["LowerClass", 1],
+      ["CommaSequenceWrapVariant", 4],
+      ["MaterializeAsRotatedString", 1],
+      ["OpaquePredicateVariantB", 1],
+    ]),
+    "oldest first, one row per transform",
+  );
+  const body = v.renderChainBody(file.regions[0]);
+  assert.ok(!/survives/.test(body), "no bare 'survives'");
+  assert.match(
+    body,
+    /Materialize<wbr>As<wbr>Rotated<wbr>String<\/span>/,
+    "long names break at word humps",
+  );
+  assert.match(
+    body,
+    /<\/div><div class="chain-caption">.*Hides values.*resists deobfuscators 78%/,
+    "the rate sits on the caption line under the name, not beside it",
+  );
+  assert.match(body, /resists deobfuscators 0\.9%/);
+  assert.match(body, />×4<\/span>/);
+  assert.match(body, /Rewrites syntax<\/span><\/div>/, "a 0-credit rewrite shows no rate");
+  assert.ok(!/data-doc="attackers"[^>]*>resists deobfuscators 0%/.test(body));
+
+  const off = { raw: { lineage: [], transformCount: 3 } };
+  assert.match(v.renderChainBody(off), /protectionMap\.detailed/);
+});
+
+test("O. every docs link the viewer can render resolves to a known docs page", async () => {
+  const doc = docWithTree();
+  doc.engine.complexity = 5;
+  const v = await loadViewer(doc, { hash: "#file=src/lib/auth.ts" });
+  for (const [key, path] of Object.entries(v.DOC)) {
+    assert.match(path, /^\/docs\/[a-z-]+(#[A-Za-z-]+)?$/, `${key} is a docs path`);
+    assert.equal(v.docUrl(key), `${["https", "//www.afterpack.dev"].join(":")}${path}`);
+  }
+  assert.equal(v.docUrl("nope"), null);
+
+  const template = readFileSync(new URL("./template.html", import.meta.url), "utf8");
+  const keys = new Set([
+    ...[...template.matchAll(/data-doc(?:-link)?="([A-Za-z]+)"/g)].map((m) => m[1]),
+    ...[...template.matchAll(/docLinkHtml\("([A-Za-z]+)"/g)].map((m) => m[1]),
+    ...[...template.matchAll(/\bdoc: "([A-Za-z]+)"/g)].map((m) => m[1]),
+    ...template
+      .split("\n")
+      .filter((line) => /tipAttrs\(|inspFlag\(/.test(line))
+      .flatMap((line) =>
+        [...line.matchAll(/(?<!plural\([^()]*), "([A-Za-z]+)"\)/g)].map((m) => m[1]),
+      ),
+  ]);
+  for (const k of keys) assert.ok(k in v.DOC, `template references unknown docs key "${k}"`);
+
+  const file = v.FILES[1];
+  const rendered = [
+    v.byId("file-summary-metrics").innerHTML,
+    v.byId("engine-info").innerHTML,
+    v.byId("file-tree").innerHTML,
+    v.byId("weakspots-list").innerHTML,
+    v.cardSpotlight(file, file.spotlights[0], null),
+    v.cardSpotlight(file, file.spotlights[1], null),
+  ].join("");
+  for (const m of rendered.matchAll(/data-doc="([^"]*)"/g)) {
+    assert.ok(v.docUrl(m[1]), `rendered data-doc="${m[1]}" resolves`);
+  }
+});
+
+test("P. the copy a reader sees carries no internal jargon or overclaims", async () => {
+  const doc = docWithComplexityLane();
+  doc.files[0].regions[1] = regionWithChain();
+  doc.files[0].regions[1].span = [CX_SRC.indexOf("beta"), CX_SRC.indexOf("beta") + 4];
+  const v = await loadViewer(doc);
+  const file = v.FILES[0];
+  v.paintCode(file);
+  const pieces = [
+    v.byId("file-summary-metrics").innerHTML,
+    v.byId("engine-info").innerHTML,
+    v.byId("cx-legend").innerHTML,
+    v.byId("cx-legend-note").innerHTML,
+    v.byId("class-rows").innerHTML,
+    v.byId("build-cx").getAttribute("data-tip"),
+    v.byId("private-tag").getAttribute("data-tip"),
+    v.byId("file-tree").innerHTML,
+    v.byId("code-body").innerHTML,
+    v.cardRegion(file, file.regions[1], { cx: 12 }),
+    v.cardUnlit(file, { pos: 0, end: 5, type: "k" }),
+    v.renderChainBody(file.regions[1]),
+    JSON.stringify(v.INSP_COPY),
+  ].join("\n");
+  const banned = [
+    /ledger/i,
+    /entropy/i,
+    /funnel/i,
+    /injective/i,
+    /engine-input/i,
+    /\bMBA\b/,
+    /infeasible/i,
+    /unbreakable/i,
+    /irreversib/i,
+    /cannot be (undone|reversed)/i,
+    /\/100\b/,
+    /\bPro\b/,
+    /survives</,
+  ];
+  for (const re of banned) assert.doesNotMatch(pieces, re);
+});
+
+test("Q. a map from an engine older than 0.1.1 never presents its score as a resistance rate", async () => {
+  const rows = (html) => [...html.matchAll(/<span class="k">([^<]*)<\/span>/g)].map((m) => m[1]);
+  const old = docWithMachineryAsLastFile();
+  old.engine.version = "0.1.0";
+  const legacy = await loadViewer(old);
+  const oldCard = legacy.cardRegion(legacy.FILES[0], legacy.FILES[0].regions[1], { cx: null });
+  assert.ok(
+    !rows(oldCard).includes("Resists deobfuscators"),
+    "an entropy score is not a survival rate",
+  );
+  assert.ok(!oldCard.includes("no measured resistance"));
+
+  const oldWithRates = docWithMachineryAsLastFile();
+  oldWithRates.engine.version = "0.1.0-rc.1";
+  oldWithRates.files[0].regions[0] = regionWithChain();
+  const rated = await loadViewer(oldWithRates);
+  assert.ok(
+    rows(rated.cardRegion(rated.FILES[0], rated.FILES[0].regions[0], { cx: null })).includes(
+      "Resists deobfuscators",
+    ),
+    "per-transform rates in the map mark the score as a rate",
+  );
+
+  const current = docWithMachineryAsLastFile();
+  current.engine.version = "0.1.1";
+  current.files[0].regions[1].score = 100;
+  const now = await loadViewer(current);
+  const card = now.cardRegion(now.FILES[0], now.FILES[0].regions[1], { cx: null });
+  assert.match(card, /<span class="k">Resists deobfuscators<\/span><span class="v">99%\+</);
+  assert.ok(!/>100%</.test(card), "never a flat 100%");
+});
+
+test("R. a weak spot the map cannot place offers no jump, and says so", async () => {
+  const doc = docWithTree();
+  doc.files[1].spotlights[1].span = null;
+  const v = await loadViewer(doc, { hash: "#file=src/lib/auth.ts" });
+  const file = v.FILES[1];
+  assert.equal(file.spotlights[0].positioned, true);
+  assert.equal(file.spotlights[1].positioned, false);
+  v.renderWeakSpots(file);
+  const html = v.byId("weakspots-list").innerHTML;
+  assert.match(html, /data-jump-spotlight="0"/);
+  assert.ok(!/data-jump-spotlight="1"/.test(html), "no button that does nothing");
+  assert.match(html, /can't point to where this sits in your source/);
 });

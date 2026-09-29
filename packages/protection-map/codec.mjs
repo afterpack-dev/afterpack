@@ -203,6 +203,7 @@ export function encodeCompact(data, { includeLineage = true } = {}) {
       aggregate: fdoc.aggregate,
       ...(fdoc.renamedSpans?.length ? { renamedSpans: fdoc.renamedSpans } : {}),
       ...(fdoc.extractedSpans?.length ? { extractedSpans: fdoc.extractedSpans } : {}),
+      ...(fdoc.complexitySpans?.length ? { complexitySpans: fdoc.complexitySpans } : {}),
     };
   });
 
@@ -287,6 +288,7 @@ function afterpackDecodeDocument(c) {
       aggregate: fc.aggregate,
       renamedSpans: fc.renamedSpans || [],
       extractedSpans: fc.extractedSpans || [],
+      complexitySpans: fc.complexitySpans || [],
     };
   });
 

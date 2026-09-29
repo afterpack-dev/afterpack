@@ -215,6 +215,7 @@ function richDoc() {
           [40, 46],
         ],
         extractedSpans: [12, 17, 0, 51, 58, 1],
+        complexitySpans: [6, 7, 11, 0, 27, 5],
       },
       vendorFileWithNoRegionsOrSpotlights(),
     ],
@@ -238,6 +239,7 @@ function vendorFileWithNoRegionsOrSpotlights() {
     aggregate: { classSummary: {} },
     renamedSpans: [],
     extractedSpans: [],
+    complexitySpans: [],
   };
 }
 
@@ -322,6 +324,17 @@ test("renderProtectionMapHtml embeds a gzip+base64 payload that inflates + decod
     Buffer.byteLength(payload, "utf8") < rawBytes,
     "the compressed payload is smaller than the raw JSON",
   );
+});
+
+test("the per-token complexity lane rides through the compact form, and a map without it decodes to an empty lane", () => {
+  const rich = richDoc();
+  const compact = encodeCompact(rich);
+  assert.deepEqual(compact.files[0].complexitySpans, [6, 7, 11, 0, 27, 5]);
+  assert.ok(!("complexitySpans" in compact.files[1]), "an empty lane costs no bytes");
+  const older = structuredClone(compact);
+  for (const f of older.files) delete f.complexitySpans;
+  const back = decodeCompact(older);
+  for (const f of back.files) assert.deepEqual(f.complexitySpans, []);
 });
 
 test("encodeCompact omits spanUnits rather than nulling it when the input predates the key", () => {
