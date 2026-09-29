@@ -102,13 +102,13 @@ export function presetTarget(preset: Preset): number {
     case "minify":
       return 0;
     case "light":
-      return 2;
+      return 5;
     case "medium":
-      return 8;
+      return 7;
     case "hard":
-      return 25;
+      return 12;
     case "extreme":
-      return 80;
+      return 25;
   }
 }
 
@@ -168,11 +168,9 @@ export function buildEngineConfig(options: BuildEngineConfigOptions): CoreConfig
     preset?: Preset;
     complexity?: number;
   } = {};
-  const target = effectiveComplexityTarget(options.preset, options.complexity);
+  if (options.complexity !== undefined) defaults.complexity = options.complexity;
   if (options.preset !== undefined) defaults.preset = options.preset;
-  if (options.preset === undefined || options.complexity !== undefined) {
-    defaults.complexity = target;
-  }
+  else if (options.complexity === undefined) defaults.preset = DEFAULT_PRESET;
   const config = mergeInto<CoreConfig>(
     { ...defaults, sourceMap, protectionMap: { enabled: policy.protectionMap } },
     (engine ?? {}) as Record<string, unknown>,

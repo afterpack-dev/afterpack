@@ -15,11 +15,11 @@ describe("parseDirectivePayload", () => {
     });
     expect(parseDirectivePayload("preset=hard")).toMatchObject({
       tier: "amplifying",
-      delta: { complexity: 25, strings: { encode: true } },
+      delta: { complexity: 12, strings: { encode: true } },
     });
     expect(parseDirectivePayload("preset=extreme")).toMatchObject({
       tier: "amplifying",
-      delta: { complexity: 80, strings: { encode: true } },
+      delta: { complexity: 25, strings: { encode: true } },
     });
   });
 
@@ -85,7 +85,7 @@ describe("scanDirectives — block-scoped", () => {
     const { regions, directives } = scanDirectives(src);
     const block = directives.find((d) => d.form === "block");
     expect(block?.keyword).toBe("preset");
-    expect(block?.region.complexity).toBe(80);
+    expect(block?.region.complexity).toBe(25);
     const inner = directives.find((d) => d.keyword === "skip");
     const outer = block as NonNullable<typeof block>;
     expect(
@@ -191,7 +191,7 @@ describe("parseDirectivePayload — the documented dotted vocabulary", () => {
     expect(parseDirectivePayload("preset=extreme")).toMatchObject({
       keyword: "preset",
       tier: "amplifying",
-      delta: { complexity: 80, strings: { encode: true } },
+      delta: { complexity: 25, strings: { encode: true } },
     });
     expect(parseDirectivePayload("preset=minify").delta).toEqual({
       complexity: 0,

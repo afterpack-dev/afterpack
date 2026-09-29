@@ -208,11 +208,11 @@ describe("afterpackVite preset bundle vs numeric complexity", () => {
     }));
   });
 
-  it("zero-config ships complexity 2 with no preset and leaves strings.encode to the engine", async () => {
+  it("zero-config ships the light preset with no complexity and leaves strings.encode to the engine", async () => {
     await runPlugin({});
     const cfg = sharedConfig();
-    expect(cfg.preset).toBeUndefined();
-    expect(cfg.complexity).toBe(2);
+    expect(cfg.preset).toBe("light");
+    expect(cfg.complexity).toBeUndefined();
     expect(cfg.strings).toBeUndefined();
   });
 

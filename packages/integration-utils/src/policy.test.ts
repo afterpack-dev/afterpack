@@ -205,10 +205,11 @@ describe("buildEngineConfig", () => {
 describe("buildEngineConfig — preset bundle vs numeric complexity target", () => {
   const policy = resolveReportPolicy({}, {});
 
-  it("no preset and no complexity -> LIGHT (target 2.0 + string floor ON)", () => {
+  it("no preset and no complexity -> the light preset rides as `preset`, no target", () => {
     expect(DEFAULT_PRESET).toBe("light");
     const cfg = buildEngineConfig({ policy, seed: 1 });
-    expect(target(cfg)).toBe(2);
+    expect(cfg.preset).toBe("light");
+    expect(target(cfg)).toBeUndefined();
   });
 
   it('preset "minify" -> minify-only: no target on the wire', () => {
@@ -245,24 +246,24 @@ describe("buildEngineConfig — preset bundle vs numeric complexity target", () 
 
   it("presets map to the same targets as the engine's Preset ladder", () => {
     expect(presetTarget("minify")).toBe(0);
-    expect(presetTarget("light")).toBe(2);
-    expect(presetTarget("medium")).toBe(8);
-    expect(presetTarget("hard")).toBe(25);
-    expect(presetTarget("extreme")).toBe(80);
+    expect(presetTarget("light")).toBe(5);
+    expect(presetTarget("medium")).toBe(7);
+    expect(presetTarget("hard")).toBe(12);
+    expect(presetTarget("extreme")).toBe(25);
   });
 
   it("resolves an explicit target over the preset ladder over the light default", () => {
-    expect(effectiveComplexityTarget(undefined, undefined)).toBe(2);
-    expect(effectiveComplexityTarget("hard", undefined)).toBe(25);
+    expect(effectiveComplexityTarget(undefined, undefined)).toBe(5);
+    expect(effectiveComplexityTarget("hard", undefined)).toBe(12);
     expect(effectiveComplexityTarget("hard", 40)).toBe(40);
     expect(effectiveComplexityTarget("extreme", 0)).toBe(0);
   });
 
-  it("the LIGHT default rides through to the engine config object", () => {
+  it("the LIGHT default rides through to the engine config object as the preset", () => {
     const cfg = buildEngineConfig({ policy, seed: 3 });
-    expect(cfg.complexity).toBe(2);
+    expect(cfg.preset).toBe("light");
+    expect(cfg.complexity).toBeUndefined();
     expect(cfg.strings).toBeUndefined();
-    expect(cfg.preset).toBeUndefined();
   });
 
   it("lets an explicitly-configured complexity beat the preset's", () => {
