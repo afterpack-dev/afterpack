@@ -169,6 +169,9 @@ interface PmFileEntry {
   spotlights?: PmSpotlight[];
   renamedSpans?: [number, number][];
   extractedSpans?: number[];
+  complexitySpans?: number[];
+  declarationKinds?: string[];
+  declarationSpans?: number[];
   aggregate?: unknown;
   [k: string]: unknown;
 }
@@ -299,6 +302,106 @@ function spanKey(start: number, end: number, kind: number): number | string {
   return `${start},${end},${kind}`;
 }
 
+function sortTriples(flat: number[]): number[] {
+  const count = (flat.length / 3) | 0;
+  const order = new Uint32Array(count);
+  for (let i = 0; i < count; i++) order[i] = i;
+  order.sort((x, y) => {
+    const a = x * 3;
+    const b = y * 3;
+    return flat[a] - flat[b] || flat[a + 1] - flat[b + 1] || flat[a + 2] - flat[b + 2];
+  });
+  const out: number[] = new Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    out[i * 3] = flat[order[i] * 3];
+    out[i * 3 + 1] = flat[order[i] * 3 + 1];
+    out[i * 3 + 2] = flat[order[i] * 3 + 2];
+  }
+  return out;
+}
+
+function mergeComplexitySpans(entries: PmFileEntry[]): number[] {
+  const lowest = new Map<number | string, [number, number, number]>();
+  for (const e of entries) {
+    const flat = e.complexitySpans ?? [];
+    for (let i = 0; i + 2 < flat.length; i += 3) {
+      const key = spanKey(flat[i], flat[i + 1], 0);
+      const seen = lowest.get(key);
+      if (!seen) lowest.set(key, [flat[i], flat[i + 1], flat[i + 2]]);
+      else if (flat[i + 2] < seen[2]) seen[2] = flat[i + 2];
+    }
+  }
+  return sortTriples([...lowest.values()].flat());
+}
+
+function mergeKindOrder(tables: string[][]): string[] {
+  const next = new Map<string, Set<string>>();
+  const inDegree = new Map<string, number>();
+  for (const t of tables) {
+    for (const name of t) {
+      if (!next.has(name)) {
+        next.set(name, new Set());
+        inDegree.set(name, 0);
+      }
+    }
+  }
+  for (const t of tables) {
+    for (let i = 1; i < t.length; i++) {
+      const after = next.get(t[i - 1]) as Set<string>;
+      if (t[i] === t[i - 1] || after.has(t[i])) continue;
+      after.add(t[i]);
+      inDegree.set(t[i], (inDegree.get(t[i]) ?? 0) + 1);
+    }
+  }
+  const order: string[] = [];
+  const ready = [...next.keys()].filter((n) => inDegree.get(n) === 0).sort();
+  while (ready.length) {
+    const name = ready.shift() as string;
+    order.push(name);
+    for (const m of next.get(name) as Set<string>) {
+      const d = (inDegree.get(m) ?? 0) - 1;
+      inDegree.set(m, d);
+      if (d === 0) {
+        ready.push(m);
+        ready.sort();
+      }
+    }
+  }
+  for (const name of [...next.keys()].sort()) if (!order.includes(name)) order.push(name);
+  return order;
+}
+
+function mergeDeclarationLane(entries: PmFileEntry[]): {
+  declarationKinds: string[];
+  declarationSpans: number[];
+} {
+  const tables = entries.map((e) =>
+    Array.isArray(e.declarationKinds)
+      ? e.declarationKinds.filter((k): k is string => typeof k === "string")
+      : [],
+  );
+  const order = mergeKindOrder(tables);
+  const rank = new Map(order.map((name, i) => [name, i]));
+  const seen = new Set<number | string>();
+  const flat: number[] = [];
+  for (const e of entries) {
+    const kinds = Array.isArray(e.declarationKinds) ? e.declarationKinds : [];
+    const spans = e.declarationSpans ?? [];
+    for (let i = 0; i + 2 < spans.length; i += 3) {
+      const k = rank.get(kinds[spans[i + 2]]);
+      if (k === undefined) continue;
+      const key = spanKey(spans[i], spans[i + 1], k);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      flat.push(spans[i], spans[i + 1], k);
+    }
+  }
+  const used = [...new Set(flat.filter((_, i) => i % 3 === 2))].sort((a, b) => a - b);
+  const compact = new Map(used.map((k, i) => [k, i]));
+  for (let i = 2; i < flat.length; i += 3) flat[i] = compact.get(flat[i]) as number;
+  return { declarationKinds: used.map((k) => order[k]), declarationSpans: sortTriples(flat) };
+}
+
 function mergeEntries(entries: PmFileEntry[], path: string): PmFileEntry {
   const regions: PmRegion[] = [];
   const seenRegion = new Set<string>();
@@ -352,25 +455,7 @@ function mergeEntries(entries: PmFileEntry[], path: string): PmFileEntry {
   renamedSpans.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
 
   const extractedCount = (extractedFlat.length / 3) | 0;
-  const order = new Uint32Array(extractedCount);
-  for (let i = 0; i < extractedCount; i++) order[i] = i;
-  order.sort((x, y) => {
-    const a = x * 3;
-    const b = y * 3;
-    return (
-      extractedFlat[a] - extractedFlat[b] ||
-      extractedFlat[a + 1] - extractedFlat[b + 1] ||
-      extractedFlat[a + 2] - extractedFlat[b + 2]
-    );
-  });
-  const extractedSpans: number[] = new Array(extractedCount * 3);
-  for (let i = 0; i < extractedCount; i++) {
-    const from = order[i] * 3;
-    const to = i * 3;
-    extractedSpans[to] = extractedFlat[from];
-    extractedSpans[to + 1] = extractedFlat[from + 1];
-    extractedSpans[to + 2] = extractedFlat[from + 2];
-  }
+  const extractedSpans = sortTriples(extractedFlat);
 
   regions.sort((a, b) => {
     const er = (b.entropyRaw ?? 0) - (a.entropyRaw ?? 0);
@@ -421,6 +506,12 @@ function mergeEntries(entries: PmFileEntry[], path: string): PmFileEntry {
     spotlights,
     renamedSpans,
     extractedSpans,
+    ...(entries.some((e) => Array.isArray(e.complexitySpans))
+      ? { complexitySpans: mergeComplexitySpans(entries) }
+      : {}),
+    ...(entries.some((e) => Array.isArray(e.declarationSpans))
+      ? mergeDeclarationLane(entries)
+      : {}),
     aggregate: computeAggregate(
       regions,
       spotlights,

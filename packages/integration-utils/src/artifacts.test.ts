@@ -20,6 +20,9 @@ const { decodeCompact } = (await import(
   new URL("../../protection-map/codec.mjs", import.meta.url).href
 )) as { decodeCompact: (compact: unknown) => unknown };
 
+const LANE_FREE_MERGE =
+  '[{"file":{"path":"app/shared.tsx","sourceOrigin":"original","vendor":false,"originalSource":"const total = price * qty;\\nexport const label = total + 1;\\n","inputSize":57,"bundledInputSize":80,"outputSize":160,"outputSizeEstimated":true,"inflationRatio":2},"regions":[{"span":[14,19],"reversalClass":"flattened-fused","score":60,"entropy":0.6,"entropyRaw":6,"transformCount":1,"sizeDeltaEst":3,"perf":{"costClass":"none","decodeOps":0,"callFrames":0},"lineage":[{"transform":"ScopeDeepen"}]},{"span":[6,11],"reversalClass":"renamed-encoded","score":40,"entropy":0.4,"entropyRaw":4,"transformCount":1,"sizeDeltaEst":3,"perf":{"costClass":"none","decodeOps":0,"callFrames":0},"lineage":[{"transform":"ScopeDeepen"}]},{"span":[33,38],"reversalClass":"renamed-encoded","score":20,"entropy":0.2,"entropyRaw":2,"transformCount":1,"sizeDeltaEst":3,"perf":{"costClass":"none","decodeOps":0,"callFrames":0},"lineage":[{"transform":"ScopeDeepen"}]}],"spotlights":[{"span":[44,45],"severity":"leak","sample":"x","reason":"r"}],"renamedSpans":[[6,11],[14,19],[33,38]],"extractedSpans":[14,19,0,22,25,1],"aggregate":{"avgEntropy":0.4,"maxEntropy":0.6,"minEntropy":0.2,"totalTransforms":3,"renamedCount":3,"extractedCount":2,"weakRegions":1,"leakCount":1,"perfCostTotal":{"decodeOps":0,"callFrames":0},"sizeDeltaEstTotal":9,"classSummary":{"preserved":0,"renamed-encoded":2,"flattened-fused":1,"destroyed-fused":0,"maxClassReached":"flattened-fused"},"directives":[{"keyword":"skip","span":[0,5]}]}}]';
+
 let dir: string;
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "afterpack-artifacts-test-"));
@@ -188,6 +191,49 @@ describe("writeCombinedProtectionMap — directory / framework build", () => {
     const html = readFileSync(out as string, "utf8");
     assertSelfContained(html);
     expect(embeddedPaths(html)).toEqual(["a/main.js", "b/page.js"]);
+  });
+
+  it("carries both lanes of a file split across chunks into the rendered page", () => {
+    const policy = resolveReportPolicy({}, {}, { hasBundlerSourcemap: true });
+    const chunkDoc = (complexitySpans: number[], kinds: string[], spans: number[]) =>
+      ({
+        schemaVersion: 4,
+        spanUnits: "utf16",
+        engine: { version: "0.1.1", preset: "medium" },
+        files: [
+          {
+            file: {
+              path: "webpack://_N_E/./app/shared.tsx",
+              sourceOrigin: "original",
+              originalSource: "var total = 1;\n",
+              inputSize: 15,
+            },
+            regions: [],
+            spotlights: [],
+            renamedSpans: [[4, 9]],
+            extractedSpans: [],
+            complexitySpans,
+            declarationKinds: kinds,
+            declarationSpans: spans,
+            aggregate: { classSummary: {} },
+          },
+        ],
+      }) as unknown as ProtectionMap;
+    const out = writeCombinedProtectionMap({
+      buildDir: dir,
+      docs: [
+        chunkDoc([4, 9, 7, 12, 13, 3], ["LowerVarToLet"], [4, 9, 0]),
+        chunkDoc([4, 9, 5], ["LowerVarToLet", "DeclarationChaining"], [4, 9, 1]),
+      ],
+      policy,
+      afterpackDir: join(dir, ".afterpack"),
+    });
+    const [page] = embeddedData(readFileSync(out as string, "utf8")).files as Array<
+      Record<string, unknown>
+    >;
+    expect(page.complexitySpans).toEqual([4, 9, 5, 12, 13, 3]);
+    expect(page.declarationKinds).toEqual(["LowerVarToLet", "DeclarationChaining"]);
+    expect(page.declarationSpans).toEqual([4, 9, 0, 4, 9, 1]);
   });
 
   it("returns null when PM is disabled or there are no docs", () => {
@@ -510,6 +556,121 @@ describe("buildProjectFileTree — project-source tree normalization", () => {
       if (out[i] === 7 && out[i + 1] === 9) kindsAt79.push(out[i + 2]);
     }
     expect(kindsAt79).toEqual([0, 1]);
+  });
+
+  function permutations<T>(items: T[]): T[][] {
+    if (items.length <= 1) return [items];
+    return items.flatMap((x, i) =>
+      permutations([...items.slice(0, i), ...items.slice(i + 1)]).map((rest) => [x, ...rest]),
+    );
+  }
+
+  function laneChunk(lanes: Record<string, unknown>): Record<string, unknown> {
+    return { ...original("webpack://_N_E/./app/heat.tsx", "SRC", [], []), ...lanes };
+  }
+
+  it("merges the complexity lane: a shared token keeps its weakest copy, nested tokens all stay, chunk order never matters", () => {
+    const chunks = [
+      laneChunk({ complexitySpans: [0, 10, 8, 0, 3, 12, 20, 25, 5] }),
+      laneChunk({ complexitySpans: [0, 10, 6, 4, 7, 9, 20, 25, 7] }),
+      laneChunk({ complexitySpans: [0, 3, 15, 30, 31, 2] }),
+    ];
+    const outputs = permutations(chunks).map((p) => JSON.stringify(buildProjectFileTree(p)));
+    expect(new Set(outputs).size).toBe(1);
+    const [page] = buildProjectFileTree(chunks);
+    expect(page.complexitySpans).toEqual([0, 3, 12, 0, 10, 6, 4, 7, 9, 20, 25, 5, 30, 31, 2]);
+  });
+
+  it("merges the declaration lane into one kind table in pipeline order, re-indexed, deduped and sorted", () => {
+    const chunks = [
+      laneChunk({
+        declarationKinds: ["LowerVarToLet", "DeclarationChaining"],
+        declarationSpans: [6, 11, 0, 6, 11, 1, 30, 33, 0],
+      }),
+      laneChunk({
+        declarationKinds: ["LowerFunctionDeclToArrow", "DeclarationChaining"],
+        declarationSpans: [14, 19, 0, 6, 11, 1],
+      }),
+      laneChunk({
+        declarationKinds: ["LowerVarToLet", "LowerFunctionDeclToArrow"],
+        declarationSpans: [40, 44, 1, 30, 33, 0],
+      }),
+      laneChunk({ declarationKinds: ["UnusedBindingElimination"], declarationSpans: [] }),
+    ];
+    const outputs = permutations(chunks).map((p) => JSON.stringify(buildProjectFileTree(p)));
+    expect(new Set(outputs).size).toBe(1);
+    const [page] = buildProjectFileTree(chunks);
+    expect(page.declarationKinds).toEqual([
+      "LowerVarToLet",
+      "LowerFunctionDeclToArrow",
+      "DeclarationChaining",
+    ]);
+    expect(page.declarationSpans).toEqual([6, 11, 0, 6, 11, 2, 14, 19, 1, 30, 33, 0, 40, 44, 1]);
+
+    const [empty] = buildProjectFileTree([
+      laneChunk({ complexitySpans: [], declarationKinds: [], declarationSpans: [] }),
+    ]);
+    expect(empty.complexitySpans).toEqual([]);
+    expect(empty.declarationKinds).toEqual([]);
+    expect(empty.declarationSpans).toEqual([]);
+  });
+
+  it("merges maps from an engine without the new lanes byte-for-byte as before", () => {
+    const entry = (
+      outputSize: number,
+      regions: Record<string, unknown>[],
+      renamedSpans: [number, number][],
+      extractedSpans: number[],
+    ) => ({
+      file: {
+        path: "webpack://_N_E/./app/shared.tsx",
+        sourceOrigin: "original",
+        vendor: false,
+        originalSource: "const total = price * qty;\nexport const label = total + 1;\n",
+        inputSize: 57,
+        bundledInputSize: 40,
+        outputSize,
+        outputSizeEstimated: true,
+      },
+      regions,
+      spotlights: [{ span: [44, 45], severity: "leak", sample: "x", reason: "r" }],
+      renamedSpans,
+      extractedSpans,
+      aggregate: { classSummary: {}, directives: [{ keyword: "skip", span: [0, 5] }] },
+    });
+    const scored = (span: [number, number], entropyRaw: number, reversalClass: string) => ({
+      span,
+      reversalClass,
+      score: entropyRaw * 10,
+      entropy: entropyRaw / 10,
+      entropyRaw,
+      transformCount: 1,
+      sizeDeltaEst: 3,
+      perf: { costClass: "none", decodeOps: 0, callFrames: 0 },
+      lineage: [{ transform: "ScopeDeepen" }],
+    });
+    const chunks = [
+      entry(
+        90,
+        [scored([6, 11], 4, "renamed-encoded"), scored([14, 19], 6, "flattened-fused")],
+        [
+          [6, 11],
+          [14, 19],
+        ],
+        [14, 19, 0],
+      ),
+      entry(
+        70,
+        [scored([6, 11], 4, "renamed-encoded"), scored([33, 38], 2, "renamed-encoded")],
+        [
+          [33, 38],
+          [6, 11],
+        ],
+        [22, 25, 1, 14, 19, 0],
+      ),
+    ];
+    expect(JSON.stringify(buildProjectFileTree(chunks))).toBe(LANE_FREE_MERGE);
+    expect(JSON.stringify(buildProjectFileTree([chunks[1], chunks[0]]))).toBe(LANE_FREE_MERGE);
   });
 
   it("keeps same-path/different-source entries separate, suffix-disambiguated + flagged", () => {
