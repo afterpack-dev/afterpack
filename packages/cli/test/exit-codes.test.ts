@@ -12,6 +12,7 @@ import {
   engineCalls,
   processBatch,
 } from "../../../test/core-fake.js";
+import { MIN_CORE_VERSION } from "../../integration-utils/src/compat.js";
 import { HELP_ALL } from "../src/args.js";
 import { EXIT_CODE_HELP } from "../src/exit.js";
 import { run } from "../src/run.js";
@@ -29,6 +30,9 @@ const logger = {
 };
 
 const QUIET = ["--protectionMap.enabled=false", "--telemetry.enabled=false"];
+
+const [FLOOR_MAJOR, FLOOR_MINOR] = MIN_CORE_VERSION.split(".").map(Number);
+const SERVER_MINIMUM = `${FLOOR_MAJOR}.${FLOOR_MINOR + 1}.0`;
 
 function invoke(argv: string[], env: Record<string, string | undefined> = {}): Promise<number> {
   return run({
@@ -134,8 +138,8 @@ describe("the exit-code contract", () => {
     __setBatchError(
       cloudRefusal("AFTERPACK_CLOUD_UPGRADE_REQUIRED", {
         apiCode: "DIAG_CLIENT_UPGRADE_REQUIRED",
-        message: "clients below 0.3.0 are no longer served",
-        details: { minVersion: "0.3.0" },
+        message: `clients below ${SERVER_MINIMUM} are no longer served`,
+        details: { minVersion: SERVER_MINIMUM },
         notices: [
           {
             severity: "warning",
@@ -154,22 +158,24 @@ describe("the exit-code contract", () => {
       version: "0.1.0",
       env: {},
       stdout: { isTTY: false, write: () => {} },
-      client: { packageName: "afterpack", packageVersion: "0.1.0", coreVersion: "0.2.0" },
+      client: { packageName: "afterpack", packageVersion: "0.1.0", coreVersion: MIN_CORE_VERSION },
     });
     expect(code).toBe(6);
     const text = [...err, ...warn, ...out].join("\n");
     expect(text).toContain(
       "This version of AfterPack is no longer supported by the AfterPack cloud.",
     );
-    expect(text).toContain("Installed @afterpack/core 0.2.0 · required 0.3.0 or newer");
-    expect(text).toContain("clients below 0.3.0 are no longer served");
+    expect(text).toContain(
+      `Installed @afterpack/core ${MIN_CORE_VERSION} · required ${SERVER_MINIMUM} or newer`,
+    );
+    expect(text).toContain(`clients below ${SERVER_MINIMUM} are no longer served`);
     expect(text).toContain("Update, then build again:");
-    expect(text).toContain("$ npm install afterpack@latest @afterpack/core@0.3.0");
+    expect(text).toContain(`$ npm install afterpack@latest @afterpack/core@${SERVER_MINIMUM}`);
     expect(text).toContain("or, without a local install: npx afterpack@latest");
     expect(text).toContain("https://www.afterpack.dev/docs/upgrade");
     expect(text).not.toContain("--paths.exclude");
     const fixOccurrences =
-      text.split("npm install afterpack@latest @afterpack/core@0.3.0").length - 1;
+      text.split(`npm install afterpack@latest @afterpack/core@${SERVER_MINIMUM}`).length - 1;
     expect(fixOccurrences).toBe(1);
     expect(readFileSync(join(buildDir, "app.js"), "utf8")).toBe("export const a = 1;");
   });
