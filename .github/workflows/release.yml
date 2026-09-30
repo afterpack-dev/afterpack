@@ -3,99 +3,138 @@ name: Release
 # The one workflow that publishes the CLI and the plugins to npm, so each
 # package needs a single trusted publisher. Every package carries one version.
 #
-#  * Release lane: a push to main publishes a new patch of every package to
-#    `latest`, but only when a file that ships in a package's npm tarball
-#    changed, and only while the repo variable AUTO_RELEASE is `true`. A
-#    manual run with lane=release always publishes one, with the bump it
-#    names (patch, minor or major).
-#  * RC lane: a manual run with lane=rc publishes the next patch as a
-#    timestamp release candidate under the `rc` dist-tag, installable as
-#    `npx afterpack@rc`, without moving `latest`.
-#  * Promote lane: a manual run with lane=promote and an rc_version
-#    republishes that RC's tree as the clean version under `latest`.
-#  * `repository_dispatch` type `core-published` reacts to a stable engine
-#    release by bumping the `@afterpack/core` pin across every package, then
-#    runs the release lane.
+# One lane, straight to `latest`: decide the version, run every gate on the
+# commit, publish, then verify what npm serves on Linux, macOS and Windows.
 #
-# Every publish waits for approval on the `npm` environment. The version is
-# stamped at publish time and never committed: the root package.json version
-# is a floor, and the next version is one bump above the higher of the last
-# vX.Y.Z tag and the npm `latest` of `afterpack`.
+#  * `repository_dispatch` type `core-published`, sent by the Publish engine
+#    workflow once npmjs serves a stable engine, first repins
+#    @afterpack/core across every package. A new release line (a minor under
+#    major 0) also raises every package version and MIN_CORE_VERSION to it.
+#    The bump waits until npmjs serves the engine, writes the lockfile
+#    against npmjs, runs the gates, pushes to main and releases that commit.
+#  * A manual run releases the commit it runs on, with the bump it names.
+#
+# Nothing is released when no package ships a change against its npm
+# `latest`. The version is decided once per run and the publish skips every
+# package npmjs already holds at that version, so re-running a failed job
+# resumes the release. The version is stamped at publish time and never
+# committed: the root package.json version is a floor, and the next version
+# is one bump above the higher of the last vX.Y.Z tag and the npm `latest`
+# of `afterpack`. The human approval for a production ship is the Approve
+# workflow; the `npm` environment only binds the trusted publishers, so
+# rename neither this file nor that environment.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
-      lane:
-        description: "release publishes to latest; rc publishes a release candidate; promote moves rc_version to latest"
-        required: true
-        default: rc
-        type: choice
-        options: [release, rc, promote]
       bump:
-        description: "Release and rc lanes: the part of the version to raise"
-        required: false
+        description: "The part of the version to raise"
+        required: true
         default: patch
         type: choice
         options: [patch, minor, major]
-      rc_version:
-        description: "Promote lane only: the release candidate to promote, e.g. 0.1.0-rc.20260908T1530"
-        required: false
-        type: string
   repository_dispatch:
     types: [core-published]
 
 run-name: >-
-  ${{ github.event_name == 'repository_dispatch' && format('Bump engine to {0}', github.event.client_payload.version)
-  || github.event_name == 'push' && 'Release on a shipped change'
-  || inputs.lane == 'promote' && format('Promote {0}', inputs.rc_version)
-  || inputs.lane == 'release' && format('Release ({0})', inputs.bump)
-  || 'Release candidate' }}
+  ${{ github.event_name == 'repository_dispatch' && format('Bump engine to {0} and release', github.event.client_payload.version)
+  || format('Release ({0})', inputs.bump) }}
 
-# Releases to `latest` run one at a time. A push while AUTO_RELEASE is off
-# gets a group of its own, so it never displaces a queued release.
 concurrency:
-  group: >-
-    ${{ github.workflow }}-${{ github.event_name == 'repository_dispatch' && 'bump'
-    || github.event_name == 'push' && (vars.AUTO_RELEASE == 'true' && 'latest' || github.run_id)
-    || inputs.lane == 'promote' && 'promote'
-    || inputs.lane == 'release' && 'latest'
-    || 'rc' }}
+  group: ${{ github.workflow }}
   cancel-in-progress: false
 
 permissions:
-  contents: write
-  id-token: write
+  contents: read
 
+# A job skipped upstream (bump-engine on a manual run) would skip every job
+# below it through the implicit success(), so each gate names the results it
+# depends on instead.
 jobs:
-  plan:
-    name: Decide what to release
-    if: >-
-      (github.event_name == 'push' && vars.AUTO_RELEASE == 'true')
-      || (github.event_name == 'workflow_dispatch' && (inputs.lane == 'release' || inputs.lane == 'rc'))
+  bump-engine:
+    name: Bump the engine pin
+    if: github.event_name == 'repository_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 75
     permissions:
-      contents: read
+      contents: write
     outputs:
-      lane: ${{ steps.lane.outputs.lane }}
-      bump: ${{ steps.lane.outputs.bump }}
+      sha: ${{ steps.push.outputs.sha }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
 
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-        if: github.event_name == 'push'
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        if: github.event_name == 'push'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - name: Repin @afterpack/core across every package
+        id: bump
+        env:
+          ENGINE_VERSION: ${{ github.event.client_payload.version }}
+        run: node scripts/bump-engine.mjs "$ENGINE_VERSION"
+
+      # A lockfile resolved before npmjs serves the engine fails to install.
+      - name: Wait until npmjs serves the engine
+        if: steps.bump.outputs.changed == 'true'
+        env:
+          ENGINE_VERSION: ${{ steps.bump.outputs.version }}
+        run: node scripts/npm-release.mjs wait --version "$ENGINE_VERSION"
+
+      - name: Write the lockfile against npmjs and run the gates
+        if: steps.bump.outputs.changed == 'true'
+        run: |
+          pnpm install --no-frozen-lockfile
+          pnpm hygiene
+          pnpm check:comments
+          pnpm lint
+          pnpm build
+          pnpm typecheck
+          pnpm test
+
+      - name: Commit and push
+        id: push
+        env:
+          CHANGED: ${{ steps.bump.outputs.changed }}
+          ENGINE_VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "$CHANGED" = "true" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add package.json packages/*/package.json packages/integration-utils/src/compat.ts pnpm-lock.yaml
+            git commit -m "chore(deps): bump @afterpack/core to $ENGINE_VERSION"
+            git push origin HEAD:main
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  version:
+    name: Decide the version
+    needs: bump-engine
+    if: ${{ !cancelled() && (needs.bump-engine.result == 'success' || needs.bump-engine.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.plan.outputs.release }}
+      version: ${{ steps.plan.outputs.version }}
+      sha: ${{ steps.plan.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.bump-engine.outputs.sha || github.sha }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
 
       - name: Install dependencies
-        if: github.event_name == 'push'
         run: pnpm install --frozen-lockfile
 
       - name: Build
-        if: github.event_name == 'push'
         run: pnpm build
 
       # Packs every package from this commit and compares each tarball with
@@ -103,50 +142,43 @@ jobs:
       # would install counts: tests, fixtures and CI never reach a tarball.
       - name: Compare every package with its npm latest
         id: shipped
-        if: github.event_name == 'push'
         run: node scripts/release-plan.mjs changed
 
-      - name: Choose the lane
-        id: lane
+      - name: Compute the version
+        id: plan
         env:
-          EVENT: ${{ github.event_name }}
           SHIPPED: ${{ steps.shipped.outputs.changed }}
           PACKAGES: ${{ steps.shipped.outputs.packages }}
-          INPUT_LANE: ${{ inputs.lane }}
-          INPUT_BUMP: ${{ inputs.bump }}
+          BUMP: ${{ inputs.bump || 'patch' }}
         run: |
-          if [ "$EVENT" = "push" ]; then
-            if [ "$SHIPPED" = "true" ]; then LANE="release"; else LANE="none"; fi
-            BUMP="patch"
-          else
-            LANE="$INPUT_LANE"
-            BUMP="${INPUT_BUMP:-patch}"
+          set -euo pipefail
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          if [ "$SHIPPED" != "true" ]; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "No package ships a change against its npm \`latest\`; nothing to release." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
-          echo "lane=$LANE" >> "$GITHUB_OUTPUT"
-          echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
+          VERSION=$(node scripts/release-plan.mjs version --bump "$BUMP")
           {
-            if [ "$LANE" = "none" ]; then
-              echo "No shipped file changed since the npm \`latest\`; nothing to release."
-            elif [ "$EVENT" = "push" ]; then
-              echo "Shipped change in: \`$PACKAGES\`. Releasing a new patch of every package."
-            else
-              echo "Lane \`$LANE\`, bump \`$BUMP\`."
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
+            echo "release=true"
+            echo "version=$VERSION"
+          } >> "$GITHUB_OUTPUT"
+          echo "Releasing \`$VERSION\` of every package (\`$BUMP\`); shipped change in \`$PACKAGES\`." >> "$GITHUB_STEP_SUMMARY"
 
   checks:
     name: Hygiene, lint, build, typecheck, test
-    needs: plan
-    if: needs.plan.outputs.lane == 'release' || needs.plan.outputs.lane == 'rc'
+    needs: version
+    if: ${{ !cancelled() && needs.version.result == 'success' && needs.version.outputs.release == 'true' }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+          persist-credentials: false
 
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
 
@@ -173,18 +205,19 @@ jobs:
 
   e2e:
     name: End-to-end (Playwright, full suite)
-    needs: plan
-    if: needs.plan.outputs.lane == 'release' || needs.plan.outputs.lane == 'rc'
+    needs: version
+    if: ${{ !cancelled() && needs.version.result == 'success' && needs.version.outputs.release == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    permissions:
-      contents: read
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+          persist-credentials: false
 
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
 
@@ -205,7 +238,7 @@ jobs:
 
       - name: Upload the Playwright report
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: playwright-report
           path: |
@@ -216,21 +249,22 @@ jobs:
 
   pro-path:
     name: Pro cloud path (staging)
-    needs: plan
-    if: needs.plan.outputs.lane == 'release' || needs.plan.outputs.lane == 'rc'
+    needs: version
+    if: ${{ !cancelled() && needs.version.result == 'success' && needs.version.outputs.release == 'true' }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     # The key lives in an environment, so it reaches this job and nothing else.
     # A pull request from a fork is never given secrets at all, which is why
     # this check is here and not in the contributor lane.
     environment: staging-pro
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+          persist-credentials: false
 
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
 
@@ -287,139 +321,35 @@ jobs:
           fi
 
   publish:
-    name: Publish ${{ needs.plan.outputs.lane == 'rc' && 'a release candidate' || 'a release' }}
-    needs: [plan, checks, e2e, pro-path]
+    name: Publish ${{ needs.version.outputs.version }} to latest
+    needs: [version, checks, e2e, pro-path]
+    if: >-
+      ${{ !cancelled() && needs.version.outputs.release == 'true'
+      && needs.checks.result == 'success' && needs.e2e.result == 'success'
+      && needs.pro-path.result == 'success' }}
     runs-on: ubuntu-latest
     environment: npm
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      dist_tag: ${{ steps.version.outputs.dist_tag }}
+    timeout-minutes: 75
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      SHA: ${{ needs.version.outputs.sha }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.version.outputs.sha }}
 
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
-          registry-url: ${{ vars.NPM_TRUSTED_PUBLISHING != 'true' && 'https://registry.npmjs.org' || '' }}
 
-      # Trusted publishing needs npm 11.5.1 or newer; pnpm publish runs this npm.
+      # Trusted publishing needs npm 11.5.1 or newer.
       - name: Update npm
         run: npm install -g npm@^11.5.1
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # Computed after the approval, so a release that waited reads the tags
-      # and the npm `latest` as they are now.
-      - name: Compute the version
-        id: version
-        env:
-          LANE: ${{ needs.plan.outputs.lane }}
-          BUMP: ${{ needs.plan.outputs.bump }}
-        run: |
-          set -euo pipefail
-          if [ "$LANE" = "rc" ]; then
-            VERSION=$(node scripts/release-plan.mjs version --bump "$BUMP" --rc)
-            DIST_TAG=rc
-            GIT_TAG="rc-$VERSION"
-          else
-            VERSION=$(node scripts/release-plan.mjs version --bump "$BUMP")
-            DIST_TAG=latest
-            GIT_TAG="v$VERSION"
-          fi
-          {
-            echo "VERSION=$VERSION"
-            echo "DIST_TAG=$DIST_TAG"
-            echo "GIT_TAG=$GIT_TAG"
-          } >> "$GITHUB_ENV"
-          {
-            echo "version=$VERSION"
-            echo "dist_tag=$DIST_TAG"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Set the version across every package
-        run: pnpm version:set --version "$VERSION"
-
-      - name: Build
-        run: pnpm build
-
-      # `pnpm -r publish` skips every package marked private, so the workspace
-      # root is never published.
-      - name: Publish to the ${{ steps.version.outputs.dist_tag }} dist-tag
-        run: pnpm -r publish --tag "$DIST_TAG" --provenance --access public --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ vars.NPM_TRUSTED_PUBLISHING != 'true' && secrets.NPM_TOKEN || '' }}
-
-      # The tag names the SOURCE commit, not the version bump, which is never
-      # committed. The promote lane checks an rc- tag out and re-derives a
-      # clean version from it.
-      - name: Tag the source commit
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag "$GIT_TAG"
-          git push origin "$GIT_TAG"
-
-      - name: Summary
-        run: |
-          {
-            echo "Published \`$VERSION\` to the \`$DIST_TAG\` dist-tag and tagged \`$GIT_TAG\`."
-            echo ""
-            if [ "$DIST_TAG" = "rc" ]; then
-              echo "Try it: \`npx afterpack@rc --version\`"
-              echo "Promote it: run the Release workflow with \`lane: promote\` and \`rc_version: $VERSION\`."
-            else
-              echo "Try it: \`npx afterpack@latest --version\`"
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  promote:
-    name: Promote a release candidate to latest
-    if: github.event_name == 'workflow_dispatch' && inputs.lane == 'promote'
-    runs-on: ubuntu-latest
-    environment: npm
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-    steps:
-      - name: Require an rc_version
-        env:
-          RC: ${{ inputs.rc_version }}
-        run: |
-          if [ -z "$RC" ]; then
-            echo "::error::the promote lane needs rc_version"
-            exit 1
-          fi
-
-      # Promote-by-republish: the tree that publishes to `latest` is byte for
-      # byte the tree that was published as the RC, not a fresh build of main.
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          ref: rc-${{ inputs.rc_version }}
-
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: 22
-          registry-url: ${{ vars.NPM_TRUSTED_PUBLISHING != 'true' && 'https://registry.npmjs.org' || '' }}
-
-      # Trusted publishing needs npm 11.5.1 or newer; pnpm publish runs this npm.
-      - name: Update npm
-        run: npm install -g npm@^11.5.1
-
-      - name: Derive the stable version
-        id: version
-        run: |
-          RC="${{ inputs.rc_version }}"
-          VERSION="${RC%%-rc.*}"
-          if [ -z "$RC" ] || [ "$VERSION" = "$RC" ]; then
-            echo "::error::'$RC' is not a release-candidate version"
-            exit 1
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -429,26 +359,34 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Pack every package
+        run: node scripts/release-plan.mjs pack --into "$RUNNER_TEMP/release"
 
       - name: Publish to the latest dist-tag
-        run: pnpm -r publish --tag latest --provenance --access public --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ vars.NPM_TRUSTED_PUBLISHING != 'true' && secrets.NPM_TOKEN || '' }}
+        run: node scripts/npm-release.mjs publish --dir "$RUNNER_TEMP/release" --tag latest --provenance
 
-      - name: Tag the release
+      # The tag names the SOURCE commit, not the version bump, which is never
+      # committed. A re-run finds its own tag and moves on.
+      - name: Tag the source commit
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag "v$VERSION"
-          git push origin "v$VERSION"
+          set -euo pipefail
+          TAGGED=$(git ls-remote --tags origin "refs/tags/v$VERSION" | cut -f1)
+          if [ -z "$TAGGED" ]; then
+            git tag "v$VERSION" "$SHA"
+            git push origin "v$VERSION"
+          elif [ "$TAGGED" != "$SHA" ]; then
+            echo "::error::v$VERSION already names $TAGGED, not $SHA"
+            exit 1
+          fi
+
+      - name: Wait until npmjs serves every tarball
+        run: node scripts/npm-release.mjs wait --dir "$RUNNER_TEMP/release" --tag latest
 
   release:
     name: Create the GitHub Release
-    needs: [promote, publish]
-    if: >-
-      !cancelled()
-      && (needs.promote.result == 'success'
-      || (needs.publish.result == 'success' && needs.publish.outputs.dist_tag == 'latest'))
+    needs: [version, publish]
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -457,7 +395,7 @@ jobs:
       - name: Create the release if it does not exist yet
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.promote.outputs.version || needs.publish.outputs.version }}
+          VERSION: ${{ needs.version.outputs.version }}
           REPO: ${{ github.repository }}
         run: |
           if gh release view "v$VERSION" --repo "$REPO" >/dev/null 2>&1; then
@@ -467,120 +405,31 @@ jobs:
           gh release create "v$VERSION" --repo "$REPO" --title "v$VERSION" --generate-notes
 
   verify:
-    name: Verify the published release
-    needs: [promote, publish]
-    if: >-
-      !cancelled()
-      && (needs.promote.result == 'success'
-      || (needs.publish.result == 'success' && needs.publish.outputs.dist_tag == 'latest'))
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    name: Verify on ${{ matrix.os }}
+    needs: [version, publish]
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
     steps:
-      # A clean runner with nothing from this repository checked out: the only
-      # thing under test is what a user gets from npm.
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
 
-      # The registry takes minutes to serve a fresh publish everywhere, and
-      # afterpack pins its sibling packages exactly, so retry for up to 10 minutes.
-      - name: Install from npm and run it
+      # Installs the published CLI from npmjs into an empty project and runs
+      # it on the smoke fixtures with this OS's native engine binding.
+      - name: Install afterpack from npm and run it
         env:
-          WANT: ${{ needs.promote.outputs.version || needs.publish.outputs.version }}
-        run: |
-          for attempt in $(seq 1 20); do
-            INSTALLED=$(npx --yes --prefer-online afterpack@latest --version 2>/dev/null || true)
-            echo "attempt $attempt: afterpack@latest reports '$INSTALLED'"
-            if [ "$INSTALLED" = "$WANT" ]; then
-              exit 0
-            fi
-            sleep 30
-          done
-          echo "::error::expected $WANT, got '$INSTALLED' after 10 minutes"
-          exit 1
-
-  bump-engine:
-    name: Bump the engine pin
-    if: github.event_name == 'repository_dispatch'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      actions: write
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          ref: main
-
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: 22
-
-      # A breaking engine bump is a deliberate migration, never an automatic
-      # commit: it fails here so a human does it. Under major 0 a minor
-      # change is breaking, exactly like a major.
-      - name: Repin @afterpack/core across every package
-        run: |
-          NEXT="${{ github.event.client_payload.version }}"
-          NEXT="${NEXT#v}"
-          node - "$NEXT" <<'NODE'
-          const fs = require("node:fs");
-          const next = process.argv[2];
-          if (!/^\d+\.\d+\.\d+$/.test(next)) {
-            console.error(`::error::'${next}' is not a stable version`);
-            process.exit(1);
-          }
-          const breakingLine = (v) => {
-            const [major, minor] = v.split(".");
-            return major === "0" ? `0.${minor}` : major;
-          };
-          const nextLine = breakingLine(next);
-          let changed = 0;
-          for (const dir of fs.readdirSync("packages")) {
-            const file = `packages/${dir}/package.json`;
-            const pkg = JSON.parse(fs.readFileSync(file, "utf8"));
-            const current = pkg.dependencies?.["@afterpack/core"];
-            if (!current) continue;
-            const currentLine = breakingLine(current.replace(/^[~^]/, ""));
-            if (currentLine !== nextLine) {
-              console.error(`::error::${file} pins ${current}; ${next} is a breaking change`);
-              process.exit(1);
-            }
-            pkg.dependencies["@afterpack/core"] = `~${next}`;
-            fs.writeFileSync(file, `${JSON.stringify(pkg, null, 2)}\n`);
-            changed++;
-          }
-          console.log(`repinned ${changed} package(s) to ~${next}`);
-          NODE
-          echo "ENGINE_VERSION=$NEXT" >> "$GITHUB_ENV"
-
-      - name: Commit and push
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet; then
-            echo "::notice::already pinned to $ENGINE_VERSION"
-            exit 0
-          fi
-          pnpm install --lockfile-only
-          git add packages/*/package.json pnpm-lock.yaml
-          git commit -m "chore(deps): bump @afterpack/core to $ENGINE_VERSION"
-          git push origin main
-          echo "BUMPED=1" >> "$GITHUB_ENV"
-
-      # The new pin ships in every package.json, so it is a shipped change.
-      # A push made with GITHUB_TOKEN never triggers another workflow, so the
-      # release lane is dispatched explicitly; workflow_dispatch is the
-      # documented exception. It follows the same AUTO_RELEASE switch as a
-      # push to main.
-      - name: Release against the new engine
-        if: env.BUMPED == '1' && vars.AUTO_RELEASE == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh workflow run release.yml --ref main -f lane=release -f bump=patch
-
-      - name: Say how to release by hand
-        if: env.BUMPED == '1' && vars.AUTO_RELEASE != 'true'
-        run: echo "::notice::AUTO_RELEASE is off, so nothing was released. Run the Release workflow with lane=release."
+          VERSION: ${{ needs.version.outputs.version }}
+        run: node scripts/smoke.mjs release --version "$VERSION"

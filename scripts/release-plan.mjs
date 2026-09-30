@@ -85,7 +85,7 @@ function npmLatest(name) {
   return result.stdout.trim() || null;
 }
 
-function nextVersion(kind, rc) {
+function nextVersion(kind) {
   const floorRaw = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")).version;
   const floor = parseStable(floorRaw.split("-")[0]) ?? fail(`invalid root version ${floorRaw}`);
   const tag = lastReleaseTag();
@@ -95,13 +95,7 @@ function nextVersion(kind, rc) {
   console.error(
     `last tag v${tag.join(".")}, npm latest ${latest ? latest.join(".") : "none"}, floor ${floor.join(".")} -> ${next}`,
   );
-  if (!rc) return next;
-  const stamp = new Date()
-    .toISOString()
-    .replace(/[-:]/g, "")
-    .replace(/\.\d+Z$/, "")
-    .slice(0, 13);
-  return `${next}-rc.${stamp}`;
+  return next;
 }
 
 function extract(tarball, into) {
@@ -226,6 +220,16 @@ function shippedChanges() {
   return changed;
 }
 
+function packAll(into) {
+  fs.mkdirSync(into, { recursive: true });
+  const stale = fs.readdirSync(into).filter((f) => f.endsWith(".tgz"));
+  if (stale.length > 0) fail(`${into} already holds ${stale.join(", ")}`);
+  for (const { dir, pkg } of listPackages()) {
+    run("pnpm", ["pack", "--pack-destination", path.resolve(into)], { cwd: dir });
+    console.log(`packed ${pkg.name}@${pkg.version}`);
+  }
+}
+
 function output(key, value) {
   if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${value}\n`);
 }
@@ -244,8 +248,12 @@ if (command === "changed") {
   output("changed", changed.length ? "true" : "false");
   output("packages", changed.join(" "));
 } else if (command === "version") {
-  const version = nextVersion(flag("bump") ?? "patch", args.includes("--rc"));
+  const version = nextVersion(flag("bump") ?? "patch");
   console.log(version);
+} else if (command === "pack") {
+  packAll(flag("into") ?? fail("pack needs --into <dir>"));
 } else {
-  fail("usage: node scripts/release-plan.mjs changed | version [--bump patch|minor|major] [--rc]");
+  fail(
+    "usage: node scripts/release-plan.mjs changed | version [--bump patch|minor|major] | pack --into <dir>",
+  );
 }
