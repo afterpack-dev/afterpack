@@ -104,6 +104,7 @@ test.describe("electron-vite emits main, preload and renderer, full suite", () =
         LEGS,
       );
       expect(fromEnv).toBe(pinned);
+      runBuild(app);
     },
   );
 });

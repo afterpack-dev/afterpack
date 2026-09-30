@@ -45,6 +45,8 @@ export default defineConfig({
       name: browserName === "chromium" ? fixture.name : `${fixture.name}@${browserName}`,
       testMatch: `**/${fixture.relativeDir}/*.spec.ts`,
       grepInvert: browserName === "chromium" ? undefined : /@node/,
+      dependencies:
+        browserName !== "chromium" && browsers.includes("chromium") ? [fixture.name] : [],
       metadata: { fixture: fixture.name },
       use: { browserName, baseURL: fixture.baseURL ?? undefined },
     })),
