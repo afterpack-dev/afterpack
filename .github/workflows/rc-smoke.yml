@@ -1,0 +1,126 @@
+name: RC smoke
+
+# Installs one @afterpack/core build from the engine registry on every
+# platform it ships a native binding for, on this repository's free hosted
+# runners, and proves each binding on its real OS: it loads natively (not a
+# fallback), version() reports the version it was published as, every
+# fixture in scripts/smoke-fixtures at every preset and two seeds becomes
+# protected output that still runs the same in Node, and that output is
+# byte-identical on every platform. The linux-x64-gnu job computes the
+# reference hashes and every other job compares against them.
+#
+# The jobs only read the registry, with the read-only token of the `npm`
+# environment written to a job-scoped npmrc that is deleted after the
+# install. Nothing is uploaded. The run's conclusion is the verdict.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "The @afterpack/core version to smoke, e.g. 0.2.2-rc.202610011200"
+        required: true
+        type: string
+  repository_dispatch:
+    types: [rc-smoke]
+
+run-name: "RC smoke ${{ github.event.client_payload.version || inputs.version }}"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.client_payload.version || inputs.version }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  VERSION: ${{ github.event.client_payload.version || inputs.version }}
+  NODE_VERSION: 22.23.3
+  ALPINE_IMAGE: node:22.23.3-alpine3.24@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402
+
+jobs:
+  reference:
+    name: linux-x64-gnu (reference hashes)
+    runs-on: ubuntu-latest
+    environment: npm
+    timeout-minutes: 15
+    outputs:
+      manifest: ${{ steps.smoke.outputs.manifest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Smoke the native binding
+        id: smoke
+        env:
+          ENGINE_REGISTRY: ${{ secrets.ENGINE_REGISTRY }}
+          ENGINE_REGISTRY_TOKEN: ${{ secrets.ENGINE_REGISTRY_TOKEN }}
+        run: node scripts/smoke.mjs engine --version "$VERSION" --binding linux-x64-gnu
+
+  platform:
+    name: ${{ matrix.binding }}
+    needs: reference
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - binding: darwin-arm64
+            os: macos-latest
+          - binding: darwin-x64
+            os: macos-15-intel
+          - binding: win32-x64-msvc
+            os: windows-latest
+          - binding: linux-arm64-gnu
+            os: ubuntu-24.04-arm
+          - binding: linux-x64-musl
+            os: ubuntu-latest
+            alpine: true
+          - binding: linux-arm64-musl
+            os: ubuntu-24.04-arm
+            alpine: true
+    runs-on: ${{ matrix.os }}
+    environment: npm
+    timeout-minutes: 20
+    env:
+      BINDING: ${{ matrix.binding }}
+      RC_SMOKE_GOLDEN: ${{ needs.reference.outputs.manifest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: ${{ !matrix.alpine }}
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Smoke the native binding
+        if: ${{ !matrix.alpine }}
+        env:
+          ENGINE_REGISTRY: ${{ secrets.ENGINE_REGISTRY }}
+          ENGINE_REGISTRY_TOKEN: ${{ secrets.ENGINE_REGISTRY_TOKEN }}
+        run: node scripts/smoke.mjs engine --version "$VERSION" --binding "$BINDING"
+
+      # musl runs in Alpine with the checkout mounted read-only; the runner's
+      # own temp directory is mounted at the same path so the job summary and
+      # the scratch project land where the runner expects them.
+      - name: Smoke the native binding in Alpine
+        if: ${{ matrix.alpine }}
+        env:
+          ENGINE_REGISTRY: ${{ secrets.ENGINE_REGISTRY }}
+          ENGINE_REGISTRY_TOKEN: ${{ secrets.ENGINE_REGISTRY_TOKEN }}
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE:ro" -w "$GITHUB_WORKSPACE" \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" \
+            -e RUNNER_TEMP -e GITHUB_ACTIONS -e GITHUB_STEP_SUMMARY -e GITHUB_OUTPUT \
+            -e ENGINE_REGISTRY -e ENGINE_REGISTRY_TOKEN -e RC_SMOKE_GOLDEN \
+            "$ALPINE_IMAGE" \
+            node scripts/smoke.mjs engine --version "$VERSION" --binding "$BINDING"
