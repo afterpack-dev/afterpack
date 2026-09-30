@@ -27,9 +27,14 @@ packages/
   vue/                 @afterpack/vue — Vue 3 (Vite) integration
   webpack/             @afterpack/webpack — webpack plugin
   */e2e/               Playwright fixtures, one per package, driven by playwright.config.ts
+e2e/                    the e2e harness: registry, parallel fixture builds, scenario and signature
+                        helpers; e2e/README.md explains lanes, sharding and how to write a scenario
 test/core-fake.ts       the shared `@afterpack/core` test double, aliased in by every vitest.config.ts
 scripts/                set-version.ts, release-plan.mjs, check-hygiene.mjs, check-comments.mjs
-.github/workflows/      ci (contributor), release (release, rc, promote lanes), publish-engine
+.github/workflows/      ci (contributor: checks, four e2e shards, Windows and macOS e2e), release
+                        (release, rc, promote lanes), publish-engine, e2e-candidate (the full e2e
+                        lane on an unreleased engine)
+.github/actions/        e2e-fixtures: cached fixture installs and Playwright browsers
 .github/ISSUE_TEMPLATE/ bug report form, issue config
 .github/PULL_REQUEST_TEMPLATE.md   the PR gate checklist
 playwright.config.ts    root Playwright config for every packages/*/e2e fixture
@@ -43,7 +48,8 @@ CODE_OF_CONDUCT.md      Contributor Covenant 2.1 by reference
 pnpm install
 pnpm build       # every package, in dependency order
 pnpm test        # unit tests
-pnpm e2e         # Playwright, packages/*/e2e (pnpm e2e:quick for the PR subset; pnpm e2e:install first)
+pnpm e2e         # build every e2e fixture, then Playwright in three browsers (pnpm e2e:quick for the
+                 # PR subset in Chromium; pnpm e2e:install first; see e2e/README.md)
 pnpm lint:fix    # biome, autofixing — run after any file change
 pnpm typecheck   # after a build: plugins typecheck against built declarations
 pnpm hygiene     # repo hygiene guardrail; CI fails on it

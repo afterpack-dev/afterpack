@@ -13,7 +13,7 @@ so `corepack enable` is enough to get the right one.
 pnpm install
 pnpm build       # every package, in dependency order
 pnpm test        # every package's unit tests
-pnpm e2e         # Playwright, packages/*/e2e (pnpm e2e:quick for the PR subset; pnpm e2e:install first)
+pnpm e2e         # build the e2e fixtures, then Playwright (pnpm e2e:quick for the PR subset; pnpm e2e:install first)
 pnpm typecheck   # needs a build first: plugins typecheck against built declarations
 pnpm lint:fix    # biome, autofixing — run it after any edit
 pnpm hygiene     # the repo hygiene guardrail described below
@@ -32,7 +32,9 @@ everywhere. `pnpm test` is the contribution path that works without the engine.
 `pnpm e2e` builds each `packages/*/e2e` fixture for real with its own bundler, obfuscates it with the
 real plugin against the published `@afterpack/core`, and drives the result with Playwright — the
 class of bug a correct-looking bundle can still fail at, which no unit test can catch. It needs
-`@afterpack/core` to resolve from the npm registry, and fails until it does.
+`@afterpack/core` to resolve from the npm registry, and fails until it does. `e2e/README.md` covers
+the lanes, the environment variables that pick fixtures, shards and browsers, and how to write a
+scenario.
 
 ## Reproduce a bug as a failing e2e test
 
@@ -45,12 +47,14 @@ A coding agent is the fastest way through the steps below: point it at this repo
    command. `playwright.config.ts` turns every entry into a Playwright project automatically.
 3. Add `packages/<fw>/e2e/<fixture>/expectations.json` describing what the build must produce.
 4. Add `<fixture>.spec.ts` beside the fixture, using the helpers in `e2e/helpers/`:
-   `expectObfuscationPass` and `expectObfuscatedAndDeterministic` assert the pass actually ran and
-   is deterministic; `runSmoke` drives the built app with Playwright.
-5. Run just that project: `pnpm e2e --project=<name>`.
+   `expectObfuscationPass` asserts the pass actually ran, `expectObfuscationSignatures` that the
+   shipped files are obfuscated rather than merely minified, and `runSmoke` drives the built app with
+   Playwright. A bug that shows only after a click or a navigation is best written as a `scenario`,
+   which runs the same steps against an unprotected build and requires both to behave alike.
+5. Run just that fixture: `AFTERPACK_E2E_FIXTURES=<name> pnpm e2e`.
 
 Tag the fastest, most representative test `@quick` — that tag is the PR lane (`pnpm e2e:quick`); the
-full suite runs on push to `main`.
+full suite, in Chromium, Firefox and WebKit, runs on push to `main`.
 
 ## Release channels
 
