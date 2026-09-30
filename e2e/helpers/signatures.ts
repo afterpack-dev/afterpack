@@ -41,16 +41,14 @@ export interface Signature {
 
 function isPropertyName(node: ts.Identifier): boolean {
   const parent = node.parent;
-  if (!parent) return false;
   return (
-    ((ts.isPropertyAccessExpression(parent) ||
+    (ts.isPropertyAccessExpression(parent) ||
       ts.isPropertyAssignment(parent) ||
       ts.isMethodDeclaration(parent) ||
       ts.isPropertyDeclaration(parent) ||
       ts.isGetAccessorDeclaration(parent) ||
       ts.isSetAccessorDeclaration(parent)) &&
-      parent.name === node) ||
-    false
+    parent.name === node
   );
 }
 

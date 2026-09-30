@@ -247,18 +247,16 @@ export function parityProblems(baseline: Recording, candidate: Recording): strin
       `document loads: protected ${candidate.documents}, baseline ${baseline.documents}`,
     );
   }
-  const expected = new Map(baseline.snapshots);
-  for (const [label, snapshot] of candidate.snapshots) {
-    const want = expected.get(label);
+  const checkpoints = Math.max(baseline.snapshots.length, candidate.snapshots.length);
+  for (let index = 0; index < checkpoints; index++) {
+    const [label, want] = baseline.snapshots[index] ?? [candidate.snapshots[index][0], undefined];
+    const got = candidate.snapshots[index]?.[1];
     if (want === undefined) problems.push(`checkpoint "${label}" never reached by the baseline`);
-    else if (want !== snapshot) {
-      problems.push(
-        `checkpoint "${label}" differs:\n--- baseline\n${want}\n--- protected\n${snapshot}`,
-      );
+    else if (got === undefined) problems.push(`checkpoint "${label}" never reached`);
+    else if (want !== got) {
+      problems.push(`checkpoint "${label}" differs:\n--- baseline\n${want}\n--- protected\n${got}`);
     }
-    expected.delete(label);
   }
-  for (const label of expected.keys()) problems.push(`checkpoint "${label}" never reached`);
   return problems;
 }
 
