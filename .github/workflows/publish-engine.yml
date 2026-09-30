@@ -57,8 +57,9 @@ jobs:
         with:
           node-version: 24
 
+      # Trusted publishing needs npm 11.5.1 or newer; npm 12 reshaped `npm pack --json`.
       - name: Update npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@^11.5.1
 
       - name: Resolve the version
         env:
@@ -127,7 +128,7 @@ jobs:
               echo "::error::no integrity for ${name}@${VERSION}"
               exit 1
             fi
-            file=$(NPM_CONFIG_USERCONFIG="$npmrc" npm pack "${name}@${VERSION}" --registry "$source_registry" --pack-destination "$out" --json | jq -r '.[0].filename')
+            file=$(NPM_CONFIG_USERCONFIG="$npmrc" npm pack "${name}@${VERSION}" --registry "$source_registry" --pack-destination "$out" --json | jq -r '[.[]][0].filename')
             have="sha512-$(openssl dgst -sha512 -binary "$out/$file" | base64 -w0)"
             if [ "$have" != "$want" ]; then
               echo "::error::${name}@${VERSION} integrity mismatch: got $have, expected $want"
