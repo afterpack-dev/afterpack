@@ -7,7 +7,7 @@
   "packageManager": "pnpm@9.15.0",
   "scripts": {
     "build": "pnpm -r build",
-    "test": "pnpm -r --if-present test",
+    "test": "pnpm -r --if-present test && node --test \"scripts/test/*.test.mjs\"",
     "e2e": "playwright test",
     "e2e:quick": "playwright test --grep @quick",
     "e2e:install": "tsx e2e/install.ts",
