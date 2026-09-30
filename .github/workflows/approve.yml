@@ -1,0 +1,40 @@
+name: Approve
+
+# The single human approval for a production ship. The release tooling
+# dispatches this workflow and waits for it to succeed; the job waits for a
+# required reviewer on the `ship-approval` environment and records what was
+# approved. It publishes, deploys and changes nothing.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "The release candidate to ship, e.g. 0.2.2-rc.202610011200"
+        required: true
+        type: string
+      summary:
+        description: "What ships, in one line"
+        required: true
+        type: string
+
+run-name: "Approve shipping ${{ inputs.version }}"
+
+permissions: {}
+
+jobs:
+  approve:
+    name: Approve the ship
+    runs-on: ubuntu-latest
+    environment: ship-approval
+    timeout-minutes: 5
+    steps:
+      - name: Record the approval
+        env:
+          VERSION: ${{ inputs.version }}
+          SUMMARY: ${{ inputs.summary }}
+          REQUESTED_BY: ${{ github.triggering_actor }}
+        run: |
+          {
+            echo "Approved shipping \`$VERSION\` (requested by $REQUESTED_BY)."
+            echo ""
+            echo "$SUMMARY"
+          } >> "$GITHUB_STEP_SUMMARY"
