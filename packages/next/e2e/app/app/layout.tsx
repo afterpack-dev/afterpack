@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { GuestbookProvider } from "./guestbook-store";
+import { MainNav } from "./MainNav";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -13,7 +15,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <GuestbookProvider>
+          <MainNav />
+          {children}
+        </GuestbookProvider>
+      </body>
     </html>
   );
 }
