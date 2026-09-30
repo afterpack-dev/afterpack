@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 import { expect } from "@playwright/test";
 import ts from "typescript";
 import { stripHashes } from "./normalize.js";
@@ -220,7 +220,8 @@ export function expectLiteralsHidden(app: Fixture, signature: Signature): void {
     const matches = existsSync(exact)
       ? [exact]
       : jsUnder(root).filter(
-          (path) => stripHashes(relative(root, path)) === stripHashes(file.path),
+          (path) =>
+            stripHashes(relative(root, path).split(sep).join("/")) === stripHashes(file.path),
         );
     expect(
       matches.length,

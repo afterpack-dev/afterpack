@@ -23,6 +23,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -45,11 +46,23 @@ jobs:
       - name: Test
         run: pnpm test
 
+  # A push to main runs the full lane: every browser, the byte-level checks.
+  # Everything else runs the quick lane (`@quick`, Chromium). Four shards
+  # split the fixtures by weight; fixtures that share a directory stay in one
+  # shard, so each fixture installs and builds once.
   e2e:
-    name: End-to-end (Playwright)
+    name: End-to-end, ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'full' || 'quick' }} lane, shard ${{ matrix.shard }}/4
     needs: check
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      AFTERPACK_E2E_SHARD: ${{ matrix.shard }}/4
+      LANE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'full' || 'quick' }}
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.afterpack/ms-playwright
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -58,6 +71,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -65,18 +79,13 @@ jobs:
       - name: Build every package
         run: pnpm -r build
 
-      - name: Install the e2e fixtures
-        run: pnpm e2e:install
+      - uses: ./.github/actions/e2e-fixtures
+        with:
+          browsers: ${{ env.LANE == 'full' && 'chromium firefox webkit' || 'chromium' }}
 
-      - name: Install Playwright chromium
-        run: npx playwright install --with-deps chromium
-
-      - name: Run the end-to-end suite
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          GIT_REF: ${{ github.ref }}
+      - name: Run the ${{ env.LANE }} lane
         run: |
-          if [ "$EVENT_NAME" = "push" ] && [ "$GIT_REF" = "refs/heads/main" ]; then
+          if [ "$LANE" = "full" ]; then
             pnpm e2e
           else
             pnpm e2e:quick
@@ -86,7 +95,59 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: playwright-report
+          name: playwright-report-shard-${{ matrix.shard }}
+          path: |
+            .afterpack/e2e/playwright-report/**
+            .afterpack/e2e/test-results/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # Path handling differs on Windows and macOS: build and smoke a Vite, a
+  # webpack, a CLI and a Next fixture there on every run (free on a public
+  # repository).
+  e2e-os:
+    name: End-to-end, quick lane, ${{ matrix.os }}
+    needs: check
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    env:
+      AFTERPACK_E2E_FIXTURES: vite-react,webpack-react,cli-vanilla-esm,next-app-webpack
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.afterpack/ms-playwright
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build every package
+        run: pnpm -r build
+
+      - uses: ./.github/actions/e2e-fixtures
+        with:
+          browsers: chromium
+
+      - name: Run the quick lane
+        run: pnpm e2e:quick
+
+      - name: Upload the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playwright-report-${{ matrix.os }}
           path: |
             .afterpack/e2e/playwright-report/**
             .afterpack/e2e/test-results/**
