@@ -51,7 +51,7 @@ jobs:
   # split the fixtures by weight; fixtures that share a directory stay in one
   # shard, so each fixture installs and builds once.
   e2e:
-    name: End-to-end, ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'full' || 'quick' }} lane, shard ${{ matrix.shard }}/4
+    name: End-to-end, shard ${{ matrix.shard }}/4
     needs: check
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -107,7 +107,7 @@ jobs:
   # webpack, a CLI and a Next fixture there on every run (free on a public
   # repository).
   e2e-os:
-    name: End-to-end, quick lane, ${{ matrix.os }}
+    name: End-to-end on ${{ matrix.os }}
     needs: check
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
