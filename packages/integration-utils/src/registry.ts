@@ -243,7 +243,7 @@ export const CONFIG_KEYS = [
     tier: "free",
     surface: "engine",
     item: { kind: "boolean" },
-    default: "true when the bundler emitted a source map",
+    default: "true when the bundler emitted a source map, outside CI",
   },
   {
     path: "protectionMap.detailed",
