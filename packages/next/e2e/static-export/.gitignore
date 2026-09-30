@@ -17,7 +17,6 @@
 
 # afterpack
 /.afterpack/
-/.afterpack-baseline/
 
 # production
 /build

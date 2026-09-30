@@ -1,43 +1,67 @@
-import { join } from "node:path";
 import { defineConfig } from "@playwright/test";
-import { assertFixturesInstalled } from "./e2e/global-setup.js";
-import { FIXTURES, REPO_ROOT } from "./e2e/helpers/registry.js";
+import { selectedBrowsers, selectedFixtures } from "./e2e/helpers/registry.js";
+import { assertFixturesBuilt, assertFixturesInstalled } from "./e2e/preflight.js";
 
-const BUILD_AND_SERVE = join(REPO_ROOT, "e2e", "helpers", "build-and-serve.mjs");
-const SERVER_TIMEOUT_MS = 10 * 60 * 1000;
+const SERVER_TIMEOUT_MS = 2 * 60 * 1000;
+const fixtures = selectedFixtures();
+const browsers = selectedBrowsers();
 
-assertFixturesInstalled();
+assertFixturesInstalled(fixtures);
+assertFixturesBuilt(fixtures);
+
+function server(command: string, cwd: string, url: string, env: Record<string, string>) {
+  return {
+    command,
+    cwd,
+    url,
+    env,
+    reuseExistingServer: false,
+    timeout: SERVER_TIMEOUT_MS,
+    stdout: "pipe" as const,
+    stderr: "pipe" as const,
+  };
+}
+
+const requestedWorkers = Number(process.env.AFTERPACK_E2E_WORKERS);
 
 export default defineConfig({
   testDir: "./packages",
   testMatch: "**/e2e/**/*.spec.ts",
   tsconfig: "./tsconfig.json",
   outputDir: ".afterpack/e2e/test-results",
-  globalSetup: "./e2e/global-setup.ts",
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
   retries: 0,
-  workers: 1,
-  timeout: 10 * 60 * 1000,
+  workers: Number.isInteger(requestedWorkers) && requestedWorkers > 0 ? requestedWorkers : 2,
+  timeout: 5 * 60 * 1000,
   expect: { timeout: 20_000 },
   reporter: [
     ["list"],
     ["html", { open: "never", outputFolder: ".afterpack/e2e/playwright-report" }],
   ],
   use: { trace: "retain-on-failure" },
-  projects: FIXTURES.map((fixture) => ({
-    name: fixture.name,
-    testMatch: `**/${fixture.relativeDir}/*.spec.ts`,
-    use: { baseURL: fixture.baseURL ?? undefined },
-  })),
-  webServer: FIXTURES.filter((fixture) => fixture.serveCommand !== null).map((fixture) => ({
-    command: `node "${BUILD_AND_SERVE}" "${fixture.buildLog}" "${fixture.buildCommand}" "${fixture.serveCommand}"`,
-    cwd: fixture.dir,
-    url: fixture.baseURL as string,
-    env: fixture.env,
-    reuseExistingServer: false,
-    timeout: SERVER_TIMEOUT_MS,
-    stdout: "pipe",
-    stderr: "pipe",
-  })),
+  projects: fixtures.flatMap((fixture) =>
+    browsers.map((browserName) => ({
+      name: browserName === "chromium" ? fixture.name : `${fixture.name}@${browserName}`,
+      testMatch: `**/${fixture.relativeDir}/*.spec.ts`,
+      grepInvert: browserName === "chromium" ? undefined : /@node/,
+      metadata: { fixture: fixture.name },
+      use: { browserName, baseURL: fixture.baseURL ?? undefined },
+    })),
+  ),
+  webServer: fixtures.flatMap((fixture) => [
+    ...(fixture.serveCommand && fixture.baseURL
+      ? [server(fixture.serveCommand, fixture.dir, fixture.baseURL, fixture.env)]
+      : []),
+    ...(fixture.baseline
+      ? [
+          server(
+            fixture.baseline.serveCommand,
+            fixture.dir,
+            fixture.baseline.baseURL,
+            fixture.baseline.env,
+          ),
+        ]
+      : []),
+  ]),
 });

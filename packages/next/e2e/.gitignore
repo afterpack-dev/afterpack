@@ -13,9 +13,11 @@ build/
 .svelte-kit/
 .parcel-cache/
 .afterpack/
-.afterpack-baseline/
 *.tsbuildinfo
 pnpm-lock.yaml
 yarn.lock
 test-results/
 playwright-report/
+.next-baseline/
+.next-webpack-baseline/
+next-env.d.ts

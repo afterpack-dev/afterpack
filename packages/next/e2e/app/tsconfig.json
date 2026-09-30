@@ -36,7 +36,11 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts",
     ".next-webpack/types/**/*.ts",
-    ".next-webpack/dev/types/**/*.ts"
+    ".next-webpack/dev/types/**/*.ts",
+    ".next-baseline/types/**/*.ts",
+    ".next-baseline/dev/types/**/*.ts",
+    ".next-webpack-baseline/types/**/*.ts",
+    ".next-webpack-baseline/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

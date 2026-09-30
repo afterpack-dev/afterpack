@@ -3,7 +3,6 @@
 # these; repeated here so the AfterPack gitignore guard finds them already present.
 node_modules/
 dist/
-.afterpack-baseline/
 
 # AfterPack artifacts.
 .afterpack/
