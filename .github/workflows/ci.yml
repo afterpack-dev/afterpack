@@ -46,8 +46,8 @@ jobs:
       - name: Test
         run: pnpm test
 
-  # A push to main runs the full lane: every browser, the byte-level checks.
-  # Everything else runs the quick lane (`@quick`, Chromium). Four shards
+  # A push to main runs the full lane: every test, in Chromium, Firefox and
+  # WebKit. Everything else runs the quick lane (`@quick`, Chromium). Four shards
   # split the fixtures by weight; fixtures that share a directory stay in one
   # shard, so each fixture installs and builds once.
   e2e:
@@ -62,6 +62,7 @@ jobs:
     env:
       AFTERPACK_E2E_SHARD: ${{ matrix.shard }}/4
       LANE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'full' || 'quick' }}
+      AFTERPACK_E2E_BROWSERS: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'chromium,firefox,webkit' || 'chromium' }}
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.afterpack/ms-playwright
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
