@@ -12,7 +12,7 @@ so `corepack enable` is enough to get the right one.
 ```bash
 pnpm install
 pnpm build       # every package, in dependency order
-pnpm test        # every package's unit tests
+pnpm test        # every package's unit tests, then the release scripts' (scripts/test)
 pnpm e2e         # Playwright, packages/*/e2e (pnpm e2e:quick for the PR subset; pnpm e2e:install first)
 pnpm typecheck   # needs a build first: plugins typecheck against built declarations
 pnpm lint:fix    # biome, autofixing — run it after any edit
@@ -52,25 +52,39 @@ A coding agent is the fastest way through the steps below: point it at this repo
 Tag the fastest, most representative test `@quick` — that tag is the PR lane (`pnpm e2e:quick`); the
 full suite runs on push to `main`.
 
-## Release channels
+## Releases
 
-- **`latest`** — the `Release` workflow publishes a new patch of every package on a push to `main`
-  that changes what a package ships: it packs each package and compares the tarball with the one
-  npm serves as `latest`, so tests, fixtures, CI and the root readme never cause a release. It runs
-  the full checks and e2e suite first, only while the repository variable `AUTO_RELEASE` is `true`,
-  and every publish waits for a maintainer's approval. A minor or major release is manual: run
-  the workflow with `lane: release` and a `bump`. An engine bump releases the same way.
-- **`rc`** — run the workflow with `lane: rc` to publish the next version as `X.Y.Z-rc.<utc>` under
-  the `rc` dist-tag without moving `latest`, e.g. a fix for one user to try with `npx afterpack@rc`.
-  `lane: promote` with that `rc_version` republishes the same tree as `X.Y.Z` under `latest`.
-- **engine** — `@afterpack/core`, its platform packages and `@afterpack/wasm` are built outside this
-  repository and published to npm by the `Publish engine` workflow, without provenance, because
-  their source is not here.
+One lane publishes to `latest`; there is no release-candidate channel for the CLI and plugins.
+
+- **`Release`** decides the version, runs the checks, the full e2e suite and the Pro path on one
+  commit, publishes every package with provenance, then installs the published CLI from npm on
+  Ubuntu, macOS and Windows and runs it on `scripts/smoke-fixtures`. A manual run releases the
+  commit it runs on with the `bump` it names. It releases nothing when no package ships a change
+  against its npm `latest`: it packs each package and compares the tarball with the one npm
+  serves, so tests, fixtures, CI and the root readme never cause a release.
+- **engine** — `@afterpack/core`, its platform packages and `@afterpack/wasm` are built outside
+  this repository and published to npm by `Publish engine`, without provenance, because their
+  source is not here. Once npmjs serves a `latest` engine it sends `core-published`, and
+  `Release` repins `@afterpack/core` in every package, waits for npmjs, rewrites the lockfile,
+  runs the gates, pushes the bump to `main` and releases it. A new release line (a minor under
+  major 0) also moves every package version and `MIN_CORE_VERSION` to that line:
+  `node scripts/bump-engine.mjs <version>` makes the same change locally.
+- **`RC smoke`** installs an engine build on every OS it ships a native binding for, and fails
+  unless each binding loads natively, reports its version, and produces protected output that
+  still runs and matches Linux byte for byte.
+- **`Approve`** is the single human approval for a production ship; the release tooling
+  dispatches it and waits. Dispatching `Release` or `Publish engine` directly publishes with no
+  further approval.
+
+Both publishing workflows are safe to re-run: every step checks npmjs first, skips a version it
+already serves, treats "cannot publish over" (E403/E409) as published, and waits up to 45
+minutes for npmjs to serve each tarball before anything depends on it. Their file names and the
+`npm` environment are what the npm trusted publishers are bound to; never rename them.
 
 Every package in this repository carries **one version**, stamped at publish time and never
 committed: the root `package.json` version is a floor, and the next version is one bump above the
 last `vX.Y.Z` tag or the npm `latest`, whichever is higher. `node scripts/release-plan.mjs changed`
-shows what a push would release; never bump a single package on its own.
+shows what a release would ship; never bump a single package on its own.
 
 ## Pull requests
 

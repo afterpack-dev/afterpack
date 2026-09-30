@@ -28,8 +28,10 @@ packages/
   webpack/             @afterpack/webpack — webpack plugin
   */e2e/               Playwright fixtures, one per package, driven by playwright.config.ts
 test/core-fake.ts       the shared `@afterpack/core` test double, aliased in by every vitest.config.ts
-scripts/                set-version.ts, release-plan.mjs, check-hygiene.mjs, check-comments.mjs
-.github/workflows/      ci (contributor), release (release, rc, promote lanes), publish-engine
+scripts/                set-version.ts, release-plan.mjs, bump-engine.mjs, npm-release.mjs,
+                        smoke.mjs (+ smoke-fixtures/), check-hygiene.mjs, check-comments.mjs;
+                        lib/ holds their logic, test/ its node:test suites (run by pnpm test)
+.github/workflows/      ci (contributor), release, publish-engine, rc-smoke, approve
 .github/ISSUE_TEMPLATE/ bug report form, issue config
 .github/PULL_REQUEST_TEMPLATE.md   the PR gate checklist
 playwright.config.ts    root Playwright config for every packages/*/e2e fixture
