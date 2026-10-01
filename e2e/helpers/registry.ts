@@ -167,7 +167,6 @@ const SPECS: FixtureSpec[] = [
     clean: [".parcel-cache", "dist"],
     env: { COLUMNS: "1000", LINES: "50" },
     targets: { root: "dist" },
-    receipts: [],
     port: 4311,
     serve: "node serve.mjs {port}",
     weight: 15,

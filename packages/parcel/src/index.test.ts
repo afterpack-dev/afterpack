@@ -19,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __reset, __setProcessResult, engineCalls } from "../../../test/core-fake.js";
 import { resetBuildSessions } from "../../integration-utils/src/seed.js";
 import afterpackParcel from "./index.js";
+import { readBundleRecord, writeBundleRecord } from "./records.js";
 
 const PLUGIN_CONFIG = Symbol.for("parcel-plugin-config");
 
@@ -68,6 +69,7 @@ afterEach(() => {
 });
 
 interface BundleOverrides {
+  id?: string;
   name?: string;
   displayName?: string;
   publicId?: string;
@@ -78,6 +80,7 @@ interface BundleOverrides {
 
 function fakeBundle(o: BundleOverrides = {}): unknown {
   return {
+    id: o.id ?? "bundle-app",
     name: o.name ?? "app.HASH_REF_1111111111111111.js",
     displayName: o.displayName ?? "app.[hash].js",
     publicId: o.publicId ?? "aBcDe",
@@ -307,7 +310,52 @@ describe("per-bundle Protection Map", () => {
       ".gitignore",
       "app.js.aaa.protectionMap.html",
       "lazy.js.bbb.protectionMap.html",
+      "parcel",
     ]);
+  });
+});
+
+describe("the record the receipt reporter reads", () => {
+  const stale = {
+    tool: "afterpack-parcel",
+    engine: "local" as const,
+    engineVersion: "0.0.0-old",
+    seed: "1",
+    seedOrigin: "config",
+    transformed: true,
+  };
+
+  it("records what the pass did to the bundle, under .afterpack, keyed by the bundle id", async () => {
+    await run({ config: { seed: 42 } });
+
+    expect(readBundleRecord(root, "bundle-app")).toEqual({
+      tool: "afterpack-parcel",
+      engine: "local",
+      engineVersion: "0.0.0-test",
+      seed: "42",
+      seedOrigin: "option",
+      transformed: true,
+    });
+    expect(readFileSync(join(root, ".afterpack", ".gitignore"), "utf8")).not.toBe("");
+  });
+
+  it("drops the bundle's old record when this build does not obfuscate it", async () => {
+    for (const skipped of [
+      { bundle: fakeBundle({ shouldOptimize: false }) },
+      { config: { build: { autorun: false } } },
+    ]) {
+      writeBundleRecord(root, "bundle-app", stale);
+      await run(skipped);
+      expect(readBundleRecord(root, "bundle-app")).toBeNull();
+    }
+  });
+
+  it("drops the bundle's old record when the engine fails the build", async () => {
+    writeBundleRecord(root, "bundle-app", stale);
+    __setProcessResult(() => ({ code: "", diagnostics: [{ severity: "error", message: "boom" }] }));
+
+    await expect(run()).rejects.toThrow(/boom/);
+    expect(readBundleRecord(root, "bundle-app")).toBeNull();
   });
 });
 

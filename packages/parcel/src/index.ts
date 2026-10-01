@@ -21,6 +21,8 @@ import diagnosticExport from "@parcel/diagnostic";
 import { Optimizer } from "@parcel/plugin";
 import sourceMapExport from "@parcel/source-map";
 import type { NamedBundle } from "@parcel/types";
+import { escapeParcelMarkdown } from "./markdown.js";
+import { clearBundleRecord, writeBundleRecord } from "./records.js";
 
 const PLUGIN_NAME = "@afterpack/parcel-optimizer";
 const CONFIG_FILES = [CONFIG_FILE_NAME];
@@ -41,10 +43,6 @@ async function blobToString(blob: string | Buffer | Readable): Promise<string> {
   if (typeof blob === "string") return blob;
   if (Buffer.isBuffer(blob)) return blob.toString("utf8");
   return await text(blob);
-}
-
-function escapeParcelMarkdown(message: string): string {
-  return message.replace(/[\\*_`~]/g, (c) => `\\${c}`);
 }
 
 const CONTENT_HASH_REF = /HASH_REF_\w{16}/g;
@@ -100,6 +98,7 @@ export default new Optimizer<ParcelConfig, void>({
   async optimize({ bundle, contents, map, options, logger, config, getSourceMapReference }) {
     const unchanged = { contents, map };
     if (bundle.type !== "js") return unchanged;
+    clearBundleRecord(options.projectRoot, bundle.id);
     if (!bundle.env.shouldOptimize) return unchanged;
     const autorun = config.options.build?.autorun ?? true;
     if (!autorun) return unchanged;
@@ -200,6 +199,18 @@ export default new Optimizer<ParcelConfig, void>({
             'Or set `"preset": "minify"` in afterpack.json to ship minify-only.',
           ],
         },
+      });
+    }
+
+    const receipt = result.deferredReceipt;
+    if (receipt) {
+      writeBundleRecord(options.projectRoot, bundle.id, {
+        tool: receipt.tool,
+        engine: receipt.engine,
+        engineVersion: receipt.engineVersion,
+        seed: String(receipt.seed),
+        seedOrigin: receipt.seedOrigin,
+        transformed: receipt.transformed.includes(projectedFilePath),
       });
     }
 

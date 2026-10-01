@@ -127,14 +127,6 @@ export interface ProtectedFile {
 }
 
 export function protectedFilesOf(app: Fixture): ProtectedFile[] {
-  if (app.receipts.length === 0) {
-    return app.targets.flatMap((target) =>
-      jsUnder(target.path).map((path) => ({
-        root: target.path,
-        path: relative(target.path, path),
-      })),
-    );
-  }
   return app.receipts.flatMap((root) => {
     const receiptPath = join(root, RECEIPT);
     expect(existsSync(receiptPath), `${app.name}: no protection receipt at ${receiptPath}`).toBe(

@@ -28,6 +28,22 @@ that way.
 Keep the `"..."`: it runs Parcel's own minifier first and AfterPack last. If obfuscation fails, the
 build fails.
 
+## Check a deploy
+
+Add the plugin's reporter to the build command, and each build writes `.afterpack-protection.json`
+into the target's output directory, a receipt with a hash per obfuscated bundle:
+
+```sh
+parcel build index.html --reporter @afterpack/parcel-optimizer/reporter
+npx afterpack verify dist   # in the deploy step, before the upload
+```
+
+`afterpack verify` fails if a file changed after it was obfuscated, or if there is no receipt. The
+reporter writes none when a bundle it shipped was not obfuscated in that build: the optimizer is
+missing from `.parcelrc`, `build.autorun` is off, or Parcel reused the bundle from `.parcel-cache`.
+Parcel's naming rule for plugins in `.parcelrc` leaves no place there for a reporter in this
+package, so it goes on the command line.
+
 ## Configuration
 
 `.parcelrc` cannot pass options, so put them in `afterpack.json` at your project root, or in
@@ -81,8 +97,7 @@ source, so never deploy or commit it.
   `"preset": "minify"`. Parcel's default ES module output is not affected.
 - **Cache.** Parcel caches optimizer output. Clear `.parcel-cache` for a fresh seed on an unchanged
   build.
-- **Not available here:** [`build.backup`][build.backup] and [`paths.include`][paths.include], and there is no protection receipt, so
-  `afterpack verify` has nothing to check on a Parcel build.
+- **Not available here:** [`build.backup`][build.backup] and [`paths.include`][paths.include].
 - Parcel may print that ES module dependencies are experimental and that the plugin has
   non-statically analyzable dependencies. Both are harmless.
 

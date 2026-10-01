@@ -17,7 +17,7 @@
     }
   },
   "scripts": {
-    "build": "parcel build index.html --target app",
+    "build": "parcel build index.html --target app --reporter @afterpack/parcel-optimizer/reporter",
     "build:legacy": "parcel build index.html --target legacy",
     "serve": "node serve.mjs"
   },

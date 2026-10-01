@@ -19,7 +19,7 @@ packages/
   esbuild/             @afterpack/esbuild — esbuild plugin
   next/                @afterpack/next — Next.js integration
   nuxt/                @afterpack/nuxt — Nuxt 3 (Vite) module
-  parcel/              @afterpack/parcel-optimizer — Parcel 2 optimizer
+  parcel/              @afterpack/parcel-optimizer — Parcel 2 optimizer, plus its receipt reporter
   rollup/              @afterpack/rollup — Rollup plugin
   svelte/              @afterpack/svelte — Svelte on Vite
   sveltekit/           @afterpack/sveltekit — SvelteKit on Vite

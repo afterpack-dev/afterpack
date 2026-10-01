@@ -1,10 +1,10 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { expectObfuscationPass, readBuildLog } from "@e2e/helpers/build-log.js";
 import { readExpectations, smokeOf } from "@e2e/helpers/expectations.js";
-import { baseURLOf, fixture } from "@e2e/helpers/registry.js";
+import { baseURLOf, fixture, REPO_ROOT } from "@e2e/helpers/registry.js";
 import { expectObfuscationSignatures } from "@e2e/helpers/signatures.js";
 import { runSmoke } from "@e2e/helpers/smoke.js";
 
@@ -21,8 +21,19 @@ test.describe("Parcel 2 packages a code-split app", { tag: "@quick" }, () => {
     expectObfuscationPass(readBuildLog(app), app.name, expectations.obfuscation);
   });
 
+  test("the build left a protection receipt that `afterpack verify` passes", { tag: "@node" }, () => {
+    const verify = spawnSync(
+      process.execPath,
+      [join(REPO_ROOT, "packages", "cli", "dist", "cli.js"), "verify", "dist"],
+      { cwd: app.dir, encoding: "utf8" },
+    );
+    const output = `${verify.stdout}${verify.stderr}`;
+    expect(verify.status, output).toBe(0);
+    expect(output).toContain("Verified 2 files");
+  });
+
   test(
-    "the shipped files carry obfuscation signatures, not mere minification",
+    "the files its receipt names carry obfuscation signatures, not mere minification",
     { tag: "@node" },
     () => {
       expectObfuscationSignatures(app);
