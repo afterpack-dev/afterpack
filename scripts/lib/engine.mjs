@@ -56,3 +56,30 @@ export function checkEngineManifest(manifest, name, version) {
   }
   return problems;
 }
+
+export const SOURCE_SHA = /^[0-9a-f]{40}$/;
+
+export function releaseOf(version) {
+  return version.replace(/[-+].*$/, "");
+}
+
+export function servedEngineProblems(info, { version, sha }) {
+  if (!SEMVER.test(version)) return [`'${version}' is not a version`];
+  if (!SOURCE_SHA.test(sha)) return [`'${sha}' is not a 40-character commit sha`];
+  if (info === null || typeof info !== "object") return ["the API answered no version document"];
+  const problems = [];
+  if (info.engineSourceSha !== sha) {
+    problems.push(
+      `the API serves the engine built from ${info.engineSourceSha ?? "an unknown commit"}, not the candidate's ${sha}`,
+    );
+  }
+  if (info.engineSourceDirty !== false) {
+    problems.push("the API does not report its engine as built from a clean tree");
+  }
+  if (info.engineVersion !== releaseOf(version)) {
+    problems.push(
+      `the API's engine is version ${info.engineVersion ?? "(none)"}, not ${releaseOf(version)}`,
+    );
+  }
+  return problems;
+}

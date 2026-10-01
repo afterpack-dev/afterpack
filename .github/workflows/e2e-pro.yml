@@ -1,0 +1,106 @@
+name: E2E Pro
+
+# Runs the scenarios of vite-react and both next-app legs built on the Pro
+# cloud engine, with an engine candidate as the client. With a key the
+# candidate only sends the bundle to the API, which runs its own engine, so
+# the lane tests the candidate only once the API serves the Pro engine built
+# from the candidate's commit. The job checks that first, from the API's
+# /v1/version, and fails while the API serves any other engine. Every
+# receipt must then name the cloud engine at the candidate's release, and
+# every build must have sent the engine a directive region.
+#
+# Triggered by a repository_dispatch of type `e2e-pro` whose client_payload
+# carries `version`, `sha` (the commit the candidate's engine was built
+# from) and optionally `id`, which lands in the run name so the dispatcher
+# can find its run, or by hand. It never runs on a pull request. No step
+# uploads the candidate, and no cache it writes holds it.
+#
+# The job runs in the `staging-pro` environment, which must be limited to
+# the default branch and hold the secrets AFTERPACK_KEY, ENGINE_REGISTRY and
+# ENGINE_REGISTRY_TOKEN (read-only) and the variable AFTERPACK_API_URL.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "The @afterpack/core candidate, e.g. 0.2.2-rc.202610011200"
+        required: true
+        type: string
+      sha:
+        description: "The commit the candidate's engine was built from (40 hex characters)"
+        required: true
+        type: string
+  repository_dispatch:
+    types: [e2e-pro]
+
+run-name: "E2E Pro ${{ github.event.client_payload.version || inputs.version }}${{ github.event.client_payload.id && format(' ({0})', github.event.client_payload.id) || '' }}"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.client_payload.version || inputs.version }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  pro:
+    name: Scenarios on the Pro engine of ${{ github.event.client_payload.version || inputs.version }}
+    runs-on: ubuntu-latest
+    environment: staging-pro
+    timeout-minutes: 30
+    env:
+      AFTERPACK_E2E_FIXTURES: vite-react,next-app-turbopack,next-app-webpack
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
+
+      # No `cache: pnpm`: the store would hold the candidate afterwards.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - name: Require the API to serve the candidate's Pro engine
+        id: engine
+        env:
+          VERSION: ${{ github.event.client_payload.version || inputs.version }}
+          SHA: ${{ github.event.client_payload.sha || inputs.sha }}
+          AFTERPACK_API_URL: ${{ vars.AFTERPACK_API_URL }}
+        run: node scripts/served-engine.mjs
+
+      - uses: ./.github/actions/candidate-workspace
+        with:
+          version: ${{ github.event.client_payload.version || inputs.version }}
+          registry: ${{ secrets.ENGINE_REGISTRY }}
+          token: ${{ secrets.ENGINE_REGISTRY_TOKEN }}
+
+      - uses: ./.github/actions/e2e-fixtures
+        with:
+          browsers: chromium
+          save-cache: "false"
+
+      # The key reaches this step alone.
+      - name: Build on the Pro engine and run the scenarios
+        env:
+          AFTERPACK_KEY: ${{ secrets.AFTERPACK_KEY }}
+          AFTERPACK_API_URL: ${{ vars.AFTERPACK_API_URL }}
+          AFTERPACK_E2E_ENGINE_VERSION: ${{ steps.engine.outputs.engine_version }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AFTERPACK_KEY:-}" ]; then
+            echo "::error::AFTERPACK_KEY must be set in the staging-pro environment"
+            exit 1
+          fi
+          pnpm e2e --grep "@scenario|@lane"
+
+      - name: Upload the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report-pro
+          path: |
+            .afterpack/e2e/playwright-report/**
+            .afterpack/e2e/test-results/**
+          if-no-files-found: ignore
+          retention-days: 7

@@ -40,16 +40,16 @@ Run the full lane as CI does with `AFTERPACK_E2E_BROWSERS=chromium,firefox,webki
 | quick | every pull request, in four shards; a Windows and a macOS job over `vite-react`, `webpack-react`, `cli-vanilla-esm` and `next-app-webpack` (on a push to `main` too) | tests tagged `@quick`, in Chromium |
 | full | a push to `main`, in four shards; `e2e-candidate.yml` for an engine candidate | every test, in Chromium, Firefox and WebKit |
 | preset | `e2e-candidate.yml`, once per preset: medium, hard, extreme | `vite-react` and `next-app-webpack` built with `AFTERPACK_preset`, then `@scenario` and `@lane` in Chromium |
-| Pro | `e2e-candidate.yml`, in the `staging-pro` environment | `vite-react` and both `next-app` legs built with `AFTERPACK_KEY` on the staging cloud engine, then `@scenario` and `@lane` in Chromium |
+| Pro | `e2e-pro.yml`, once the API serves the candidate's Pro engine | `vite-react` and both `next-app` legs built with `AFTERPACK_KEY` on that cloud engine, then `@scenario` and `@lane` in Chromium |
 
 - `@quick`: in the PR lane. Tag the tests that matter most for the fixture, and keep them fast.
 - `@node`: needs no browser: build logs, receipts, signatures, source maps, Node-side checks. It runs
   once, in the Chromium project.
 - `@scenario`: a differential user journey (see below).
 - `@lane`: proves a candidate lane built what it claims (`e2e/helpers/lanes.ts`): every pass at
-  `AFTERPACK_preset`, or, with `AFTERPACK_KEY`, a receipt from the cloud engine and a directive
-  region sent to it. Each check skips without its variable; an untagged `@node` test shows both
-  checks rejecting the keyless default build.
+  `AFTERPACK_preset`, or, with `AFTERPACK_KEY`, a receipt from the cloud engine at
+  `AFTERPACK_E2E_ENGINE_VERSION` and a directive region sent to it. Each check skips without its
+  variable; an untagged `@node` test shows both checks rejecting the keyless default build.
 
 Tests that rebuild a fixture in place, such as the determinism rebuild on `next-app-webpack` and
 `electron-app`, are `@node`. A fixture's Firefox and WebKit projects depend on its Chromium project
@@ -139,8 +139,8 @@ same way to check a new comparison rule.
 ## Engine candidates
 
 `.github/workflows/e2e-candidate.yml` tests an unreleased `@afterpack/core`: the full lane in four
-shards and three browsers, the preset lane and the Pro lane. It is triggered by a
-`repository_dispatch` of type `e2e-candidate` or by hand:
+shards and three browsers, and the preset lane. It is triggered by a `repository_dispatch` of type
+`e2e-candidate` or by hand:
 
 ```bash
 gh api repos/afterpack-dev/afterpack/dispatches -f event_type=e2e-candidate \
@@ -149,14 +149,29 @@ gh api repos/afterpack-dev/afterpack/dispatches -f event_type=e2e-candidate \
 
 The run is named `E2E candidate <version> (<id>)`, so the caller can find it and wait for it. Every
 job installs the workspace through `.github/actions/candidate-workspace`, which reads
-`ENGINE_REGISTRY` and `ENGINE_REGISTRY_TOKEN` from the job's environment (`npm` for the full and
-preset lanes, `staging-pro` for the Pro lane). It writes them to an npmrc under `RUNNER_TEMP`, sets
-`pnpm.overrides["@afterpack/core"]` to the candidate, installs the workspace with
-`--ignore-scripts`, and deletes the npmrc. The dependencies' install scripts run in the next step,
-which never sees the token. It then checks that every package resolved the candidate and builds.
-The Pro lane passes `AFTERPACK_KEY` and `AFTERPACK_API_URL` to its build-and-test step alone. The
-workflow never runs on a pull request. No cache it writes and no artifact it uploads contains the
-candidate.
+`ENGINE_REGISTRY` and `ENGINE_REGISTRY_TOKEN` from the job's environment (`npm`). It writes them to
+an npmrc under `RUNNER_TEMP`, sets `pnpm.overrides["@afterpack/core"]` to the candidate, installs
+the workspace with `--ignore-scripts`, and deletes the npmrc. The dependencies' install scripts run
+in the next step, which never sees the token. It then checks that every package resolved the
+candidate and builds. The workflow never runs on a pull request. No cache it writes and no artifact
+it uploads contains the candidate.
+
+With a key, the candidate only sends the bundle; the API runs its own Pro engine. So the Pro lane,
+`.github/workflows/e2e-pro.yml`, runs later, once the API serves the Pro engine built from the
+candidate's commit:
+
+```bash
+gh api repos/afterpack-dev/afterpack/dispatches -f event_type=e2e-pro \
+  -f 'client_payload[version]=0.2.2-rc.202610011200' -f 'client_payload[sha]=<engine commit>' \
+  -f 'client_payload[id]=<caller run id>'
+```
+
+The run is named `E2E Pro <version> (<id>)`. Its one job runs in the `staging-pro` environment,
+which must allow only the default branch and holds `AFTERPACK_KEY`, `ENGINE_REGISTRY`,
+`ENGINE_REGISTRY_TOKEN` and the variable `AFTERPACK_API_URL`. `scripts/served-engine.mjs` first
+reads the API's `/v1/version` and fails unless it reports a clean engine built from `sha` at the
+candidate's release. The job then installs the candidate the same way and passes `AFTERPACK_KEY`,
+`AFTERPACK_API_URL` and `AFTERPACK_E2E_ENGINE_VERSION` to its build-and-test step alone.
 
 `vite-react` and `next-app` enable directives only when `AFTERPACK_KEY` is set: their Counter's
 `preset=hard` region raises protection, which the local engine refuses to build without a key.

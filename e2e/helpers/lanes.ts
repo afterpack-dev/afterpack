@@ -21,7 +21,7 @@ export function regionsSent(log: string): number {
   return [...log.matchAll(REGIONS_SENT)].reduce((sum, match) => sum + Number(match[1]), 0);
 }
 
-export function proBuildProblems(app: Fixture, log: string): string[] {
+export function proBuildProblems(app: Fixture, log: string, engineVersion: string): string[] {
   const problems: string[] = [];
   for (const dir of app.receipts) {
     const path = join(dir, PROTECTION_RECEIPT_FILE);
@@ -30,8 +30,18 @@ export function proBuildProblems(app: Fixture, log: string): string[] {
       problems.push(`no protection receipt at ${where}`);
       continue;
     }
-    const { engine } = JSON.parse(readFileSync(path, "utf8")) as { engine: unknown };
-    if (engine !== "cloud") problems.push(`${where} says the ${String(engine)} engine ran`);
+    const receipt = JSON.parse(readFileSync(path, "utf8")) as {
+      engine: unknown;
+      engineVersion: unknown;
+    };
+    if (receipt.engine !== "cloud") {
+      problems.push(`${where} says the ${String(receipt.engine)} engine ran`);
+    }
+    if (receipt.engineVersion !== engineVersion) {
+      problems.push(
+        `${where} says engine ${String(receipt.engineVersion)} ran, not ${engineVersion}`,
+      );
+    }
   }
   if (regionsSent(log) === 0) problems.push("the build sent the engine no directive region");
   return problems;
@@ -52,14 +62,16 @@ export function candidateLaneTests(): void {
     );
 
     test(
-      "a build with AFTERPACK_KEY ran on the cloud engine and sent it the Counter's region",
+      "a build with AFTERPACK_KEY ran on the candidate's cloud engine and sent it the Counter's region",
       {
         tag: ["@node", "@lane"],
       },
       () => {
         test.skip(!process.env.AFTERPACK_KEY, "only the Pro lane sets AFTERPACK_KEY");
+        const engineVersion = process.env.AFTERPACK_E2E_ENGINE_VERSION;
+        expect(engineVersion, "the Pro lane names the engine version it tests").toBeTruthy();
         const app = currentFixture();
-        expect(proBuildProblems(app, readBuildLog(app))).toEqual([]);
+        expect(proBuildProblems(app, readBuildLog(app), engineVersion ?? "")).toEqual([]);
       },
     );
 
@@ -70,11 +82,18 @@ export function candidateLaneTests(): void {
       );
       const app = currentFixture();
       const log = readBuildLog(app);
-      expect(proBuildProblems(app, log)).toEqual([
-        ...app.receipts.map(
-          (dir) =>
-            `${relative(app.dir, join(dir, PROTECTION_RECEIPT_FILE))} says the local engine ran`,
-        ),
+      expect(proBuildProblems(app, log, "0.0.0-none")).toEqual([
+        ...app.receipts.flatMap((dir) => {
+          const path = join(dir, PROTECTION_RECEIPT_FILE);
+          const where = relative(app.dir, path);
+          const { engineVersion } = JSON.parse(readFileSync(path, "utf8")) as {
+            engineVersion: unknown;
+          };
+          return [
+            `${where} says the local engine ran`,
+            `${where} says engine ${String(engineVersion)} ran, not 0.0.0-none`,
+          ];
+        }),
         "the build sent the engine no directive region",
       ]);
       expect(presetProblems(log, "extreme")).toContain(
