@@ -17,8 +17,10 @@ name: Publish engine
 # files is skipped (different files fail before anything publishes), a
 # publish npmjs refuses because it already holds that version (E403 "cannot
 # publish over", E409) counts as published, and nothing moves on until
-# npmjs serves every tarball, for up to 45 minutes. The trusted publishers
-# are bound to this file name and to the `npm` environment: rename neither.
+# npmjs serves every tarball, for up to 45 minutes. It then hands the engine
+# and the approval on to the CLI and plugins (core-published). The trusted
+# publishers are bound to this file name and to the `npm` environment:
+# rename neither.
 on:
   repository_dispatch:
     types: [engine-release]
@@ -90,10 +92,11 @@ jobs:
       - name: Wait until npmjs serves every tarball
         run: node scripts/npm-release.mjs wait --dir "$RUNNER_TEMP/engine" --tag latest
 
-      - name: Hand the engine to the CLI and plugins
+      - name: Hand the engine and its approval to the CLI and plugins
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh api "repos/${GITHUB_REPOSITORY}/dispatches" \
             -f event_type=core-published \
-            -f "client_payload[version]=v${VERSION}"
+            -f "client_payload[version]=v${VERSION}" \
+            -f "client_payload[approve_run_id]=${APPROVE_RUN_ID}"

@@ -3,16 +3,23 @@ name: Release
 # The one workflow that publishes the CLI and the plugins to npm, so each
 # package needs a single trusted publisher. Every package carries one version.
 #
-# One lane, straight to `latest`: decide the version, run every gate on the
-# commit, publish, then verify what npm serves on Linux, macOS and Windows.
+# One lane, straight to `latest`: check the operator's approval, decide the
+# version, run every gate on the commit, publish, then verify what npm serves
+# on Linux, macOS and Windows. Nothing runs past the approval job unless the
+# Approve run it names approves exactly this release.
 #
 #  * `repository_dispatch` type `core-published`, sent by the Publish engine
-#    workflow once npmjs serves a stable engine, first repins
+#    workflow once npmjs serves a stable engine, carries the Approve run that
+#    approved shipping an RC of that engine. It first repins
 #    @afterpack/core across every package. A new release line (a minor under
 #    major 0) also raises every package version and MIN_CORE_VERSION to it.
 #    The bump waits until npmjs serves the engine, writes the lockfile
 #    against npmjs, runs the gates, pushes to main and releases that commit.
-#  * A manual run releases the commit it runs on, with the bump it names.
+#  * A manual release of the CLI and plugins alone is requested with the
+#    Approve workflow (kind `public`), whose approved job dispatches this one
+#    with its run id. It releases the commit that Approve run ran on, with
+#    the bump it names, and refuses a commit the newest vX.Y.Z tag already
+#    holds.
 #
 # Nothing is released when no package ships a change against its npm
 # `latest`. The version is decided once per run and the publish skips every
@@ -35,6 +42,10 @@ on:
         default: patch
         type: choice
         options: [patch, minor, major]
+      approve_run_id:
+        description: "The Approve run (kind public) that approved this release; Approve dispatches it"
+        required: true
+        type: string
   repository_dispatch:
     types: [core-published]
 
@@ -53,8 +64,37 @@ permissions:
 # below it through the implicit success(), so each gate names the results it
 # depends on instead.
 jobs:
+  approval:
+    name: Require the operator's approval
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      sha: ${{ steps.verify.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - name: Check the Approve run this release names
+        id: verify
+        env:
+          EVENT: ${{ github.event_name }}
+          PAYLOAD: ${{ toJSON(github.event.client_payload) }}
+          INPUT_BUMP: ${{ inputs.bump }}
+          INPUT_APPROVE_RUN_ID: ${{ inputs.approve_run_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/npm-release.mjs verify-release-approval
+
   bump-engine:
     name: Bump the engine pin
+    needs: approval
     if: github.event_name == 'repository_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 75
@@ -115,17 +155,23 @@ jobs:
 
   version:
     name: Decide the version
-    needs: bump-engine
-    if: ${{ !cancelled() && (needs.bump-engine.result == 'success' || needs.bump-engine.result == 'skipped') }}
+    needs: [approval, bump-engine]
+    if: ${{ !cancelled() && needs.approval.result == 'success' && (needs.bump-engine.result == 'success' || needs.bump-engine.result == 'skipped') }}
     runs-on: ubuntu-latest
     outputs:
       release: ${{ steps.plan.outputs.release }}
       version: ${{ steps.plan.outputs.version }}
       sha: ${{ steps.plan.outputs.sha }}
     steps:
+      - name: Require the commit the approval names
+        env:
+          SHA: ${{ needs.bump-engine.outputs.sha || needs.approval.outputs.sha }}
+        run: |
+          [ -n "$SHA" ] || { echo "::error::no approved commit to release"; exit 1; }
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.bump-engine.outputs.sha || github.sha }}
+          ref: ${{ needs.bump-engine.outputs.sha || needs.approval.outputs.sha }}
           persist-credentials: false
 
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0

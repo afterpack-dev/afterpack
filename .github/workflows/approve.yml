@@ -1,48 +1,87 @@
 name: Approve
 
-# The single human approval for a production ship. The release tooling
-# dispatches this workflow and waits for it to succeed; the job waits for a
-# required reviewer on the `ship-approval` environment and records what was
-# approved. It publishes, deploys and changes nothing: the release tooling
-# goes on to production only after it succeeded, and publish-engine.yml
-# refuses to publish an engine unless the run it names is this workflow's,
-# on main, approved by that reviewer for an RC of the same version.
+# The single human approval for a production release. Its one job waits for
+# the required reviewer of the `ship-approval` environment; GitHub notifies
+# them, and nothing ships until they approve.
+#
+#  * kind `engine` (the default, and every `ship-approval` dispatch, which
+#    the engine's release-candidate run sends): approving starts the
+#    production ship of that RC, by dispatching ship.yml in the repository
+#    the SHIP_DISPATCH_REPO secret names, with SHIP_DISPATCH_TOKEN, both
+#    secrets of this environment. Publish engine refuses an engine unless
+#    the run it names is one of these, for an RC of the same version.
+#  * kind `public`: approving starts a `bump` release of the CLI and plugins
+#    from the commit this run ran on, by dispatching release.yml with this
+#    run's id, which release.yml checks before it publishes anything.
+#
+# A dry run records the approval under a "(dry run)" title, which no check
+# accepts, proves the token can read the workflow it would start, and
+# dispatches nothing.
 on:
+  repository_dispatch:
+    types: [ship-approval]
   workflow_dispatch:
     inputs:
-      version:
-        description: "The release candidate to ship, e.g. 0.2.2-rc.202610011200"
+      kind:
+        description: "engine: ship an engine RC to production; public: release the CLI and plugins"
         required: true
+        default: engine
+        type: choice
+        options: [engine, public]
+      version:
+        description: "kind engine: the release candidate to ship, e.g. 0.2.2-rc.202610011200"
+        required: false
         type: string
+      bump:
+        description: "kind public: the part of the version to raise"
+        required: false
+        default: patch
+        type: choice
+        options: [patch, minor, major]
       summary:
         description: "What ships, in up to ten lines"
-        required: true
+        required: false
         type: string
+      dry_run:
+        description: "Record the approval and check the token, but start nothing"
+        required: false
+        default: false
+        type: boolean
 
-run-name: "Approve shipping ${{ inputs.version }}"
+run-name: >-
+  ${{ (github.event_name == 'repository_dispatch' || inputs.kind == 'engine')
+  && format('Approve shipping {0}{1}', github.event.client_payload.version || inputs.version, inputs.dry_run && ' (dry run)' || '')
+  || format('Approve releasing the CLI and plugins ({0}) at {1}{2}', inputs.bump, github.sha, inputs.dry_run && ' (dry run)' || '') }}
 
 permissions: {}
 
 jobs:
   approve:
-    name: Approve the ship
+    name: Approve
     runs-on: ubuntu-latest
     environment: ship-approval
-    timeout-minutes: 5
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: read
     steps:
-      - name: Record the approval
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Record the approval and start what it approves
         env:
-          VERSION: ${{ inputs.version }}
-          SUMMARY: ${{ inputs.summary }}
+          KIND: ${{ github.event_name == 'repository_dispatch' && 'engine' || inputs.kind }}
+          VERSION: ${{ github.event.client_payload.version || inputs.version }}
+          BUMP: ${{ inputs.bump }}
+          SUMMARY: ${{ github.event.client_payload.summary || inputs.summary }}
+          DRY_RUN: ${{ inputs.dry_run }}
           REQUESTED_BY: ${{ github.triggering_actor }}
-        run: |
-          set -euo pipefail
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]; then
-            echo "::error::'$VERSION' is not an engine release candidate (X.Y.Z-rc.<digits>)"
-            exit 1
-          fi
-          {
-            echo "Approved shipping \`$VERSION\` (requested by $REQUESTED_BY)."
-            echo ""
-            echo "$SUMMARY"
-          } >> "$GITHUB_STEP_SUMMARY"
+          SHIP_DISPATCH_TOKEN: ${{ secrets.SHIP_DISPATCH_TOKEN }}
+          SHIP_DISPATCH_REPO: ${{ secrets.SHIP_DISPATCH_REPO }}
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/approve.mjs
