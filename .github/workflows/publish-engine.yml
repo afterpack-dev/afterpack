@@ -9,6 +9,12 @@ name: Publish engine
 # integrity the source registry reports instead. Only a `latest` publish
 # hands the engine on to the CLI and plugins.
 #
+# Nothing publishes without the operator's approval: before any download, the
+# job checks, with this repository's own token, that approve_run_id (in the
+# dispatch payload, or the manual run's input) is a successful main-branch
+# Approve run titled for an RC of this exact version, approved in
+# `ship-approval` by that environment's required reviewer.
+#
 # Idempotent and patient: a version npmjs already serves with the same
 # files is skipped (different files fail before anything publishes), a
 # publish npmjs refuses because it already holds that version (E403 "cannot
@@ -30,6 +36,10 @@ on:
         default: latest
         type: choice
         options: [latest, rc]
+      approve_run_id:
+        description: "The Approve run in which the operator approved shipping an RC of this version"
+        required: true
+        type: string
 
 run-name: "Publish engine ${{ github.event.client_payload.version || inputs.version }} (${{ github.event.client_payload.tag || inputs.tag || 'latest' }})"
 
@@ -38,6 +48,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
+  actions: read
   contents: write
   id-token: write
 
@@ -59,6 +70,16 @@ jobs:
       # Trusted publishing needs npm 11.5.1 or newer; npm 12 reshaped `npm pack --json`.
       - name: Update npm
         run: npm install -g npm@^11.5.1
+
+      - name: Require the operator's approval of this version
+        env:
+          EVENT: ${{ github.event_name }}
+          PAYLOAD: ${{ toJSON(github.event.client_payload) }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_APPROVE_RUN_ID: ${{ inputs.approve_run_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/npm-release.mjs verify-approval
 
       - name: Download and verify the tarballs
         env:

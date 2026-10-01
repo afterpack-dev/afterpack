@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { APPROVAL_ENVIRONMENT, approvalProblems, approveRunId } from "./lib/approval.mjs";
 import {
   checkEngineManifest,
   ENGINE_PACKAGES,
@@ -17,6 +18,7 @@ import {
   publishedDifferences,
   publishOrder,
   registryHost,
+  request,
   versionState,
   waitUntilServed,
 } from "./lib/registry.mjs";
@@ -40,6 +42,46 @@ function tarballsIn(dir) {
   const duplicate = names.find((name, i) => names.indexOf(name) !== i);
   if (duplicate) fail(`${dir} holds more than one tarball of ${duplicate}`);
   return tarballs;
+}
+
+async function githubGet(repository, route, token = process.env.GH_TOKEN) {
+  const api = process.env.GITHUB_API_URL ?? "https://api.github.com";
+  const response = await request(`${api}/repos/${repository}${route}`, {
+    headers: {
+      accept: "application/vnd.github+json",
+      "x-github-api-version": "2022-11-28",
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  if (token && (response.status === 401 || response.status === 403)) {
+    return githubGet(repository, route, "");
+  }
+  if (response.status === 404) return null;
+  if (!response.ok) fail(`GET ${route} answered ${response.status}`);
+  return response.json();
+}
+
+async function verifyApproval() {
+  const env = process.env;
+  const payload = env.PAYLOAD ? JSON.parse(env.PAYLOAD) : null;
+  const { version, fromDispatch } = resolveEngineRelease({
+    event: env.EVENT,
+    payload,
+    inputVersion: env.INPUT_VERSION,
+    inputTag: env.INPUT_TAG,
+  });
+  const id = approveRunId(fromDispatch ? payload?.approve_run_id : env.INPUT_APPROVE_RUN_ID);
+  const repository = env.GITHUB_REPOSITORY ?? fail("GITHUB_REPOSITORY is not set");
+  const run = await githubGet(repository, `/actions/runs/${id}`);
+  const approvals = run ? await githubGet(repository, `/actions/runs/${id}/approvals`) : null;
+  const environment = await githubGet(repository, `/environments/${APPROVAL_ENVIRONMENT}`);
+  const problems = approvalProblems({ run, approvals, environment, repository, version });
+  if (problems.length > 0) {
+    fail(`Approve run ${id} does not approve engine ${version}: ${problems.join("; ")}`);
+  }
+  const line = `Engine ${version} was approved in ${run.html_url} ("${run.display_title}").`;
+  appendFile("GITHUB_STEP_SUMMARY", `${line}\n\n`);
+  console.log(line);
 }
 
 function fetchEngine(args) {
@@ -189,12 +231,12 @@ async function wait(args) {
   console.log(`npmjs serves every tarball of ${entries[0].version}`);
 }
 
-const COMMANDS = { "fetch-engine": fetchEngine, publish, wait };
+const COMMANDS = { "verify-approval": verifyApproval, "fetch-engine": fetchEngine, publish, wait };
 const [command, ...args] = process.argv.slice(2);
 try {
   if (!COMMANDS[command]) {
     fail(
-      "usage: node scripts/npm-release.mjs fetch-engine --out <dir> | publish --dir <dir> --tag <tag> [--provenance] [--dry-run] | wait (--dir <dir> | --version <v> [--packages a,b]) [--tag <tag>] [--deadline-minutes 45]",
+      "usage: node scripts/npm-release.mjs verify-approval | fetch-engine --out <dir> | publish --dir <dir> --tag <tag> [--provenance] [--dry-run] | wait (--dir <dir> | --version <v> [--packages a,b]) [--tag <tag>] [--deadline-minutes 45]",
     );
   }
   await COMMANDS[command](args);

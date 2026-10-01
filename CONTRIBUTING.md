@@ -76,9 +76,14 @@ One lane publishes to `latest`; there is no release-candidate channel for the CL
 - **`RC smoke`** installs an engine build on every OS it ships a native binding for, and fails
   unless each binding loads natively, reports its version, and produces protected output that
   still runs and matches Linux byte for byte.
-- **`Approve`** is the single human approval for a production ship; the release tooling
-  dispatches it and waits. Dispatching `Release` or `Publish engine` directly publishes with no
-  further approval.
+- **`Approve`** is the single human approval for a production ship: the release tooling
+  dispatches it, waits until the required reviewer of the `ship-approval` environment approves
+  it, and only then goes to production. `Publish engine` publishes nothing without one: it first
+  checks, with this repository's own token, that the `approve_run_id` it was given (in the
+  dispatch payload, or as the manual run's input) is a successful `Approve` run on `main`, titled
+  for an RC of the version it publishes, and approved in `ship-approval` by that environment's
+  required reviewer. Dispatching `Release` directly publishes the CLI and plugins with no further
+  approval.
 
 Both publishing workflows are safe to re-run: every step checks npmjs first, skips a version it
 already serves with the same files, treats "cannot publish over" (E403/E409) as published, and
