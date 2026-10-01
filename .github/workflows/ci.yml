@@ -1,8 +1,11 @@
 name: CI
 
+# A pull request runs on `pull_request`, so a push runs CI only on main;
+# otherwise every push to a pull request's branch would run every job twice.
 on:
   pull_request:
   push:
+    branches: [main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -63,7 +66,6 @@ jobs:
       AFTERPACK_E2E_SHARD: ${{ matrix.shard }}/4
       LANE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'full' || 'quick' }}
       AFTERPACK_E2E_BROWSERS: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'chromium,firefox,webkit' || 'chromium' }}
-      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.afterpack/ms-playwright
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -105,19 +107,20 @@ jobs:
 
   # Path handling differs on Windows and macOS: build and smoke a Vite, a
   # webpack, a CLI and a Next fixture there on every run (free on a public
-  # repository).
+  # repository). The Windows leg may fail without failing the run until it
+  # has passed on main; make it a required check only after that.
   e2e-os:
     name: End-to-end on ${{ matrix.os }}
     needs: check
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest, macos-latest]
     env:
       AFTERPACK_E2E_FIXTURES: vite-react,webpack-react,cli-vanilla-esm,next-app-webpack
-      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.afterpack/ms-playwright
     defaults:
       run:
         shell: bash

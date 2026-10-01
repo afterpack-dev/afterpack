@@ -1,9 +1,9 @@
 name: Prepare the e2e fixtures and browsers
 description: >-
   Installs the node_modules of every e2e fixture the job selects (through
-  AFTERPACK_E2E_FIXTURES or AFTERPACK_E2E_SHARD) and the Playwright browsers
-  the lane needs, restoring both from the Actions cache when their lockfiles
-  are unchanged. Run it after the workspace is installed and built.
+  AFTERPACK_E2E_FIXTURES or AFTERPACK_E2E_SHARD), restoring them from the
+  Actions cache when their lockfiles are unchanged, and the Playwright
+  browsers the lane needs. Run it after the workspace is installed and built.
 
 inputs:
   browsers:
@@ -22,14 +22,11 @@ runs:
       shell: bash
       env:
         SELECTION: ${{ env.AFTERPACK_E2E_SHARD || env.AFTERPACK_E2E_FIXTURES || 'all' }}
-        BROWSERS: ${{ inputs.browsers }}
       run: |
         set -euo pipefail
-        playwright=$(node -p "require('@playwright/test/package.json').version")
         {
           echo "selection=$(printf '%s' "$SELECTION" | tr -c 'A-Za-z0-9-' '_')"
           echo "node=$(node --version)"
-          echo "browsers=playwright-${playwright}-$(printf '%s' "$BROWSERS" | tr ' ' '-')"
         } >> "$GITHUB_OUTPUT"
 
     # Windows links each fixture to its plugin with a junction, which the cache
@@ -53,15 +50,9 @@ runs:
         path: packages/*/e2e/*/node_modules
         key: ${{ steps.fixtures.outputs.cache-primary-key }}
 
-    - name: Restore the Playwright browsers
-      id: browsers
-      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-      with:
-        path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
-        key: ${{ runner.os }}-${{ runner.arch }}-${{ steps.keys.outputs.browsers }}
-
+    # Playwright advises against caching browsers: a restore takes about as
+    # long as the download, and Linux still needs the system libraries.
     - name: Install the Playwright browsers
-      if: steps.browsers.outputs.cache-hit != 'true'
       shell: bash
       env:
         BROWSERS: ${{ inputs.browsers }}
@@ -72,12 +63,3 @@ runs:
         else
           pnpm exec playwright install "${list[@]}"
         fi
-
-    - name: Install the browsers' system libraries
-      if: steps.browsers.outputs.cache-hit == 'true' && runner.os == 'Linux'
-      shell: bash
-      env:
-        BROWSERS: ${{ inputs.browsers }}
-      run: |
-        read -ra list <<< "$BROWSERS"
-        pnpm exec playwright install-deps "${list[@]}"

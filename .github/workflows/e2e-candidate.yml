@@ -65,7 +65,6 @@ jobs:
       AFTERPACK_E2E_SHARD: ${{ matrix.shard }}/4
       CANDIDATE: ${{ needs.version.outputs.version }}
       AFTERPACK_E2E_BROWSERS: chromium,firefox,webkit
-      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.afterpack/ms-playwright
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:

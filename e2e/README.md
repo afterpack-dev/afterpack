@@ -37,7 +37,7 @@ Run the full lane as CI does with `AFTERPACK_E2E_BROWSERS=chromium,firefox,webki
 
 | Lane | Where | What |
 |---|---|---|
-| quick | every pull request and branch push, in four shards; a Windows and a macOS job over `vite-react`, `webpack-react`, `cli-vanilla-esm` and `next-app-webpack` | tests tagged `@quick`, in Chromium |
+| quick | every pull request, in four shards; a Windows and a macOS job over `vite-react`, `webpack-react`, `cli-vanilla-esm` and `next-app-webpack` (on a push to `main` too) | tests tagged `@quick`, in Chromium |
 | full | a push to `main`, in four shards; `e2e-candidate.yml` for an engine candidate | every test, in Chromium, Firefox and WebKit |
 
 - `@quick`: in the PR lane. Tag the tests that matter most for the fixture, and keep them fast.
