@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { after, describe, it } from "node:test";
 import {
+  approvedRcOf,
   BINDINGS,
   bindingPackage,
   checkEngineManifest,
@@ -9,6 +14,8 @@ import {
   hostBinding,
   payloadIntegrity,
   resolveEngineRelease,
+  restamped,
+  tarballRestampDifferences,
 } from "../lib/engine.mjs";
 
 describe("the engine package set", () => {
@@ -50,6 +57,90 @@ describe("resolveEngineRelease", () => {
         /is not a stable version/,
       );
     }
+  });
+});
+
+describe("approvedRcOf", () => {
+  it("accepts only a release candidate of the version being published", () => {
+    assert.equal(approvedRcOf("0.3.0-rc.202610011200", "0.3.0"), "0.3.0-rc.202610011200");
+    for (const rc of ["0.3.1-rc.1", "0.3.0", "0.30.0-rc.1", "0.3.0-rc.", "", undefined]) {
+      assert.throws(
+        () => approvedRcOf(rc, "0.3.0"),
+        /not a release candidate of 0\.3\.0/,
+        String(rc),
+      );
+    }
+  });
+});
+
+describe("restamped tarballs", () => {
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "restamp-test-"));
+  after(() => fs.rmSync(work, { recursive: true, force: true }));
+  const RC = "0.3.0-rc.202610011200";
+  const rcManifest = {
+    name: "@afterpack/core",
+    version: RC,
+    main: "index.js",
+    repository: { type: "git", url: "git+https://example.invalid/source.git" },
+    optionalDependencies: { "@afterpack/core-linux-x64-gnu": RC },
+    dependencies: { "detect-libc": "^2.0.0" },
+  };
+  const pack = (name, manifest, files) => {
+    const dir = path.join(work, name, "package");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "package.json"), `${JSON.stringify(manifest, null, "\t")}\n`);
+    for (const [file, text] of Object.entries(files)) fs.writeFileSync(path.join(dir, file), text);
+    const file = path.join(work, `${name}.tgz`);
+    execFileSync("tar", ["-czf", file, "-C", path.join(work, name), "package"]);
+    return file;
+  };
+  const files = { "index.js": "module.exports = 1;\n", "engine.node": "\u0000binary" };
+  const rc = pack("rc", rcManifest, files);
+  const promoted = (manifest, extra = {}) =>
+    pack(`stable-${Object.keys(extra).join("-") || "x"}-${Math.random()}`, manifest, {
+      ...files,
+      ...extra,
+    });
+
+  it("accepts the approved RC with only the version restamped, as promote writes it", () => {
+    const stable = promoted(restamped(rcManifest, "0.3.0"));
+    assert.deepEqual(tarballRestampDifferences(rc, stable, "0.3.0"), []);
+    assert.deepEqual(restamped(rcManifest, "0.3.0").optionalDependencies, {
+      "@afterpack/core-linux-x64-gnu": "0.3.0",
+    });
+    assert.equal(restamped(rcManifest, "0.3.0").repository.url, EXPECTED_REPOSITORY);
+  });
+
+  it("refuses a doctored file, an added file and a changed manifest", () => {
+    const manifest = restamped(rcManifest, "0.3.0");
+    assert.deepEqual(
+      tarballRestampDifferences(
+        rc,
+        promoted(manifest, { "index.js": "module.exports = 2;\n" }),
+        "0.3.0",
+      ),
+      ["~ index.js"],
+    );
+    assert.deepEqual(
+      tarballRestampDifferences(rc, promoted(manifest, { "postinstall.js": "x" }), "0.3.0"),
+      ["+ postinstall.js"],
+    );
+    assert.deepEqual(
+      tarballRestampDifferences(rc, promoted({ ...manifest, main: "evil.js" }), "0.3.0"),
+      ["~ package.json (beyond the version restamp)"],
+    );
+    assert.deepEqual(
+      tarballRestampDifferences(
+        rc,
+        promoted({ ...manifest, dependencies: { "detect-libc": "*" } }),
+        "0.3.0",
+      ),
+      ["~ package.json (beyond the version restamp)"],
+    );
+    assert.deepEqual(
+      tarballRestampDifferences(rc, promoted(restamped(rcManifest, "0.3.1")), "0.3.0"),
+      ["~ package.json (beyond the version restamp)"],
+    );
   });
 });
 

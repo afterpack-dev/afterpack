@@ -10,10 +10,12 @@ import {
   releaseApproval,
 } from "./lib/approval.mjs";
 import {
+  approvedRcOf,
   checkEngineManifest,
   ENGINE_PACKAGES,
   payloadIntegrity,
   resolveEngineRelease,
+  tarballRestampDifferences,
 } from "./lib/engine.mjs";
 import {
   alreadyPublished,
@@ -102,8 +104,11 @@ async function verifyApproval() {
     inputVersion: env.INPUT_VERSION,
   });
   const id = approveRunId(fromDispatch ? payload?.approve_run_id : env.INPUT_APPROVE_RUN_ID);
-  await checkedApproval(id, { kind: "engine", version });
-  appendFile("GITHUB_ENV", `APPROVE_RUN_ID=${id}\n`);
+  const run = await checkedApproval(id, { kind: "engine", version });
+  appendFile(
+    "GITHUB_ENV",
+    `APPROVED_RC=${approvedTarget(run.display_title).rc}\nAPPROVE_RUN_ID=${id}\n`,
+  );
 }
 
 async function verifyReleaseApproval() {
@@ -140,6 +145,7 @@ function fetchEngine(args) {
     payload,
     inputVersion: env.INPUT_VERSION,
   });
+  const rc = approvedRcOf(env.APPROVED_RC, version);
   if (!env.ENGINE_REGISTRY || !env.ENGINE_REGISTRY_TOKEN) {
     fail("ENGINE_REGISTRY and ENGINE_REGISTRY_TOKEN must be set in the npm environment");
   }
@@ -178,13 +184,24 @@ function fetchEngine(args) {
       }
       const problems = checkEngineManifest(tarball.manifest, name, version);
       if (problems.length > 0) fail(`${spec} ${problems.join("; ")}`);
-      console.log(`verified ${spec} ${tarball.integrity}`);
+      const approved = `${name}@${rc}`;
+      const rcPack = npm(
+        ["pack", approved, "--registry", source, "--pack-destination", scratch, "--json"],
+        npmEnv,
+      );
+      if (rcPack.status !== 0) fail(`npm pack ${approved} failed:\n${rcPack.stderr}`);
+      const rcFile = path.join(scratch, packFilename(rcPack.stdout));
+      const differences = tarballRestampDifferences(rcFile, tarball.file, version);
+      if (differences.length > 0) {
+        fail(`${spec} is not the approved ${approved} restamped: ${differences.join(", ")}`);
+      }
+      console.log(`verified ${spec} ${tarball.integrity}: the approved ${approved}, restamped`);
     }
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });
   }
   appendFile("GITHUB_ENV", `VERSION=${version}\n`);
-  console.log(`engine ${version} is ready to publish from ${out}`);
+  console.log(`engine ${version}, the approved ${rc}, is ready to publish from ${out}`);
 }
 
 async function publish(args) {

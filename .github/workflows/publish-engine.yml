@@ -11,7 +11,9 @@ name: Publish engine
 # job checks, with this repository's own token, that approve_run_id (in the
 # dispatch payload, or the manual run's input) is a successful main-branch
 # Approve run titled for an RC of this exact version, approved in
-# `ship-approval` by that environment's required reviewer.
+# `ship-approval` by that environment's required reviewer. The approval binds
+# the bytes, not just the version: every tarball must unpack to the approved
+# RC's files, byte for byte, with only the version restamped in package.json.
 #
 # Idempotent and patient: a version npmjs already serves with the same
 # files is skipped (different files fail before anything publishes), a
@@ -74,7 +76,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/npm-release.mjs verify-approval
 
-      - name: Download and verify the tarballs
+      - name: Download the tarballs and check them against the approved RC
         env:
           EVENT: ${{ github.event_name }}
           PAYLOAD: ${{ toJSON(github.event.client_payload) }}
