@@ -24,8 +24,11 @@ with an environment variable:
 | `AFTERPACK_E2E_FIXTURES=vite-react,next-app-webpack` | only these fixtures: install, build, serve, test |
 | `AFTERPACK_E2E_SHARD=2/4` | one slice of four, balanced by the `weight` in the registry; fixtures that share a directory stay in the same slice |
 | `AFTERPACK_E2E_BROWSERS=chromium,firefox,webkit` | the browsers to run (default `chromium`); CI's full lane runs all three |
-| `AFTERPACK_E2E_BUILD_CONCURRENCY=3` | how many fixture builds run at once; the default is 3, or fewer on a small machine |
-| `AFTERPACK_E2E_WORKERS=2` | Playwright workers (default 2) |
+| `AFTERPACK_E2E_BUILD_CONCURRENCY=3` | how many fixture builds run at once; the default is 3, or fewer on a small machine, and 1 on a self-hosted Actions runner |
+| `AFTERPACK_E2E_WORKERS=2` | Playwright workers; the default is 2, and 1 on a self-hosted Actions runner |
+
+A self-hosted runner (`RUNNER_ENVIRONMENT=self-hosted`) is usually a shared machine, so the suite
+builds and tests one thing at a time there unless the two variables say otherwise.
 
 Run the full lane as CI does with `AFTERPACK_E2E_BROWSERS=chromium,firefox,webkit pnpm e2e`, after
 `npx playwright install chromium firefox webkit`.
@@ -43,8 +46,12 @@ Run the full lane as CI does with `AFTERPACK_E2E_BROWSERS=chromium,firefox,webki
 - `@scenario`: a differential user journey (see below).
 
 Tests that rebuild a fixture in place, such as the determinism rebuild on `next-app-webpack` and
-`electron-app`, are `@node`. A fixture's Firefox and WebKit projects run after its Chromium project,
-so a rebuild never replaces files that another browser is still loading.
+`electron-app`, are `@node`. A fixture's Firefox and WebKit projects depend on its Chromium project
+(or on the first browser listed, when Chromium is not), which alone runs the `@node` tests, so a
+rebuild never replaces files that another browser is still loading. Playwright runs a dependency
+project whole: `--grep`, `--repeat-each` and `--project` do not narrow it, and a failure there skips
+that fixture's other browsers. To repeat one Firefox test, select only that browser:
+`AFTERPACK_E2E_BROWSERS=firefox AFTERPACK_E2E_FIXTURES=vite-react pnpm e2e --grep @scenario --repeat-each 5`.
 
 ## What every fixture proves
 

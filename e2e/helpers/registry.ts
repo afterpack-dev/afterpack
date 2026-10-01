@@ -1,3 +1,4 @@
+import { availableParallelism } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -375,7 +376,28 @@ export function selectedBrowsers(env: NodeJS.ProcessEnv = process.env): BrowserN
       throw new Error(`AFTERPACK_E2E_BROWSERS names an unknown browser "${name}"`);
     }
   }
-  return names as BrowserName[];
+  if (names.length === 0) throw new Error("AFTERPACK_E2E_BROWSERS names no browser");
+  return [...new Set(names)] as BrowserName[];
+}
+
+function requestedCount(value: string | undefined): number | null {
+  const count = Number(value);
+  return Number.isInteger(count) && count >= 1 ? count : null;
+}
+
+function onSelfHostedRunner(env: NodeJS.ProcessEnv): boolean {
+  return env.RUNNER_ENVIRONMENT === "self-hosted";
+}
+
+export function buildConcurrency(env: NodeJS.ProcessEnv = process.env): number {
+  const requested = requestedCount(env.AFTERPACK_E2E_BUILD_CONCURRENCY);
+  if (requested !== null) return requested;
+  if (onSelfHostedRunner(env)) return 1;
+  return Math.max(1, Math.min(3, availableParallelism() - 1));
+}
+
+export function playwrightWorkers(env: NodeJS.ProcessEnv = process.env): number {
+  return requestedCount(env.AFTERPACK_E2E_WORKERS) ?? (onSelfHostedRunner(env) ? 1 : 2);
 }
 
 export function fixtureDirs(fixtures: Fixture[] = FIXTURES): string[] {

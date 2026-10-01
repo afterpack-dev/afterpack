@@ -1,9 +1,8 @@
 import { spawn } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { availableParallelism } from "node:os";
 import { dirname, relative } from "node:path";
 import { pathToFileURL } from "node:url";
-import { type Fixture, REPO_ROOT, selectedFixtures } from "./helpers/registry.js";
+import { buildConcurrency, type Fixture, REPO_ROOT, selectedFixtures } from "./helpers/registry.js";
 
 export interface BuildJob {
   label: string;
@@ -78,15 +77,9 @@ function runJob(job: BuildJob): Promise<JobResult> {
   });
 }
 
-function defaultConcurrency(): number {
-  const requested = Number(process.env.AFTERPACK_E2E_BUILD_CONCURRENCY);
-  if (Number.isInteger(requested) && requested >= 1) return requested;
-  return Math.max(1, Math.min(3, availableParallelism() - 1));
-}
-
 export async function buildFixtures(
   fixtures: Fixture[],
-  concurrency = defaultConcurrency(),
+  concurrency = buildConcurrency(),
 ): Promise<boolean> {
   const queue = [...fixtures].sort((a, b) => b.weight - a.weight).flatMap(buildJobsOf);
   const results: JobResult[] = [];

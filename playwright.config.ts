@@ -1,13 +1,24 @@
 import { defineConfig } from "@playwright/test";
-import { selectedBrowsers, selectedFixtures } from "./e2e/helpers/registry.js";
+import {
+  type BrowserName,
+  type Fixture,
+  playwrightWorkers,
+  selectedBrowsers,
+  selectedFixtures,
+} from "./e2e/helpers/registry.js";
 import { assertFixturesBuilt, assertFixturesInstalled } from "./e2e/preflight.js";
 
 const SERVER_TIMEOUT_MS = 2 * 60 * 1000;
 const fixtures = selectedFixtures();
 const browsers = selectedBrowsers();
+const primary: BrowserName = browsers.includes("chromium") ? "chromium" : browsers[0];
 
 assertFixturesInstalled(fixtures);
 assertFixturesBuilt(fixtures);
+
+function projectName(fixture: Fixture, browserName: BrowserName): string {
+  return browserName === "chromium" ? fixture.name : `${fixture.name}@${browserName}`;
+}
 
 function server(command: string, cwd: string, url: string, env: Record<string, string>) {
   return {
@@ -22,8 +33,6 @@ function server(command: string, cwd: string, url: string, env: Record<string, s
   };
 }
 
-const requestedWorkers = Number(process.env.AFTERPACK_E2E_WORKERS);
-
 export default defineConfig({
   testDir: "./packages",
   testMatch: "**/e2e/**/*.spec.ts",
@@ -32,7 +41,7 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
   retries: 0,
-  workers: Number.isInteger(requestedWorkers) && requestedWorkers > 0 ? requestedWorkers : 2,
+  workers: playwrightWorkers(),
   timeout: 5 * 60 * 1000,
   expect: { timeout: 20_000 },
   reporter: [
@@ -42,11 +51,10 @@ export default defineConfig({
   use: { trace: "retain-on-failure" },
   projects: fixtures.flatMap((fixture) =>
     browsers.map((browserName) => ({
-      name: browserName === "chromium" ? fixture.name : `${fixture.name}@${browserName}`,
+      name: projectName(fixture, browserName),
       testMatch: `**/${fixture.relativeDir}/*.spec.ts`,
-      grepInvert: browserName === "chromium" ? undefined : /@node/,
-      dependencies:
-        browserName !== "chromium" && browsers.includes("chromium") ? [fixture.name] : [],
+      grepInvert: browserName === primary ? undefined : /@node/,
+      dependencies: browserName === primary ? [] : [projectName(fixture, primary)],
       metadata: { fixture: fixture.name },
       use: { browserName, baseURL: fixture.baseURL ?? undefined },
     })),
