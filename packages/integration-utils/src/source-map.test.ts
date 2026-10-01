@@ -7,6 +7,7 @@ import {
   discoverInputSourceMap,
   extractSourceMappingURL,
   isRemoteSourceMappingURL,
+  withoutCssSourceMappingURL,
 } from "./source-map.js";
 
 let dir: string;
@@ -28,6 +29,26 @@ describe("extractSourceMappingURL", () => {
   it("supports the legacy //@ form and returns null when absent", () => {
     expect(extractSourceMappingURL("var a=1;\n//@ sourceMappingURL=legacy.map")).toBe("legacy.map");
     expect(extractSourceMappingURL("var a=1;")).toBeNull();
+  });
+});
+
+describe("withoutCssSourceMappingURL", () => {
+  it("drops the trailer Turbopack and webpack write, on its own line or after the last rule", () => {
+    expect(withoutCssSourceMappingURL("a{color:red}\n/*# sourceMappingURL=0kdic.css.map*/")).toBe(
+      "a{color:red}\n",
+    );
+    expect(withoutCssSourceMappingURL("a{color:red} /*# sourceMappingURL=bd1f.css.map */\n")).toBe(
+      "a{color:red}",
+    );
+  });
+  it("drops an inline data URI and the legacy /*@ form", () => {
+    const inline = `a{}\n/*# sourceMappingURL=data:application/json;base64,${Buffer.from(MAP).toString("base64")} */\n`;
+    expect(withoutCssSourceMappingURL(inline)).toBe("a{}\n");
+    expect(withoutCssSourceMappingURL("a{}\n/*@ sourceMappingURL=a.css.map */")).toBe("a{}\n");
+  });
+  it("leaves CSS without a trailer, and its other comments, untouched", () => {
+    const css = "/* theme */\na{color:red}\n/*! license */\n";
+    expect(withoutCssSourceMappingURL(css)).toBe(css);
   });
 });
 

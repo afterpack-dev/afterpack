@@ -1,7 +1,7 @@
 import { basename, resolve } from "node:path";
 import type { InMemoryInput, InMemoryOutput } from "./pass.js";
 import type { ReportPolicy } from "./policy.js";
-import { withSourceMappingURL } from "./source-map.js";
+import { withoutCssSourceMappingURL, withSourceMappingURL } from "./source-map.js";
 
 export interface BundleEntryLike {
   type: string;
@@ -22,6 +22,8 @@ export interface BundleJs {
 }
 
 const BUNDLE_JS_RE = /\.[cm]?js$/;
+
+const CSS_MAP_RE = /\.css\.map$/;
 
 export function collectBundleJs(bundle: OutputBundleLike, outDir: string): BundleJs {
   const files: string[] = [];
@@ -74,4 +76,19 @@ export function applyBundleOutput(
     entry.map = null;
   }
   entry.code = withSourceMappingURL(out.code, policy.emitSourceMappingURL ? url : null);
+}
+
+export function stripBundleCssSourceMaps(bundle: OutputBundleLike): void {
+  for (const [fileName, entry] of Object.entries(bundle)) {
+    if (CSS_MAP_RE.test(fileName)) {
+      delete bundle[fileName];
+      continue;
+    }
+    if (entry.type !== "asset" || !fileName.endsWith(".css") || entry.source === undefined)
+      continue;
+    const css =
+      typeof entry.source === "string" ? entry.source : Buffer.from(entry.source).toString("utf8");
+    const stripped = withoutCssSourceMappingURL(css);
+    if (stripped !== css) entry.source = stripped;
+  }
 }

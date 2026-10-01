@@ -13,6 +13,7 @@ import {
   resolvePluginConfig,
   runObfuscationPass,
   scanDirectives,
+  stripBundleCssSourceMaps,
   type WriteProtectionReceiptInput,
   writeDeferredProtectionReceipt,
 } from "@afterpack/integration-utils";
@@ -141,6 +142,9 @@ export function afterpackRollup(options: AfterpackRollupOptions = {}): Plugin {
           if (entry) {
             applyBundleOutput(bundle as unknown as OutputBundleLike, entry, out, result.policy);
           }
+        }
+        if (!result.policy.sourceMap) {
+          stripBundleCssSourceMaps(bundle as unknown as OutputBundleLike);
         }
         if (result.deferredReceipt) deferredReceiptByOutDir.set(outDir, result.deferredReceipt);
       },

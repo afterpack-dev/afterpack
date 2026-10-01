@@ -196,6 +196,20 @@ describe("afterpackVite generateBundle (production policy)", () => {
     expect(existsSync(join(outDir, "protectionMap.html"))).toBe(false);
     expect((sharedConfig().protectionMap as { enabled: boolean }).enabled).toBe(false);
   });
+
+  it("drops a CSS map another plugin emitted, and the trailer that names it", async () => {
+    const bundle = await runPlugin(
+      { protectionMap: false },
+      bundleOf(
+        chunk("a.js", "export const a = 1;"),
+        { type: "asset", fileName: "a.css", source: "a{}\n/*# sourceMappingURL=a.css.map */\n" },
+        { type: "asset", fileName: "a.css.map", source: '{"version":3,"sourcesContent":["a {}"]}' },
+      ),
+    );
+
+    expect(bundle["a.css.map"]).toBeUndefined();
+    expect(bundle["a.css"].source).toBe("a{}\n");
+  });
 });
 
 describe("afterpackVite preset bundle vs numeric complexity", () => {

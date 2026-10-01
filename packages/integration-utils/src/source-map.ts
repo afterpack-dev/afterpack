@@ -5,11 +5,18 @@ const SOURCE_MAPPING_URL_RE = /\/\/[#@]\s*sourceMappingURL=(\S+)\s*$/gm;
 
 const SOURCE_MAPPING_URL_LINE_RE = /^[ \t]*\/\/[#@]\s*sourceMappingURL=\S+[ \t]*\r?\n?/gm;
 
+const CSS_SOURCE_MAPPING_URL_RE =
+  /[ \t]*\/\*[#@]\s*sourceMappingURL=[^\s*]+\s*\*\/[ \t]*(?:\r?\n)?/g;
+
 export function withSourceMappingURL(code: string, url: string | null): string {
   const stripped = code.replace(SOURCE_MAPPING_URL_LINE_RE, "");
   if (url == null) return stripped;
   const separator = stripped.length > 0 && !stripped.endsWith("\n") ? "\n" : "";
   return `${stripped}${separator}//# sourceMappingURL=${url}\n`;
+}
+
+export function withoutCssSourceMappingURL(css: string): string {
+  return css.replace(CSS_SOURCE_MAPPING_URL_RE, "");
 }
 
 export function extractSourceMappingURL(code: string): string | null {

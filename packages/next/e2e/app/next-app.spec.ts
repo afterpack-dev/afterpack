@@ -15,7 +15,11 @@ import {
   unprotectedBaselineSignature,
 } from "@e2e/helpers/signatures.js";
 import { runSmoke } from "@e2e/helpers/smoke.js";
-import { expectSourceMap } from "@e2e/helpers/source-map.js";
+import {
+  expectSourceMap,
+  servedSourceMapProblems,
+  sourceMapsUnder,
+} from "@e2e/helpers/source-map.js";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 const expectations = readExpectations(HERE);
@@ -90,6 +94,10 @@ function distDirOf(app: Fixture): string {
   return join(app.dir, app.env.AFTERPACK_E2E_DIST_DIR ?? ".next");
 }
 
+async function statusOf(url: string): Promise<number> {
+  return (await fetch(url)).status;
+}
+
 function testIdText(html: string, testId: string): string {
   const match = html.match(new RegExp(`data-testid="${testId}"[^>]*>([^<]*)<`));
   if (!match) throw new Error(`data-testid="${testId}" not found in the server-rendered HTML`);
@@ -141,6 +149,25 @@ test.describe("Next.js 16 App Router serves a dual bundle", { tag: "@quick" }, (
 
   test("every source map left in the build output is a usable v3 map", { tag: "@node" }, () => {
     expectSourceMap(currentFixture());
+  });
+
+  test("the client tree serves no JS or CSS source map, and names none", { tag: "@node" }, async () => {
+    const app = currentFixture();
+    if (!app.baseline) throw new Error(`${app.name} has no baseline build`);
+    expect(servedSourceMapProblems(join(distDirOf(app), "static"))).toEqual([]);
+
+    const baselineMaps = sourceMapsUnder(
+      join(app.dir, app.baseline.env.AFTERPACK_E2E_DIST_DIR, "static"),
+    );
+    expect(
+      baselineMaps.filter((path) => path.endsWith(".css.map")),
+      "the unprotected baseline serves no CSS map, so this check cannot fail",
+    ).not.toEqual([]);
+    for (const path of baselineMaps) {
+      const url = `/_next/static/${path}`;
+      expect(await statusOf(`${app.baseline.baseURL}${url}`), `baseline ${url}`).toBe(200);
+      expect(await statusOf(`${baseURLOf(app)}${url}`), `protected ${url}`).toBe(404);
+    }
   });
 });
 

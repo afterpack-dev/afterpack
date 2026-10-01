@@ -193,7 +193,7 @@ describe("stripServedSourceMaps", () => {
     writeFileSync(nested, "var b=2;");
     writeFileSync(join(p.chunksDir, "app", "page.js.map"), '{"version":3}');
 
-    stripServedSourceMaps([main, nested], p.chunksDir);
+    stripServedSourceMaps([main, nested], join(p.distDir, "static"));
 
     expect(existsSync(join(p.chunksDir, "main.js.map"))).toBe(false);
     expect(existsSync(join(p.chunksDir, "app", "page.js.map"))).toBe(false);
@@ -201,11 +201,51 @@ describe("stripServedSourceMaps", () => {
     expect(readFileSync(nested, "utf8")).toBe("var b=2;");
   });
 
+  it("deletes the CSS maps both bundlers serve and the trailers that name them", () => {
+    const p = project();
+    const turbopackCss = chunk(p, "0nltecp1q_s1s.css", "a{}\n/*# sourceMappingURL=0kdic.css.map*/");
+    writeFileSync(join(p.chunksDir, "0kdic.css.map"), '{"version":3,"sourcesContent":["a{}"]}');
+    const cssDir = join(p.distDir, "static", "css");
+    mkdirSync(cssDir, { recursive: true });
+    const webpackCss = join(cssDir, "bd1f.css");
+    writeFileSync(webpackCss, "b{}\n/*# sourceMappingURL=bd1f.css.map*/");
+    writeFileSync(join(cssDir, "bd1f.css.map"), '{"version":3,"sourcesContent":["b{}"]}');
+    const lines: string[] = [];
+
+    stripServedSourceMaps([], join(p.distDir, "static"), (line) => lines.push(line));
+
+    expect(existsSync(join(p.chunksDir, "0kdic.css.map"))).toBe(false);
+    expect(existsSync(join(cssDir, "bd1f.css.map"))).toBe(false);
+    expect(readFileSync(turbopackCss, "utf8")).toBe("a{}\n");
+    expect(readFileSync(webpackCss, "utf8")).toBe("b{}\n");
+    expect(lines).toEqual([
+      "[afterpack-next] stripped 2 served source map(s) + 2 sourceMappingURL trailer(s) from the client tree",
+    ]);
+  });
+
   it("is a no-op (no throw) when there are no served maps", () => {
     const p = project();
     const main = chunk(p, "main.js", "var a=1;");
 
-    expect(() => stripServedSourceMaps([main], p.chunksDir)).not.toThrow();
+    expect(() => stripServedSourceMaps([main], join(p.distDir, "static"))).not.toThrow();
     expect(readFileSync(main, "utf8")).toBe("var a=1;");
+  });
+});
+
+describe("runAfterpackHook leaves no source map in the served tree", () => {
+  it("strips a CSS map outside static/chunks, where webpack writes CSS", async () => {
+    const p = project("webpack");
+    chunk(p, "main.js", "var a=1;\n//# sourceMappingURL=main.js.map\n");
+    writeFileSync(join(p.chunksDir, "main.js.map"), '{"version":3}');
+    const cssDir = join(p.distDir, "static", "css");
+    mkdirSync(cssDir, { recursive: true });
+    writeFileSync(join(cssDir, "app.css"), "a{}\n/*# sourceMappingURL=app.css.map*/");
+    writeFileSync(join(cssDir, "app.css.map"), '{"version":3}');
+
+    await runAfterpackHook({ metadata: p, options: {}, engine, env });
+
+    expect(existsSync(join(p.chunksDir, "main.js.map"))).toBe(false);
+    expect(existsSync(join(cssDir, "app.css.map"))).toBe(false);
+    expect(readFileSync(join(cssDir, "app.css"), "utf8")).toBe("a{}\n");
   });
 });

@@ -11,8 +11,14 @@ export {
   type BundleJs,
   collectBundleJs,
   type OutputBundleLike,
+  stripBundleCssSourceMaps,
 } from "./bundle.js";
-export { type CollectJsOptions, collectJsFiles, collectSourceMaps } from "./collect.js";
+export {
+  type CollectJsOptions,
+  collectJsFiles,
+  collectSourceMaps,
+  collectStylesheets,
+} from "./collect.js";
 export {
   CLOUD_REFUSAL_SUMMARY,
   type ClientIdentity,
@@ -135,6 +141,7 @@ export {
   decodeDataUri,
   discoverInputSourceMap,
   extractSourceMappingURL,
+  withoutCssSourceMappingURL,
   withSourceMappingURL,
 } from "./source-map.js";
 export {

@@ -100,6 +100,7 @@ function applyPlugin(
           ? { name, info: asset.info, source: { source: () => asset.content } }
           : undefined;
       },
+      getAssets: () => [...assets.keys()].map((name) => ({ name })),
       updateAsset: (name: string, source: { source(): string }) => {
         const existing = assets.get(name);
         assets.set(name, { content: source.source(), info: existing?.info ?? {} });
@@ -297,6 +298,39 @@ describe("AfterpackWebpackPlugin source maps", () => {
     const assets = await invoke(withMap());
     expect(assets.has("main.js.map")).toBe(false);
     expect(assets.get("main.js")?.content).not.toContain("sourceMappingURL");
+  });
+
+  const withCssMap = (): Fixture => {
+    const fixture = withMap();
+    fixture.assets.set("main.css", {
+      content: "a{color:red}\n/*# sourceMappingURL=main.css.map*/",
+      info: { related: { sourceMap: "main.css.map" } },
+    });
+    fixture.assets.set("main.css.map", {
+      content: '{"version":3,"sources":["a.css"],"sourcesContent":["a { color: red }"]}',
+      info: {},
+    });
+    return fixture;
+  };
+
+  it("deletes the CSS maps and their trailers too when policy ships none", async () => {
+    const invoke = applyPlugin(
+      new AfterpackWebpackPlugin({
+        sourceMap: false,
+        build: { mode: "production" },
+        protectionMap: false,
+      }),
+    );
+    const assets = await invoke(withCssMap());
+    expect([...assets.keys()].sort()).toEqual(["main.css", "main.js"]);
+    expect(assets.get("main.css")?.content).toBe("a{color:red}\n");
+  });
+
+  it("keeps the CSS maps when policy ships source maps", async () => {
+    const invoke = applyPlugin(new AfterpackWebpackPlugin({ sourceMap: { enabled: true } }));
+    const assets = await invoke(withCssMap());
+    expect(assets.get("main.css.map")?.content).toContain("a { color: red }");
+    expect(assets.get("main.css")?.content).toContain("sourceMappingURL=main.css.map");
   });
 });
 

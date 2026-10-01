@@ -1,10 +1,11 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { expect } from "@playwright/test";
 import type { Fixture, FixtureTarget } from "./registry.js";
 
 const JS_OUTPUT = /\.(?:js|mjs|cjs)$/;
 const SOURCE_MAPPING_URL = /\/\/[#@]\s*sourceMappingURL=([^\s'"]+)\s*$/m;
+const CSS_SOURCE_MAPPING_URL = /\/\*[#@]\s*sourceMappingURL=/;
 const DATA_URI = /^data:application\/json[^,]*;base64,(.*)$/;
 const BASE64_VLQ = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
@@ -72,6 +73,43 @@ export function decodeFirstSegments(mappings: string, max: number): MappedPositi
     }
   }
   return out;
+}
+
+function filesUnder(root: string): string[] {
+  const out: string[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      const isDirectory = entry.isDirectory() || (!entry.isFile() && statSync(full).isDirectory());
+      if (isDirectory) walk(full);
+      else out.push(relative(root, full).split(sep).join("/"));
+    }
+  };
+  if (existsSync(root)) walk(root);
+  return out.sort();
+}
+
+export function sourceMapsUnder(root: string): string[] {
+  return filesUnder(root).filter((path) => path.endsWith(".map"));
+}
+
+export function servedSourceMapProblems(root: string): string[] {
+  const problems: string[] = [];
+  for (const path of filesUnder(root)) {
+    if (path.endsWith(".map")) {
+      problems.push(`${path} is a source map`);
+      continue;
+    }
+    const trailer = JS_OUTPUT.test(path)
+      ? SOURCE_MAPPING_URL
+      : path.endsWith(".css")
+        ? CSS_SOURCE_MAPPING_URL
+        : null;
+    if (trailer?.test(readFileSync(join(root, path), "utf8"))) {
+      problems.push(`${path} names a source map`);
+    }
+  }
+  return problems;
 }
 
 function jsOutputs(targets: readonly FixtureTarget[]): string[] {

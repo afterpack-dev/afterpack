@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { collectJsFiles, collectSourceMaps } from "./collect.js";
+import { collectJsFiles, collectSourceMaps, collectStylesheets } from "./collect.js";
 
 let root: string;
 
@@ -171,22 +171,37 @@ describe("collectJsFiles", () => {
 });
 
 describe("collectSourceMaps", () => {
-  it("recurses and collects only .js.map/.mjs.map/.cjs.map, not JS or other files", () => {
+  it("recurses and collects the maps of JS and CSS, not the files they map or other maps", () => {
     mkdirSync(join(root, "nested"), { recursive: true });
     writeFileSync(join(root, "a.js"), "1");
     writeFileSync(join(root, "a.js.map"), "{}");
     writeFileSync(join(root, "b.mjs.map"), "{}");
     writeFileSync(join(root, "nested", "c.cjs.map"), "{}");
-    writeFileSync(join(root, "styles.css.map"), "x");
+    writeFileSync(join(root, "styles.css"), "x");
+    writeFileSync(join(root, "styles.css.map"), "{}");
+    writeFileSync(join(root, "data.json.map"), "{}");
 
     expect(rel(collectSourceMaps(root))).toEqual([
       "a.js.map",
       "b.mjs.map",
       join("nested", "c.cjs.map"),
+      "styles.css.map",
     ]);
   });
 
   it("returns [] for a missing directory", () => {
     expect(collectSourceMaps(join(root, "does-not-exist"))).toEqual([]);
+  });
+});
+
+describe("collectStylesheets", () => {
+  it("recurses and collects .css files only", () => {
+    mkdirSync(join(root, "css"), { recursive: true });
+    writeFileSync(join(root, "a.css"), "a{}");
+    writeFileSync(join(root, "css", "b.css"), "b{}");
+    writeFileSync(join(root, "a.css.map"), "{}");
+    writeFileSync(join(root, "a.js"), "1");
+
+    expect(rel(collectStylesheets(root))).toEqual(["a.css", join("css", "b.css")]);
   });
 });

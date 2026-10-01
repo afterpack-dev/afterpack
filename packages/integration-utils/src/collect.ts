@@ -79,11 +79,9 @@ function walkJs(
   return out;
 }
 
-function isSourceMap(name: string): boolean {
-  return name.endsWith(".js.map") || name.endsWith(".mjs.map") || name.endsWith(".cjs.map");
-}
+const SOURCE_MAP_RE = /\.(?:[cm]?js|css)\.map$/;
 
-export function collectSourceMaps(dir: string): string[] {
+function collectFiles(dir: string, accept: (name: string) => boolean): string[] {
   if (!existsSync(dir)) return [];
   const out: string[] = [];
   for (const entry of entriesOf(dir)) {
@@ -92,10 +90,18 @@ export function collectSourceMaps(dir: string): string[] {
     const kind = kindOf(entry, full);
     if (kind === null) continue;
     if (kind === "dir") {
-      out.push(...collectSourceMaps(full));
-    } else if (isSourceMap(name)) {
+      out.push(...collectFiles(full, accept));
+    } else if (accept(name)) {
       out.push(full);
     }
   }
   return out;
+}
+
+export function collectSourceMaps(dir: string): string[] {
+  return collectFiles(dir, (name) => SOURCE_MAP_RE.test(name));
+}
+
+export function collectStylesheets(dir: string): string[] {
+  return collectFiles(dir, (name) => name.endsWith(".css"));
 }

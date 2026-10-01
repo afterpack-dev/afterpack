@@ -32,8 +32,8 @@ and if obfuscation fails, `next build` fails.
 
 AfterPack obfuscates the client chunks in `.next/static/chunks`. With `output: "export"`, the
 obfuscated chunks are what lands in `out/`. Server code in `.next/server` never reaches the browser
-and is left as is. The plugin also removes `.js.map` files from the client output, since a served
-source map gives your source away.
+and is left as is. The plugin also removes the `.js.map` and `.css.map` files from `.next/static`, and
+the comments that point at them, since a served source map gives your source away.
 
 ## Check a deploy
 

@@ -4,12 +4,14 @@ import {
   type AfterpackPluginOptions,
   collectJsFiles,
   collectSourceMaps,
+  collectStylesheets,
   createTelemetryReporter,
   type ObfuscationEngine,
   passSettings,
   resolveClientIdentity,
   resolvePluginConfig,
   runObfuscationPass,
+  withoutCssSourceMappingURL,
   withSourceMappingURL,
 } from "@afterpack/integration-utils";
 
@@ -56,12 +58,12 @@ function detectBundler(distDir: string): string {
   return "unknown";
 }
 
-function stripDanglingTrailer(js: string): boolean {
+function stripTrailer(path: string, strip: (code: string) => string): boolean {
   try {
-    const code = readFileSync(js, "utf8");
-    const stripped = withSourceMappingURL(code, null);
+    const code = readFileSync(path, "utf8");
+    const stripped = strip(code);
     if (stripped === code) return false;
-    writeFileSync(js, stripped);
+    writeFileSync(path, stripped);
     return true;
   } catch {
     return false;
@@ -70,11 +72,11 @@ function stripDanglingTrailer(js: string): boolean {
 
 export function stripServedSourceMaps(
   chunks: string[],
-  chunksDir: string,
+  servedDir: string,
   log: (message: string) => void = (message) => console.log(message),
 ): void {
   let removed = 0;
-  for (const mapPath of collectSourceMaps(chunksDir)) {
+  for (const mapPath of collectSourceMaps(servedDir)) {
     try {
       unlinkSync(mapPath);
       removed++;
@@ -85,7 +87,10 @@ export function stripServedSourceMaps(
 
   let trailers = 0;
   for (const js of chunks) {
-    if (stripDanglingTrailer(js)) trailers++;
+    if (stripTrailer(js, (code) => withSourceMappingURL(code, null))) trailers++;
+  }
+  for (const css of collectStylesheets(servedDir)) {
+    if (stripTrailer(css, withoutCssSourceMappingURL)) trailers++;
   }
 
   if (removed > 0 || trailers > 0) {
@@ -145,7 +150,7 @@ export async function runAfterpackHook(input: AfterpackHookInput): Promise<void>
     afterWrite: () => {
       stripServedSourceMaps(
         files,
-        chunksDir,
+        join(distDir, "static"),
         settings.diagnostics?.level === "none" ? () => {} : (message) => console.log(message),
       );
     },

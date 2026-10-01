@@ -16,14 +16,16 @@ import {
   runObfuscationPass,
   scanDirectives,
   type WriteProtectionReceiptInput,
+  withoutCssSourceMappingURL,
   withSourceMappingURL,
   writeDeferredProtectionReceipt,
 } from "@afterpack/integration-utils";
-import type { Compilation, Compiler } from "webpack";
+import type { Compilation, Compiler, sources } from "webpack";
 
 const PLUGIN_NAME = "AfterpackWebpackPlugin";
 const EMITTED_JS_RE = /\.(?:js|mjs|cjs)$/;
 const SOURCE_MODULE_RE = /\.(?:m?[jt]sx?)$/;
+const CSS_MAP_RE = /\.css\.map$/;
 
 const PATHS_INCLUDE_UNSUPPORTED =
   "this plugin obfuscates the assets webpack's own chunks claim, in the pipeline — there is no " +
@@ -60,6 +62,19 @@ function inputSourceMap(compilation: Compilation, asset: OwnedAsset): string | n
   if (/^https?:\/\//i.test(asset.url) || asset.url.startsWith("//")) return null;
   const dir = asset.name.includes("/") ? `${asset.name.replace(/\/[^/]*$/, "")}/` : "";
   return assetText(compilation, `${dir}${asset.url}`.replace(/^\.\//, ""));
+}
+
+function stripCssSourceMaps(compilation: Compilation, RawSource: typeof sources.RawSource): void {
+  for (const { name } of compilation.getAssets()) {
+    if (CSS_MAP_RE.test(name)) compilation.deleteAsset(name);
+  }
+  for (const { name } of compilation.getAssets()) {
+    if (!name.endsWith(".css")) continue;
+    const css = assetText(compilation, name);
+    if (css == null) continue;
+    const stripped = withoutCssSourceMappingURL(css);
+    if (stripped !== css) compilation.updateAsset(name, new RawSource(stripped));
+  }
 }
 
 function chunkClaimedJsAssets(compilation: Compilation): OwnedAsset[] {
@@ -235,6 +250,7 @@ export class AfterpackWebpackPlugin {
         compilation.deleteAsset(asset.mapName);
       }
     }
+    if (!result.policy.sourceMap) stripCssSourceMaps(compilation, RawSource);
     if (result.deferredReceipt) {
       this.deferredReceiptByCompilation.set(compilation, result.deferredReceipt);
     }

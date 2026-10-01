@@ -216,6 +216,36 @@ describe("afterpackRollup source maps", () => {
     expect(bundle["index.js.map"]).toBeUndefined();
     expect(bundle["index.js"].code).not.toContain("sourceMappingURL");
   });
+
+  function withCss(): Record<string, BundleEntry> {
+    return {
+      ...mapped(),
+      ...bundleOf(
+        asset("styles.css", "a{}\n/*# sourceMappingURL=styles.css.map */\n"),
+        asset("styles.css.map", '{"version":3,"sourcesContent":["a {}"]}'),
+      ),
+    };
+  }
+
+  it("drops a CSS plugin's map and its trailer too when policy ships none", async () => {
+    const bundle = await runPlugin(
+      { sourceMap: false, build: { mode: "production" }, protectionMap: false },
+      { dir: outDir, sourcemap: true },
+      withCss(),
+    );
+    expect(bundle["styles.css.map"]).toBeUndefined();
+    expect(bundle["styles.css"].source).toBe("a{}\n");
+  });
+
+  it("keeps a CSS plugin's map when policy ships source maps", async () => {
+    const bundle = await runPlugin(
+      { sourceMap: { enabled: true } },
+      { dir: outDir, sourcemap: true },
+      withCss(),
+    );
+    expect(bundle["styles.css.map"].source).toContain("a {}");
+    expect(bundle["styles.css"].source).toContain("sourceMappingURL=styles.css.map");
+  });
 });
 
 const MODULE_ID = "/project/src/mod.js";
