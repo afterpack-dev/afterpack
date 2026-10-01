@@ -77,9 +77,16 @@ One lane publishes to `latest`; there is no release-candidate channel for the CL
   further approval.
 
 Both publishing workflows are safe to re-run: every step checks npmjs first, skips a version it
-already serves, treats "cannot publish over" (E403/E409) as published, and waits up to 45
-minutes for npmjs to serve each tarball before anything depends on it. Their file names and the
-`npm` environment are what the npm trusted publishers are bound to; never rename them.
+already serves with the same files, treats "cannot publish over" (E403/E409) as published, and
+waits up to 45 minutes for npmjs to serve each tarball before anything depends on it. A package
+npmjs already holds at that version with different files fails the publish before anything is
+published. Their file names and the `npm` environment are what the npm trusted publishers are
+bound to; never rename them.
+
+Resume a failed `Release` with **Re-run failed jobs** on that run, never a fresh run. A fresh run
+that finds every package already published releases nothing, so `vX.Y.Z` is never tagged and no
+GitHub Release is created; one whose packages differ from the half-published ones fails before it
+publishes any. To abandon a half-published version, raise the root `package.json` version past it.
 
 Every package in this repository carries **one version**, stamped at publish time and never
 committed: the root `package.json` version is a floor, and the next version is one bump above the

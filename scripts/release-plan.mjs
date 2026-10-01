@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { canonical, extractTarball, listFiles } from "./lib/registry.mjs";
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const REGISTRY = "https://registry.npmjs.org";
@@ -98,30 +99,6 @@ function nextVersion(kind) {
   return next;
 }
 
-function extract(tarball, into) {
-  fs.mkdirSync(into, { recursive: true });
-  run("tar", ["-xzf", tarball, "-C", into]);
-  return path.join(into, "package");
-}
-
-function walk(dir, base = dir) {
-  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) return walk(full, base);
-    return [path.relative(base, full).split(path.sep).join("/")];
-  });
-}
-
-function canonical(value) {
-  if (Array.isArray(value)) return value.map(canonical);
-  if (value === null || typeof value !== "object") return value;
-  return Object.fromEntries(
-    Object.keys(value)
-      .sort()
-      .map((key) => [key, canonical(value[key])]),
-  );
-}
-
 function normalizeManifest(file, workspaceNames) {
   const pkg = JSON.parse(fs.readFileSync(file, "utf8"));
   delete pkg.version;
@@ -142,8 +119,8 @@ function manifestChanges(local, published, workspaceNames) {
 }
 
 function diffTrees(local, published, workspaceNames) {
-  const localFiles = new Set(walk(local));
-  const publishedFiles = new Set(walk(published));
+  const localFiles = new Set(listFiles(local));
+  const publishedFiles = new Set(listFiles(published));
   const differences = [];
   for (const file of new Set([...localFiles, ...publishedFiles])) {
     if (!localFiles.has(file)) differences.push(`- ${file}`);
@@ -202,8 +179,8 @@ function shippedChanges() {
         { cwd: publishedOut },
       );
       const differences = diffTrees(
-        extract(singleTarball(localOut), path.join(slot, "local-tree")),
-        extract(singleTarball(publishedOut), path.join(slot, "published-tree")),
+        extractTarball(singleTarball(localOut), path.join(slot, "local-tree")),
+        extractTarball(singleTarball(publishedOut), path.join(slot, "published-tree")),
         workspaceNames,
       );
       if (differences.length === 0) {

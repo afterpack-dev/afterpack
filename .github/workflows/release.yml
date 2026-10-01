@@ -16,8 +16,11 @@ name: Release
 #
 # Nothing is released when no package ships a change against its npm
 # `latest`. The version is decided once per run and the publish skips every
-# package npmjs already holds at that version, so re-running a failed job
-# resumes the release. The version is stamped at publish time and never
+# package npmjs already holds at that version with the same files, so
+# "Re-run failed jobs" resumes the release. A fresh run is no resume: once
+# every package is out it releases nothing, so it never tags or creates the
+# GitHub Release, and it refuses to publish beside a different build of the
+# same version. The version is stamped at publish time and never
 # committed: the root package.json version is a floor, and the next version
 # is one bump above the higher of the last vX.Y.Z tag and the npm `latest`
 # of `afterpack`. The human approval for a production ship is the Approve

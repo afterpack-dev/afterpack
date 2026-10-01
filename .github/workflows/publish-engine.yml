@@ -9,7 +9,8 @@ name: Publish engine
 # integrity the source registry reports instead. Only a `latest` publish
 # hands the engine on to the CLI and plugins.
 #
-# Idempotent and patient: a version npmjs already serves is skipped, a
+# Idempotent and patient: a version npmjs already serves with the same
+# files is skipped (different files fail before anything publishes), a
 # publish npmjs refuses because it already holds that version (E403 "cannot
 # publish over", E409) counts as published, and nothing moves on until
 # npmjs serves every tarball, for up to 45 minutes. The trusted publishers

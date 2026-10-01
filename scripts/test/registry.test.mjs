@@ -1,13 +1,19 @@
 import assert from "node:assert/strict";
-import { afterEach, describe, it } from "node:test";
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { after, afterEach, describe, it } from "node:test";
 import {
   alreadyPublished,
   integrityOf,
   npmrcFor,
   packFilename,
   packumentUrl,
+  publishedDifferences,
   publishOrder,
   registryHost,
+  tarballDifferences,
   tarballUrl,
   versionUrl,
   waitUntilServed,
@@ -222,6 +228,120 @@ describe("waitUntilServed", () => {
         log: () => {},
       }),
       /still not served/,
+    );
+  });
+});
+
+const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "registry-test-"));
+
+after(() => {
+  fs.rmSync(WORK, { recursive: true, force: true });
+});
+
+function packTree(label, files, mtime) {
+  const root = path.join(WORK, label);
+  for (const [name, text] of Object.entries(files)) {
+    const file = path.join(root, "package", name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, text);
+    fs.utimesSync(file, mtime, mtime);
+  }
+  const file = path.join(WORK, `${label}.tgz`);
+  execFileSync("tar", ["-czf", file, "-C", root, "package"]);
+  return {
+    name: "@afterpack/vite",
+    version: "1.0.0",
+    file,
+    integrity: integrityOf(fs.readFileSync(file)),
+  };
+}
+
+const FILES = { "package.json": '{"name":"@afterpack/vite"}', "dist/index.js": "export {};" };
+const local = packTree("local", FILES, new Date("2020-01-01T00:00:00Z"));
+const rebuilt = packTree("rebuilt", FILES, new Date("2021-06-01T00:00:00Z"));
+const changed = packTree(
+  "changed",
+  { ...FILES, "dist/index.js": "export const x = 1;", "dist/extra.js": "" },
+  new Date("2020-01-01T00:00:00Z"),
+);
+
+function serveTarball(file, status = 200) {
+  globalThis.fetch = async (url) => {
+    assert.match(String(url), /\/@afterpack\/vite\/-\/vite-1\.0\.0\.tgz$/);
+    return status === 200 ? new Response(fs.readFileSync(file)) : new Response("", { status });
+  };
+}
+
+describe("tarballDifferences", () => {
+  it("ignores tar metadata and compares the files inside", () => {
+    assert.notEqual(local.integrity, rebuilt.integrity);
+    assert.deepEqual(tarballDifferences(local.file, rebuilt.file), []);
+  });
+
+  it("reads package.json as data, so key order is not a change", () => {
+    const reordered = packTree(
+      "reordered",
+      { ...FILES, "package.json": '{ "version": "1.0.0", "name": "@afterpack/vite" }' },
+      new Date("2020-01-01T00:00:00Z"),
+    );
+    const base = packTree(
+      "base",
+      { ...FILES, "package.json": '{"name":"@afterpack/vite","version":"1.0.0"}' },
+      new Date("2020-01-01T00:00:00Z"),
+    );
+    const bumped = packTree(
+      "bumped",
+      { ...FILES, "package.json": '{"name":"@afterpack/vite","version":"1.0.1"}' },
+      new Date("2020-01-01T00:00:00Z"),
+    );
+    assert.deepEqual(tarballDifferences(reordered.file, base.file), []);
+    assert.deepEqual(tarballDifferences(bumped.file, base.file), ["~ package.json"]);
+  });
+
+  it("names every file that differs, appears or disappears", () => {
+    assert.deepEqual(tarballDifferences(changed.file, local.file), [
+      "+ dist/extra.js",
+      "~ dist/index.js",
+    ]);
+    assert.deepEqual(tarballDifferences(local.file, changed.file), [
+      "- dist/extra.js",
+      "~ dist/index.js",
+    ]);
+  });
+});
+
+describe("publishedDifferences", () => {
+  it("trusts identical bytes without downloading anything", async () => {
+    globalThis.fetch = async () => assert.fail("fetched a tarball with identical bytes");
+    assert.deepEqual(await publishedDifferences(local, { integrity: local.integrity }), []);
+  });
+
+  it("accepts the same files in other tarball bytes", async () => {
+    serveTarball(rebuilt.file);
+    assert.deepEqual(await publishedDifferences(local, { integrity: rebuilt.integrity }), []);
+  });
+
+  it("reports a different build", async () => {
+    serveTarball(changed.file);
+    assert.deepEqual(await publishedDifferences(local, { integrity: changed.integrity }), [
+      "- dist/extra.js",
+      "~ dist/index.js",
+    ]);
+  });
+
+  it("fails when npmjs lists the version but serves no tarball", async () => {
+    serveTarball(changed.file, 404);
+    await assert.rejects(
+      publishedDifferences(local, { integrity: changed.integrity }),
+      /lists it but serves no tarball yet \(404\)/,
+    );
+  });
+
+  it("fails when the served bytes are not the ones npmjs lists", async () => {
+    serveTarball(rebuilt.file);
+    await assert.rejects(
+      publishedDifferences(local, { integrity: changed.integrity }),
+      /not its own sha512-/,
     );
   });
 });

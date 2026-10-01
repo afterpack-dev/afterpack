@@ -14,6 +14,7 @@ import {
   npm,
   npmrcFor,
   packFilename,
+  publishedDifferences,
   publishOrder,
   registryHost,
   versionState,
@@ -105,17 +106,32 @@ async function publish(args) {
   const dryRun = args.includes("--dry-run");
   const tarballs = tarballsIn(dir);
   const byName = new Map(tarballs.map((t) => [t.name, t]));
-  const record = [];
+  const plan = [];
+  const conflicts = [];
   for (const { name } of publishOrder(tarballs.map((t) => t.manifest))) {
     const tarball = byName.get(name);
     const spec = `${name}@${tarball.version}`;
     const live = await versionState(name, tarball.version);
     if (live.published) {
-      if (live.integrity && live.integrity !== tarball.integrity) {
-        console.log(
-          `::warning::${spec} is already on npmjs with different bytes (${live.integrity})`,
-        );
+      const differences = await publishedDifferences(tarball, live);
+      if (differences.length > 0) {
+        const shown = differences.slice(0, 5).join(", ");
+        const more = differences.length > 5 ? ` and ${differences.length - 5} more` : "";
+        conflicts.push(`${spec} (${shown}${more})`);
+      } else if (live.integrity !== tarball.integrity) {
+        console.log(`::notice::${spec} is on npmjs with the same files in other tarball bytes`);
       }
+    }
+    plan.push({ name, spec, tarball, live });
+  }
+  if (conflicts.length > 0) {
+    fail(
+      `npmjs already holds a different build of ${conflicts.join("; ")}. Resume a release with Re-run failed jobs on the run that published it, or release a new version.`,
+    );
+  }
+  const record = [];
+  for (const { name, spec, tarball, live } of plan) {
+    if (live.published) {
       console.log(`skip: ${spec} already on npmjs`);
       record.push({
         name,

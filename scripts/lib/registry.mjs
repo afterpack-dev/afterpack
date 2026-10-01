@@ -1,6 +1,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 export const NPMJS = "https://registry.npmjs.org";
@@ -99,6 +100,67 @@ export function describeTarball(file) {
   };
 }
 
+export function listFiles(dir, base = dir) {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) return listFiles(full, base);
+    return [path.relative(base, full).split(path.sep).join("/")];
+  });
+}
+
+export function extractTarball(file, into) {
+  fs.mkdirSync(into, { recursive: true });
+  execFileSync("tar", ["-xzf", file, "-C", into, "--strip-components=1"]);
+  return into;
+}
+
+export function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value === null || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .map((key) => [key, canonical(value[key])]),
+  );
+}
+
+function sameManifest(a, b) {
+  try {
+    const parse = (file) => JSON.stringify(canonical(JSON.parse(fs.readFileSync(file, "utf8"))));
+    return parse(a) === parse(b);
+  } catch {
+    return false;
+  }
+}
+
+export function treeDifferences(a, b) {
+  const aFiles = new Set(listFiles(a));
+  const bFiles = new Set(listFiles(b));
+  const differences = [];
+  for (const file of new Set([...aFiles, ...bFiles])) {
+    if (!aFiles.has(file)) differences.push(`- ${file}`);
+    else if (!bFiles.has(file)) differences.push(`+ ${file}`);
+    else if (file === "package.json") {
+      if (!sameManifest(path.join(a, file), path.join(b, file))) differences.push(`~ ${file}`);
+    } else if (!fs.readFileSync(path.join(a, file)).equals(fs.readFileSync(path.join(b, file)))) {
+      differences.push(`~ ${file}`);
+    }
+  }
+  return differences.sort();
+}
+
+export function tarballDifferences(local, published) {
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "tarball-diff-"));
+  try {
+    return treeDifferences(
+      extractTarball(local, path.join(work, "local")),
+      extractTarball(published, path.join(work, "published")),
+    );
+  } finally {
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+}
+
 export function npm(args, options = {}) {
   const result = spawnSync("npm", args, {
     encoding: "utf8",
@@ -143,6 +205,28 @@ export async function versionState(name, version, registry = NPMJS) {
   if (!response.ok) throw new Error(`${name}@${version}: the registry answered ${response.status}`);
   const doc = await response.json();
   return { published: true, integrity: doc?.dist?.integrity ?? null };
+}
+
+export async function publishedDifferences(tarball, live, registry = NPMJS) {
+  if (live.integrity && live.integrity === tarball.integrity) return [];
+  const spec = `${tarball.name}@${tarball.version}`;
+  const response = await request(tarballUrl(tarball.name, tarball.version, registry));
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new Error(`${spec}: npmjs lists it but serves no tarball yet (${response.status})`);
+  }
+  const bytes = Buffer.from(await response.arrayBuffer());
+  if (live.integrity && integrityOf(bytes) !== live.integrity) {
+    throw new Error(`${spec}: npmjs serves ${integrityOf(bytes)}, not its own ${live.integrity}`);
+  }
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "published-"));
+  try {
+    const file = path.join(work, "published.tgz");
+    fs.writeFileSync(file, bytes);
+    return tarballDifferences(tarball.file, file);
+  } finally {
+    fs.rmSync(work, { recursive: true, force: true });
+  }
 }
 
 export async function readiness({ name, version, integrity, tag }, registry = NPMJS) {
