@@ -14,6 +14,7 @@ import {
   notServedYet,
   PRESETS,
   readFixture,
+  reportedVersionProblem,
   resultKey,
   runNode,
   SEEDS,
@@ -113,7 +114,8 @@ async function engine(args) {
       fail(`expected the native ${binding} binding, loaded: ${addons.join(", ") || "none"}`);
     }
     const reported = await core.version();
-    if (reported !== version) fail(`version() is ${reported}, expected ${version}`);
+    const versionProblem = reportedVersionProblem(reported, version);
+    if (versionProblem) fail(versionProblem);
     console.log(`native binding ${path.basename(addons[0])}, version() ${reported}`);
 
     const runs = path.join(base, "runs");

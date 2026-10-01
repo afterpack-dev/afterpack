@@ -3,7 +3,8 @@ name: RC smoke
 # Installs one @afterpack/core build from the engine registry on every
 # platform it ships a native binding for, on this repository's free hosted
 # runners, and proves each binding on its real OS: it loads natively (not a
-# fallback), version() reports the version it was published as, every
+# fallback), version() reports the release it was built as (the published
+# version without a prerelease suffix such as -rc.<stamp>), every
 # fixture in scripts/smoke-fixtures at every preset and two seeds becomes
 # protected output that still runs the same in Node, and that output is
 # byte-identical on every platform. The linux-x64-gnu job computes the

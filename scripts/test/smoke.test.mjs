@@ -14,6 +14,7 @@ import {
   notServedYet,
   PRESETS,
   readFixture,
+  reportedVersionProblem,
   resultKey,
   runNode,
   SEEDS,
@@ -117,5 +118,28 @@ describe("notServedYet", () => {
     assert.ok(!notServedYet("npm error code ECONNRESET"));
     assert.ok(!notServedYet("npm error code EBADENGINE"));
     assert.ok(!notServedYet("npm error code E401\nnpm error 401 Unauthorized"));
+  });
+});
+
+describe("reportedVersionProblem", () => {
+  it("expects the release a candidate was built as, without its prerelease suffix", () => {
+    assert.equal(reportedVersionProblem("0.2.2", "0.2.2-rc.202610011829"), null);
+    assert.equal(
+      reportedVersionProblem("0.2.2-rc.202610011829", "0.2.2-rc.202610011829"),
+      "version() is 0.2.2-rc.202610011829, expected 0.2.2",
+    );
+    assert.equal(
+      reportedVersionProblem("0.2.1", "0.2.2-rc.202610011829"),
+      "version() is 0.2.1, expected 0.2.2",
+    );
+  });
+
+  it("expects exactly a stable version", () => {
+    assert.equal(reportedVersionProblem("0.2.2", "0.2.2"), null);
+    assert.equal(reportedVersionProblem("0.2.3", "0.2.2"), "version() is 0.2.3, expected 0.2.2");
+    assert.equal(
+      reportedVersionProblem(undefined, "0.2.2"),
+      "version() is undefined, expected 0.2.2",
+    );
   });
 });

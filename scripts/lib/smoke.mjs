@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { releaseOf } from "./engine.mjs";
 
 export const PRESETS = ["minify", "light", "medium", "hard", "extreme"];
 
@@ -30,6 +31,11 @@ export function hostIsMusl(platform = process.platform, report = process.report?
 
 export function notServedYet(stderr) {
   return /\b(?:ETARGET|E404)\b|No matching version found/.test(stderr);
+}
+
+export function reportedVersionProblem(reported, version) {
+  const want = releaseOf(version);
+  return reported === want ? null : `version() is ${reported}, expected ${want}`;
 }
 
 export function loadedAddons(cache) {
