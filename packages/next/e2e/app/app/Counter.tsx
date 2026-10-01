@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-/* @afterpack preset=hard */
+/* @afterpack preset=minify */
 function describe(count: number): string {
   const parity = count % 2 === 0 ? "even" : "odd";
   return `clicked ${count} times (${parity})`;

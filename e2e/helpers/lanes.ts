@@ -82,7 +82,7 @@ export function candidateLaneTests(): void {
       );
       const app = currentFixture();
       const log = readBuildLog(app);
-      expect(proBuildProblems(app, log, "0.0.0-none")).toEqual([
+      expect(proBuildProblems(app, log.replace(REGIONS_SENT, ""), "0.0.0-none")).toEqual([
         ...app.receipts.flatMap((dir) => {
           const path = join(dir, PROTECTION_RECEIPT_FILE);
           const where = relative(app.dir, path);

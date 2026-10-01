@@ -5,7 +5,7 @@ import { expectDeterministic } from "@e2e/helpers/build.js";
 import { expectObfuscationPass, readBuildLog } from "@e2e/helpers/build-log.js";
 import { currentFixture } from "@e2e/helpers/current.js";
 import { readExpectations, smokeOf } from "@e2e/helpers/expectations.js";
-import { candidateLaneTests } from "@e2e/helpers/lanes.js";
+import { candidateLaneTests, regionsSent } from "@e2e/helpers/lanes.js";
 import { expectNoPostbuildScript, expectProtectionReceipt } from "@e2e/helpers/receipt.js";
 import { baseURLOf, type Fixture } from "@e2e/helpers/registry.js";
 import { type ScenarioSteps, scenario } from "@e2e/helpers/scenario.js";
@@ -118,6 +118,14 @@ test.describe("Next.js 16 App Router serves a dual bundle", { tag: "@quick" }, (
     const app = currentFixture();
     expectObfuscationPass(readBuildLog(app), app.name, expectations.obfuscation);
   });
+
+  test(
+    "the build applied the Counter's directive region, which lowers protection",
+    { tag: "@node" },
+    () => {
+      expect(regionsSent(readBuildLog(currentFixture()))).toBeGreaterThan(0);
+    },
+  );
 
   test(
     "`next build` alone protected the output and left a matching receipt",

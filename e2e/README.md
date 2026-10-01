@@ -173,5 +173,7 @@ reads the API's `/v1/version` and fails unless it reports a clean engine built f
 candidate's release. The job then installs the candidate the same way and passes `AFTERPACK_KEY`,
 `AFTERPACK_API_URL` and `AFTERPACK_E2E_ENGINE_VERSION` to its build-and-test step alone.
 
-`vite-react` and `next-app` enable directives only when `AFTERPACK_KEY` is set: their Counter's
-`preset=hard` region raises protection, which the local engine refuses to build without a key.
+`vite-react` enables directives only when `AFTERPACK_KEY` is set: its Counter's `preset=hard`
+region raises protection, which the Free engine refuses to build. `next-app`'s Counter carries a
+`preset=minify` region, which lowers protection and which every engine applies, so every lane
+captures and applies a region on both Next legs.
