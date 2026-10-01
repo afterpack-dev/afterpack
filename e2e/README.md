@@ -66,9 +66,16 @@ that fixture's other browsers. To repeat one Firefox test, select only that brow
    | computed member accesses, share of all member accesses | ≥ 75% | 91–100% | 0–19% |
    | the same, per file with 20 or more member accesses | ≥ 60% | ≥ 82% | ≤ 32% |
    | computed member accesses per KB | ≥ 12 | 23–71 | 0–6.4 |
-   | identifier occurrences of two characters or fewer | ≥ 80% | 87–99.9% | 2–83% |
-   | mean identifier length | ≤ 2.6 | 1.53–2.16 | 2.10–6.87 |
+   | identifier occurrences of two characters or fewer | ≥ 80% | 87–99.9% | 3–98% |
+   | mean identifier length | ≤ 2.6 | 1.53–2.16 | 1.30–5.83 |
    | wordy baseline literals that survive verbatim (fixtures with a baseline) | ≤ 15% | 0–0.5% | 100% |
+
+   Only the member-access rows tell obfuscated output from minified output: every unprotected leg
+   fails them, by a wide margin. A minifier already shortens identifiers, so minified unprotected
+   bundles (Vite, webpack, Next, Nuxt, Astro, Angular, Vue, Svelte, Parcel) pass the two
+   identifier rows. Those rows are a renaming check for the fixtures whose output is not minified
+   (Rollup, esbuild, Electron, the CLI fixtures, SvelteKit's server output), where unprotected
+   output fails them.
 
    The same check must fail on the unprotected baseline build, which proves it can fail.
 3. The protected app renders, hydrates and responds (`runSmoke`).

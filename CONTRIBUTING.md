@@ -13,7 +13,7 @@ so `corepack enable` is enough to get the right one.
 pnpm install
 pnpm build       # every package, in dependency order
 pnpm test        # every package's unit tests
-pnpm e2e         # build the e2e fixtures, then Playwright (pnpm e2e:quick for the PR subset; pnpm e2e:install first)
+pnpm e2e         # Playwright, packages/*/e2e (pnpm e2e:quick for the PR subset; pnpm e2e:install first)
 pnpm typecheck   # needs a build first: plugins typecheck against built declarations
 pnpm lint:fix    # biome, autofixing — run it after any edit
 pnpm hygiene     # the repo hygiene guardrail described below
