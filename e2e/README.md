@@ -130,6 +130,7 @@ gh api repos/afterpack-dev/afterpack/dispatches -f event_type=e2e-candidate \
 The run is named `E2E candidate <version> (<id>)`, so the caller can find it and wait for it. Each
 shard reads `ENGINE_REGISTRY` and `ENGINE_REGISTRY_TOKEN` from the `npm` environment. It writes
 them to an npmrc under `RUNNER_TEMP`, sets `pnpm.overrides["@afterpack/core"]` to the candidate,
-installs the workspace, and deletes the npmrc. It then checks that every package resolved the
-candidate, builds, and runs `pnpm e2e`. The workflow never runs on a pull request. No cache it
+installs the workspace with `--ignore-scripts`, and deletes the npmrc. The dependencies' install
+scripts run in the next step, which never sees the token. It then checks that every package
+resolved the candidate, builds, and runs `pnpm e2e`. The workflow never runs on a pull request. No cache it
 writes and no artifact it uploads contains the candidate.

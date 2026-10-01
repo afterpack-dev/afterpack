@@ -79,7 +79,8 @@ jobs:
           node-version: 22
 
       # The token lives in this step's environment and in a job-scoped npmrc
-      # that is deleted before any other code runs.
+      # that is deleted before any other code runs. No dependency's install
+      # script runs while it is there: the next step runs them without it.
       - name: Install the workspace on the candidate engine
         env:
           ENGINE_REGISTRY: ${{ secrets.ENGINE_REGISTRY }}
@@ -101,7 +102,10 @@ jobs:
             echo "//${host}/:_authToken=${ENGINE_REGISTRY_TOKEN}"
           } > "$npmrc"
           npm pkg set "pnpm.overrides.@afterpack/core=${CANDIDATE}"
-          NPM_CONFIG_USERCONFIG="$npmrc" pnpm install --no-frozen-lockfile
+          NPM_CONFIG_USERCONFIG="$npmrc" pnpm install --no-frozen-lockfile --ignore-scripts
+
+      - name: Run the dependencies' install scripts
+        run: pnpm rebuild --recursive --pending
 
       - name: Check every package resolved the candidate
         run: |
