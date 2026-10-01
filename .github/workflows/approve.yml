@@ -3,7 +3,10 @@ name: Approve
 # The single human approval for a production ship. The release tooling
 # dispatches this workflow and waits for it to succeed; the job waits for a
 # required reviewer on the `ship-approval` environment and records what was
-# approved. It publishes, deploys and changes nothing.
+# approved. It publishes, deploys and changes nothing: the release tooling
+# goes on to production only after it succeeded, and publish-engine.yml
+# refuses to publish an engine unless the run it names is this workflow's,
+# on main, approved by that reviewer for an RC of the same version.
 on:
   workflow_dispatch:
     inputs:
@@ -12,7 +15,7 @@ on:
         required: true
         type: string
       summary:
-        description: "What ships, in one line"
+        description: "What ships, in up to ten lines"
         required: true
         type: string
 
@@ -33,6 +36,11 @@ jobs:
           SUMMARY: ${{ inputs.summary }}
           REQUESTED_BY: ${{ github.triggering_actor }}
         run: |
+          set -euo pipefail
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]; then
+            echo "::error::'$VERSION' is not an engine release candidate (X.Y.Z-rc.<digits>)"
+            exit 1
+          fi
           {
             echo "Approved shipping \`$VERSION\` (requested by $REQUESTED_BY)."
             echo ""
