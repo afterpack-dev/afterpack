@@ -1,7 +1,7 @@
 {
   "framework": "vite-react",
   "frameworkClass": "spa",
-  "description": "Vite 8 + React 19 SPA. Pure-bundler, single client bundle.",
+  "description": "Vite 8 + React 19 SPA, a single client bundle plus one lazy route chunk: React Router navigation, a zod-validated form, context state across routes, and notes persisted to localStorage.",
   "seed": 472938102,
   "deterministicOutput": true,
   "build": {
@@ -12,7 +12,7 @@
     "note": "obfuscation runs automatically via @afterpack/vite's closeBundle hook (vite.config.ts) -- no separate step"
   },
   "obfuscation": {
-    "minFiles": 1,
+    "minFiles": 2,
     "passes": 1
   },
   "smoke": {
@@ -26,6 +26,20 @@
         "selectors": {
           "[data-testid=\"title\"]": "Vite + React fixture",
           "[data-testid=\"intro\"]": "AfterPack framework-integration smoke fixture."
+        }
+      },
+      {
+        "path": "/notes",
+        "status": 200,
+        "selectors": {
+          "h1": "Notes"
+        }
+      },
+      {
+        "path": "/reports",
+        "status": 200,
+        "selectors": {
+          "[data-testid=\"report-summary\"]": "0 notes, 0 words"
         }
       }
     ],

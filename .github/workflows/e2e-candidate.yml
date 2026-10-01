@@ -1,0 +1,147 @@
+name: E2E candidate
+
+# Runs the full end-to-end suite, in Chromium, Firefox and WebKit, against an
+# engine release candidate before it is promoted. The candidate is fetched
+# from the engine's source registry and forced onto the whole workspace as a
+# pnpm override; the CLI, the plugins and the fixtures are this checkout.
+#
+# Triggered by a repository_dispatch of type `e2e-candidate` whose
+# client_payload carries `version` (and optionally `id`, which lands in the
+# run name so the dispatcher can find its run), or by hand. It never runs on
+# a pull request, so the registry token never meets untrusted code. No step
+# uploads the candidate, and no cache it writes holds it: caches of the
+# default branch are readable from pull requests.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "The @afterpack/core candidate, e.g. 0.2.2-rc.202610011200"
+        required: true
+        type: string
+  repository_dispatch:
+    types: [e2e-candidate]
+
+run-name: "E2E candidate ${{ github.event.client_payload.version || inputs.version }}${{ github.event.client_payload.id && format(' ({0})', github.event.client_payload.id) || '' }}"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.client_payload.version || inputs.version }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: Validate the candidate version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Validate the candidate version
+        id: version
+        env:
+          VERSION: ${{ github.event.client_payload.version || inputs.version }}
+        run: |
+          set -euo pipefail
+          VERSION="${VERSION#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::'$VERSION' is not a version"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Testing \`@afterpack/core@$VERSION\` in Chromium, Firefox and WebKit." >> "$GITHUB_STEP_SUMMARY"
+
+  e2e:
+    name: Full lane on ${{ needs.version.outputs.version }}, shard ${{ matrix.shard }}/4
+    needs: version
+    runs-on: ubuntu-latest
+    environment: npm
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      AFTERPACK_E2E_SHARD: ${{ matrix.shard }}/4
+      CANDIDATE: ${{ needs.version.outputs.version }}
+      AFTERPACK_E2E_BROWSERS: chromium,firefox,webkit
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+
+      # No `cache: pnpm`: the store would hold the candidate afterwards.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      # The token lives in this step's environment and in a job-scoped npmrc
+      # that is deleted before any other code runs. No dependency's install
+      # script runs while it is there: the next step runs them without it.
+      - name: Install the workspace on the candidate engine
+        env:
+          ENGINE_REGISTRY: ${{ secrets.ENGINE_REGISTRY }}
+          ENGINE_REGISTRY_TOKEN: ${{ secrets.ENGINE_REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ENGINE_REGISTRY:-}" ] || [ -z "${ENGINE_REGISTRY_TOKEN:-}" ]; then
+            echo "::error::ENGINE_REGISTRY and ENGINE_REGISTRY_TOKEN must be set in the npm environment"
+            exit 1
+          fi
+          host="${ENGINE_REGISTRY#https://}"
+          host="${host%/}"
+          echo "::add-mask::$host"
+          source_registry="https://${host}/"
+          npmrc="$RUNNER_TEMP/candidate.npmrc"
+          trap 'rm -f "$npmrc"' EXIT
+          {
+            echo "@afterpack:registry=${source_registry}"
+            echo "//${host}/:_authToken=${ENGINE_REGISTRY_TOKEN}"
+          } > "$npmrc"
+          npm pkg set "pnpm.overrides.@afterpack/core=${CANDIDATE}"
+          NPM_CONFIG_USERCONFIG="$npmrc" pnpm install --no-frozen-lockfile --ignore-scripts
+
+      - name: Run the dependencies' install scripts
+        run: pnpm rebuild --recursive --pending
+
+      - name: Check every package resolved the candidate
+        run: |
+          set -euo pipefail
+          checked=0
+          for manifest in packages/*/node_modules/@afterpack/core/package.json; do
+            resolved=$(node -p "require('./${manifest}').version")
+            echo "${manifest%%/node_modules/*} resolves @afterpack/core@${resolved}"
+            if [ "$resolved" != "$CANDIDATE" ]; then
+              echo "::error::${manifest} is @afterpack/core@${resolved}, not the candidate ${CANDIDATE}"
+              exit 1
+            fi
+            checked=$((checked + 1))
+          done
+          if [ "$checked" -eq 0 ]; then
+            echo "::error::no package resolved @afterpack/core"
+            exit 1
+          fi
+
+      - name: Build every package
+        run: pnpm -r build
+
+      - uses: ./.github/actions/e2e-fixtures
+        with:
+          browsers: chromium firefox webkit
+          save-cache: "false"
+
+      - name: Run the full lane
+        run: pnpm e2e
+
+      - name: Upload the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playwright-report-shard-${{ matrix.shard }}
+          path: |
+            .afterpack/e2e/playwright-report/**
+            .afterpack/e2e/test-results/**
+          if-no-files-found: ignore
+          retention-days: 7

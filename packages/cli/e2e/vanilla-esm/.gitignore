@@ -4,7 +4,6 @@
 # every managed entry already present and leaves this file untouched.
 node_modules/
 dist/
-.afterpack-baseline/
 
 # AfterPack artifacts (the exact set ensureGitignore appends).
 .afterpack/

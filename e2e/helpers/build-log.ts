@@ -55,7 +55,7 @@ export function parseObfuscationPasses(log: string): ObfuscationPass[] {
 export function readBuildLog(fixture: Fixture): string {
   expect(
     existsSync(fixture.buildLog),
-    `${fixture.name}: no build log at ${fixture.buildLog} — the build never ran through e2e/helpers/build-and-serve.mjs`,
+    `${fixture.name}: no build log at ${fixture.buildLog} — the build never ran through e2e/build-fixtures.ts (pnpm e2e:build)`,
   ).toBe(true);
   const log = readFileSync(fixture.buildLog, "utf8");
   expect(log.length, `${fixture.name}: the captured build log is empty`).toBeGreaterThan(0);

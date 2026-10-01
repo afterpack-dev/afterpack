@@ -1,14 +1,15 @@
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
+import { expectDeterministic, runBuild } from "@e2e/helpers/build.js";
 import {
   expectObfuscationPass,
   expectOneSeedAcrossLegs,
   readBuildLog,
 } from "@e2e/helpers/build-log.js";
-import { expectObfuscatedAndDeterministic, runBuild } from "@e2e/helpers/build.js";
 import { readExpectations } from "@e2e/helpers/expectations.js";
 import { baseURLOf, fixture } from "@e2e/helpers/registry.js";
+import { expectObfuscationSignatures } from "@e2e/helpers/signatures.js";
 import { collectConsoleErrors, expectNoConsoleErrors } from "@e2e/helpers/smoke.js";
 
 const app = fixture("electron-app");
@@ -18,17 +19,25 @@ if (!spec) throw new Error("the electron fixture needs an `electron` block in ex
 const LEGS = app.targets.length;
 
 test.describe("electron-vite emits main, preload and renderer", { tag: "@quick" }, () => {
-  test("the build ran a real obfuscation pass over all three legs", () => {
+  test("the build ran a real obfuscation pass over all three legs", { tag: "@node" }, () => {
     expectObfuscationPass(readBuildLog(app), app.name, expectations.obfuscation);
   });
 
-  test("node runs the obfuscated main and preload bundles across the IPC boundary", () => {
-    const result = spawnSync(process.execPath, [join(app.dir, "harness", "run-node-legs.mjs")], {
-      cwd: app.dir,
-      encoding: "utf8",
-    });
-    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+  test("every leg carries obfuscation signatures, not mere minification", { tag: "@node" }, () => {
+    expectObfuscationSignatures(app);
   });
+
+  test(
+    "node runs the obfuscated main and preload bundles across the IPC boundary",
+    { tag: "@node" },
+    () => {
+      const result = spawnSync(process.execPath, [join(app.dir, "harness", "run-node-legs.mjs")], {
+        cwd: app.dir,
+        encoding: "utf8",
+      });
+      expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+    },
+  );
 
   test("chromium runs the obfuscated renderer bundle over the stubbed bridge", async ({ page }) => {
     const errors = collectConsoleErrors(page);
@@ -50,35 +59,52 @@ test.describe("electron-vite emits main, preload and renderer", { tag: "@quick" 
   });
 });
 
-test.describe("electron-vite emits main, preload and renderer, byte-level proof", () => {
-  test("the output differs from an unobfuscated build and repeats byte for byte", () => {
-    expectObfuscatedAndDeterministic(app);
+test.describe("electron-vite emits main, preload and renderer, full suite", () => {
+  test("a rebuild with the same seed repeats every leg byte for byte", { tag: "@node" }, () => {
+    expectDeterministic(app);
   });
 
-  test("every leg shares one seed, freshly drawn per build and pinnable from the environment", () => {
-    const rerunLog = `${app.buildLog}.rerun`;
-    const first = expectOneSeedAcrossLegs(
-      runBuild(app, { AFTERPACK_FI_FREE_SEED: "1", AFTERPACK_diagnostics_level: "all" }, rerunLog),
-      `${app.name} free seed`,
-      LEGS,
-    );
-    const second = expectOneSeedAcrossLegs(
-      runBuild(app, { AFTERPACK_FI_FREE_SEED: "1", AFTERPACK_diagnostics_level: "all" }, rerunLog),
-      `${app.name} free seed again`,
-      LEGS,
-    );
-    expect(second, "two consecutive builds drew the same seed").not.toBe(first);
+  test(
+    "every leg shares one seed, freshly drawn per build and pinnable from the environment",
+    { tag: "@node" },
+    () => {
+      const rerunLog = `${app.buildLog}.rerun`;
+      const first = expectOneSeedAcrossLegs(
+        runBuild(
+          app,
+          { AFTERPACK_FI_FREE_SEED: "1", AFTERPACK_diagnostics_level: "all" },
+          rerunLog,
+        ),
+        `${app.name} free seed`,
+        LEGS,
+      );
+      const second = expectOneSeedAcrossLegs(
+        runBuild(
+          app,
+          { AFTERPACK_FI_FREE_SEED: "1", AFTERPACK_diagnostics_level: "all" },
+          rerunLog,
+        ),
+        `${app.name} free seed again`,
+        LEGS,
+      );
+      expect(second, "two consecutive builds drew the same seed").not.toBe(first);
 
-    const pinned = "424242";
-    const fromEnv = expectOneSeedAcrossLegs(
-      runBuild(
-        app,
-        { AFTERPACK_FI_FREE_SEED: "1", AFTERPACK_SEED: pinned, AFTERPACK_diagnostics_level: "all" },
-        rerunLog,
-      ),
-      `${app.name} env seed`,
-      LEGS,
-    );
-    expect(fromEnv).toBe(pinned);
-  });
+      const pinned = "424242";
+      const fromEnv = expectOneSeedAcrossLegs(
+        runBuild(
+          app,
+          {
+            AFTERPACK_FI_FREE_SEED: "1",
+            AFTERPACK_SEED: pinned,
+            AFTERPACK_diagnostics_level: "all",
+          },
+          rerunLog,
+        ),
+        `${app.name} env seed`,
+        LEGS,
+      );
+      expect(fromEnv).toBe(pinned);
+      runBuild(app);
+    },
+  );
 });

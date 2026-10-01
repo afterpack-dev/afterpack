@@ -1,7 +1,7 @@
 {
   "framework": "next-16",
   "frameworkClass": "ssr",
-  "description": "Next.js 16 App Router + Turbopack. Dual-bundle SSR: the client chunks under .next/static/chunks and the server bundle under .next/server must agree on the hydration contract.",
+  "description": "Next.js 16 App Router on Turbopack and webpack. Dual-bundle SSR: the client chunks under .next/static/chunks and the server bundle under .next/server must agree on the hydration contract. A small guestbook app: layout-level client state persisted to localStorage, a server-action form with validation, a route-handler POST, a next/dynamic chunk, and client navigation between static and dynamic routes.",
   "seed": 184650293,
   "deterministicOutput": true,
   "dualBundle": true,
@@ -14,7 +14,7 @@
     "note": "obfuscation runs INSIDE `next build`, via @afterpack/next's compiler.runAfterProductionCompile hook -- no postbuild script and no separate step; the build also writes .next/.afterpack-protection.json"
   },
   "obfuscation": {
-    "minFiles": 21,
+    "minFiles": 25,
     "passes": 1
   },
   "smoke": {
@@ -38,6 +38,24 @@
         ],
         "selectors": {
           "[data-testid=\"title\"]": "About AfterPack"
+        }
+      },
+      {
+        "path": "/guestbook",
+        "status": 200,
+        "textContains": [
+          "Sign the guestbook"
+        ],
+        "selectors": {
+          "[data-testid=\"title\"]": "Guestbook"
+        }
+      },
+      {
+        "path": "/stats",
+        "status": 200,
+        "selectors": {
+          "[data-testid=\"title\"]": "Stats",
+          "[data-testid=\"stats-summary\"]": "0 entries, 0 characters"
         }
       },
       {

@@ -1,0 +1,65 @@
+name: Prepare the e2e fixtures and browsers
+description: >-
+  Installs the node_modules of every e2e fixture the job selects (through
+  AFTERPACK_E2E_FIXTURES or AFTERPACK_E2E_SHARD), restoring them from the
+  Actions cache when their lockfiles are unchanged, and the Playwright
+  browsers the lane needs. Run it after the workspace is installed and built.
+
+inputs:
+  browsers:
+    description: "Space-separated Playwright browsers, e.g. `chromium` or `chromium firefox webkit`"
+    required: true
+  save-cache:
+    description: "`false` never writes the fixtures cache, for a run whose workspace holds unreleased packages"
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Describe the cache keys
+      id: keys
+      shell: bash
+      env:
+        SELECTION: ${{ env.AFTERPACK_E2E_SHARD || env.AFTERPACK_E2E_FIXTURES || 'all' }}
+      run: |
+        set -euo pipefail
+        {
+          echo "selection=$(printf '%s' "$SELECTION" | tr -c 'A-Za-z0-9-' '_')"
+          echo "node=$(node --version)"
+        } >> "$GITHUB_OUTPUT"
+
+    # Windows links each fixture to its plugin with a junction, which the cache
+    # would follow into the workspace, so Windows installs from scratch.
+    - name: Restore the fixtures' node_modules
+      id: fixtures
+      if: runner.os != 'Windows'
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: packages/*/e2e/*/node_modules
+        key: e2e-fixtures-${{ runner.os }}-${{ runner.arch }}-${{ steps.keys.outputs.node }}-${{ steps.keys.outputs.selection }}-${{ hashFiles('packages/*/e2e/*/package-lock.json', 'e2e/helpers/registry.ts') }}
+
+    - name: Install the e2e fixtures
+      shell: bash
+      run: pnpm e2e:install
+
+    - name: Save the fixtures' node_modules
+      if: runner.os != 'Windows' && inputs.save-cache == 'true' && steps.fixtures.outputs.cache-hit != 'true'
+      uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: packages/*/e2e/*/node_modules
+        key: ${{ steps.fixtures.outputs.cache-primary-key }}
+
+    # Playwright advises against caching browsers: a restore takes about as
+    # long as the download, and Linux still needs the system libraries.
+    - name: Install the Playwright browsers
+      shell: bash
+      env:
+        BROWSERS: ${{ inputs.browsers }}
+      run: |
+        read -ra list <<< "$BROWSERS"
+        if [ "$RUNNER_OS" = "Linux" ]; then
+          pnpm exec playwright install --with-deps "${list[@]}"
+        else
+          pnpm exec playwright install "${list[@]}"
+        fi

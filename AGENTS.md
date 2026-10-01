@@ -27,12 +27,16 @@ packages/
   vue/                 @afterpack/vue — Vue 3 (Vite) integration
   webpack/             @afterpack/webpack — webpack plugin
   */e2e/               Playwright fixtures, one per package, driven by playwright.config.ts
+e2e/                    the e2e harness: registry, parallel fixture builds, scenario and signature
+                        helpers; e2e/README.md explains lanes, sharding and how to write a scenario
 test/core-fake.ts       the shared `@afterpack/core` test double, aliased in by every vitest.config.ts
 scripts/                set-version.ts, release-plan.mjs, bump-engine.mjs, npm-release.mjs,
                         smoke.mjs (+ smoke-fixtures/), check-hygiene.mjs, check-comments.mjs;
                         lib/ holds their logic, test/ its node:test suites (run by pnpm test)
 .github/workflows/      ci (contributor), release, publish-engine, rc-smoke, approve
 .github/ISSUE_TEMPLATE/ bug report form, issue config
+.github/workflows/e2e-candidate.yml   the full e2e lane on an unreleased engine, run by dispatch
+.github/actions/        e2e-fixtures: fixture installs (cached) and Playwright browsers
 .github/PULL_REQUEST_TEMPLATE.md   the PR gate checklist
 playwright.config.ts    root Playwright config for every packages/*/e2e fixture
 SECURITY.md             where to report a vulnerability
@@ -45,7 +49,9 @@ CODE_OF_CONDUCT.md      Contributor Covenant 2.1 by reference
 pnpm install
 pnpm build       # every package, in dependency order
 pnpm test        # unit tests
-pnpm e2e         # Playwright, packages/*/e2e (pnpm e2e:quick for the PR subset; pnpm e2e:install first)
+pnpm e2e         # build every e2e fixture, then Playwright in Chromium; set
+                 # AFTERPACK_E2E_BROWSERS=chromium,firefox,webkit for all three, as CI's full lane
+                 # does (pnpm e2e:quick for the PR subset; pnpm e2e:install first; e2e/README.md)
 pnpm lint:fix    # biome, autofixing — run after any file change
 pnpm typecheck   # after a build: plugins typecheck against built declarations
 pnpm hygiene     # repo hygiene guardrail; CI fails on it

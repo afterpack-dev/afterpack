@@ -1,7 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
-  cpSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -19,6 +18,7 @@ export function runBuild(
   extraEnv: Record<string, string> = {},
   logPath: string = fixture.buildLog,
 ): string {
+  for (const path of fixture.clean) rmSync(path, { recursive: true, force: true });
   const result = spawnSync(fixture.buildCommand, {
     cwd: fixture.dir,
     shell: true,
@@ -64,35 +64,15 @@ export function hashTargets(targets: FixtureTarget[]): Map<string, string> {
   return out;
 }
 
-function sameContents(a: Map<string, string>, b: Map<string, string>): boolean {
-  if (a.size !== b.size) return false;
-  for (const [file, hash] of a) if (b.get(file) !== hash) return false;
-  return true;
-}
-
-export function expectObfuscatedAndDeterministic(fixture: Fixture): void {
-  const obfuscated = hashTargets(fixture.targets);
-  const baselineRoot = join(fixture.dir, ".afterpack-baseline");
-  rmSync(baselineRoot, { recursive: true, force: true });
-
-  runBuild(fixture, { AFTERPACK_build_autorun: "false" }, `${fixture.buildLog}.baseline`);
-  const baselineTargets = fixture.targets.map((target) => ({
-    label: target.label,
-    path: join(baselineRoot, target.label),
-  }));
-  for (const [index, target] of fixture.targets.entries()) {
-    cpSync(target.path, baselineTargets[index].path, { recursive: true });
-  }
-  const baseline = hashTargets(baselineTargets);
-  rmSync(baselineRoot, { recursive: true, force: true });
-  expect(
-    sameContents(obfuscated, baseline),
-    `${fixture.name}: the obfuscated build is byte-identical to the AFTERPACK_build_autorun=false baseline`,
-  ).toBe(false);
-
+export function expectDeterministic(fixture: Fixture): void {
+  const first = hashTargets(fixture.targets);
   runBuild(fixture, {}, `${fixture.buildLog}.rebuild`);
+  const second = hashTargets(fixture.targets);
+  const changed = [...new Set([...first.keys(), ...second.keys()])].filter(
+    (file) => first.get(file) !== second.get(file),
+  );
   expect(
-    sameContents(obfuscated, hashTargets(fixture.targets)),
+    changed,
     `${fixture.name}: two builds with the same seed produced different output`,
-  ).toBe(true);
+  ).toEqual([]);
 }

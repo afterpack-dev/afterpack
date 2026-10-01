@@ -13,7 +13,6 @@ build/
 .svelte-kit/
 .parcel-cache/
 .afterpack/
-.afterpack-baseline/
 *.tsbuildinfo
 pnpm-lock.yaml
 yarn.lock

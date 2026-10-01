@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCounter } from "./counter-store";
 
 // A canonical AfterPack directive span. The bundler's minifier strips this
 // comment before AfterPack runs (framework-integration.md §1.2); the directive
@@ -12,10 +12,10 @@ function computeLabel(count: number): string {
 // @afterpack:end
 
 export function Counter() {
-  const [count, setCount] = useState(0);
+  const { count, increment } = useCounter();
 
   return (
-    <button type="button" data-testid="counter" onClick={() => setCount((c) => c + 1)}>
+    <button type="button" data-testid="counter" onClick={increment}>
       {computeLabel(count)}
     </button>
   );
