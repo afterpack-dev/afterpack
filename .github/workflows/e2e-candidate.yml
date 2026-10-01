@@ -1,16 +1,24 @@
 name: E2E candidate
 
-# Runs the full end-to-end suite, in Chromium, Firefox and WebKit, against an
-# engine release candidate before it is promoted. The candidate is fetched
-# from the engine's source registry and forced onto the whole workspace as a
-# pnpm override; the CLI, the plugins and the fixtures are this checkout.
+# Runs the end-to-end suite against an engine release candidate before it is
+# promoted: the full lane in Chromium, Firefox and WebKit; the scenarios of
+# vite-react and next-app-webpack built at the medium, hard and extreme
+# presets; and the scenarios of vite-react and both next-app legs built on
+# the Pro cloud engine of the staging API. The candidate is fetched from the
+# engine's source registry and forced onto the whole workspace as a pnpm
+# override; the CLI, the plugins and the fixtures are this checkout.
 #
 # Triggered by a repository_dispatch of type `e2e-candidate` whose
 # client_payload carries `version` (and optionally `id`, which lands in the
 # run name so the dispatcher can find its run), or by hand. It never runs on
-# a pull request, so the registry token never meets untrusted code. No step
-# uploads the candidate, and no cache it writes holds it: caches of the
-# default branch are readable from pull requests.
+# a pull request, so the registry token and the Pro key never meet untrusted
+# code. No step uploads the candidate, and no cache it writes holds it:
+# caches of the default branch are readable from pull requests.
+#
+# The full lane and the preset lane read ENGINE_REGISTRY and
+# ENGINE_REGISTRY_TOKEN from the `npm` environment. The Pro lane runs in the
+# `staging-pro` environment, which must hold AFTERPACK_KEY and the same two
+# registry secrets.
 on:
   workflow_dispatch:
     inputs:
@@ -49,7 +57,10 @@ jobs:
             exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Testing \`@afterpack/core@$VERSION\` in Chromium, Firefox and WebKit." >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "Testing \`@afterpack/core@$VERSION\`: the full lane in Chromium, Firefox and WebKit,"
+            echo "the scenarios at the medium, hard and extreme presets, and the scenarios on the Pro cloud engine."
+          } >> "$GITHUB_STEP_SUMMARY"
 
   e2e:
     name: Full lane on ${{ needs.version.outputs.version }}, shard ${{ matrix.shard }}/4
@@ -63,69 +74,24 @@ jobs:
         shard: [1, 2, 3, 4]
     env:
       AFTERPACK_E2E_SHARD: ${{ matrix.shard }}/4
-      CANDIDATE: ${{ needs.version.outputs.version }}
       AFTERPACK_E2E_BROWSERS: chromium,firefox,webkit
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
 
       # No `cache: pnpm`: the store would hold the candidate afterwards.
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
 
-      # The token lives in this step's environment and in a job-scoped npmrc
-      # that is deleted before any other code runs. No dependency's install
-      # script runs while it is there: the next step runs them without it.
-      - name: Install the workspace on the candidate engine
-        env:
-          ENGINE_REGISTRY: ${{ secrets.ENGINE_REGISTRY }}
-          ENGINE_REGISTRY_TOKEN: ${{ secrets.ENGINE_REGISTRY_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [ -z "${ENGINE_REGISTRY:-}" ] || [ -z "${ENGINE_REGISTRY_TOKEN:-}" ]; then
-            echo "::error::ENGINE_REGISTRY and ENGINE_REGISTRY_TOKEN must be set in the npm environment"
-            exit 1
-          fi
-          host="${ENGINE_REGISTRY#https://}"
-          host="${host%/}"
-          echo "::add-mask::$host"
-          source_registry="https://${host}/"
-          npmrc="$RUNNER_TEMP/candidate.npmrc"
-          trap 'rm -f "$npmrc"' EXIT
-          {
-            echo "@afterpack:registry=${source_registry}"
-            echo "//${host}/:_authToken=${ENGINE_REGISTRY_TOKEN}"
-          } > "$npmrc"
-          npm pkg set "pnpm.overrides.@afterpack/core=${CANDIDATE}"
-          NPM_CONFIG_USERCONFIG="$npmrc" pnpm install --no-frozen-lockfile --ignore-scripts
-
-      - name: Run the dependencies' install scripts
-        run: pnpm rebuild --recursive --pending
-
-      - name: Check every package resolved the candidate
-        run: |
-          set -euo pipefail
-          checked=0
-          for manifest in packages/*/node_modules/@afterpack/core/package.json; do
-            resolved=$(node -p "require('./${manifest}').version")
-            echo "${manifest%%/node_modules/*} resolves @afterpack/core@${resolved}"
-            if [ "$resolved" != "$CANDIDATE" ]; then
-              echo "::error::${manifest} is @afterpack/core@${resolved}, not the candidate ${CANDIDATE}"
-              exit 1
-            fi
-            checked=$((checked + 1))
-          done
-          if [ "$checked" -eq 0 ]; then
-            echo "::error::no package resolved @afterpack/core"
-            exit 1
-          fi
-
-      - name: Build every package
-        run: pnpm -r build
+      - uses: ./.github/actions/candidate-workspace
+        with:
+          version: ${{ needs.version.outputs.version }}
+          registry: ${{ secrets.ENGINE_REGISTRY }}
+          token: ${{ secrets.ENGINE_REGISTRY_TOKEN }}
 
       - uses: ./.github/actions/e2e-fixtures
         with:
@@ -137,9 +103,118 @@ jobs:
 
       - name: Upload the Playwright report
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: playwright-report-shard-${{ matrix.shard }}
+          path: |
+            .afterpack/e2e/playwright-report/**
+            .afterpack/e2e/test-results/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # The full lane builds every fixture at the default preset. A stronger
+  # preset reshapes far more of the bundle, so the two fixtures with the
+  # richest scenarios are rebuilt at each one and driven again.
+  presets:
+    name: Scenarios at preset ${{ matrix.preset }} on ${{ needs.version.outputs.version }}
+    needs: version
+    runs-on: ubuntu-latest
+    environment: npm
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [medium, hard, extreme]
+    env:
+      AFTERPACK_E2E_FIXTURES: vite-react,next-app-webpack
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - uses: ./.github/actions/candidate-workspace
+        with:
+          version: ${{ needs.version.outputs.version }}
+          registry: ${{ secrets.ENGINE_REGISTRY }}
+          token: ${{ secrets.ENGINE_REGISTRY_TOKEN }}
+
+      - uses: ./.github/actions/e2e-fixtures
+        with:
+          browsers: chromium
+          save-cache: "false"
+
+      - name: Build at preset ${{ matrix.preset }} and run the scenarios
+        env:
+          AFTERPACK_preset: ${{ matrix.preset }}
+        run: pnpm e2e --grep "@scenario|@lane"
+
+      - name: Upload the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report-preset-${{ matrix.preset }}
+          path: |
+            .afterpack/e2e/playwright-report/**
+            .afterpack/e2e/test-results/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # A build with a key runs on the cloud engine, the only one that honours
+  # a directive region: each fixture's Counter carries a `preset=hard` one.
+  # The key is in the environment of the build-and-test step alone.
+  pro:
+    name: Scenarios on the Pro cloud engine with ${{ needs.version.outputs.version }}
+    needs: version
+    runs-on: ubuntu-latest
+    environment: staging-pro
+    timeout-minutes: 30
+    env:
+      AFTERPACK_E2E_FIXTURES: vite-react,next-app-turbopack,next-app-webpack
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - uses: ./.github/actions/candidate-workspace
+        with:
+          version: ${{ needs.version.outputs.version }}
+          registry: ${{ secrets.ENGINE_REGISTRY }}
+          token: ${{ secrets.ENGINE_REGISTRY_TOKEN }}
+
+      - uses: ./.github/actions/e2e-fixtures
+        with:
+          browsers: chromium
+          save-cache: "false"
+
+      - name: Build on the staging cloud engine and run the scenarios
+        env:
+          AFTERPACK_KEY: ${{ secrets.AFTERPACK_KEY }}
+          AFTERPACK_API_URL: https://staging-api.afterpack.dev
+        run: |
+          set -euo pipefail
+          if [ -z "${AFTERPACK_KEY:-}" ]; then
+            echo "::error::AFTERPACK_KEY must be set in the staging-pro environment"
+            exit 1
+          fi
+          pnpm e2e --grep "@scenario|@lane"
+
+      - name: Upload the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report-pro
           path: |
             .afterpack/e2e/playwright-report/**
             .afterpack/e2e/test-results/**

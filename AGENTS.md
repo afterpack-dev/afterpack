@@ -35,8 +35,10 @@ scripts/                set-version.ts, release-plan.mjs, bump-engine.mjs, npm-r
                         lib/ holds their logic, test/ its node:test suites (run by pnpm test)
 .github/workflows/      ci (contributor), release, publish-engine, rc-smoke, approve
 .github/ISSUE_TEMPLATE/ bug report form, issue config
-.github/workflows/e2e-candidate.yml   the full e2e lane on an unreleased engine, run by dispatch
-.github/actions/        e2e-fixtures: fixture installs (cached) and Playwright browsers
+.github/workflows/e2e-candidate.yml   the full, preset and Pro e2e lanes on an unreleased engine,
+                                      run by dispatch
+.github/actions/        e2e-fixtures: fixture installs (cached) and Playwright browsers;
+                        candidate-workspace: the workspace on an unreleased @afterpack/core
 .github/PULL_REQUEST_TEMPLATE.md   the PR gate checklist
 playwright.config.ts    root Playwright config for every packages/*/e2e fixture
 SECURITY.md             where to report a vulnerability
