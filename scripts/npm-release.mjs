@@ -6,16 +6,16 @@ import {
   approvalProblems,
   approvedTarget,
   approveRunId,
+  freshnessProblem,
   newestReleaseTag,
   releaseApproval,
 } from "./lib/approval.mjs";
 import {
   approvedRcOf,
-  checkEngineManifest,
+  checkEnginePackage,
   ENGINE_PACKAGES,
   payloadIntegrity,
   resolveEngineRelease,
-  tarballRestampDifferences,
 } from "./lib/engine.mjs";
 import {
   alreadyPublished,
@@ -124,14 +124,9 @@ async function verifyReleaseApproval() {
   const { sha } = approvedTarget(run.display_title);
   const repository = env.GITHUB_REPOSITORY;
   const newest = newestReleaseTag((await githubGet(repository, "/git/matching-refs/tags/v")) ?? []);
-  if (newest) {
-    const diff = await githubGet(repository, `/compare/${newest.sha}...${sha}`);
-    if (diff?.status !== "ahead") {
-      fail(
-        `the approved commit ${sha} is ${diff?.status ?? "unknown"} against ${newest.tag}, so it is already released or not on main: approve a newer commit`,
-      );
-    }
-  }
+  const diff = newest ? await githubGet(repository, `/compare/${newest.sha}...${sha}`) : null;
+  const problem = freshnessProblem({ sha, newest, status: diff?.status });
+  if (problem) fail(problem);
   appendFile("GITHUB_OUTPUT", `sha=${sha}\n`);
   console.log(`releasing the approved commit ${sha}`);
 }
@@ -164,6 +159,14 @@ function fetchEngine(args) {
       : "::notice::Manual retry: verifying against the integrity the source registry reports, not a release dispatch.",
   );
   try {
+    const packInto = (into) => (spec) => {
+      const pack = npm(
+        ["pack", spec, "--registry", source, "--pack-destination", into, "--json"],
+        npmEnv,
+      );
+      if (pack.status !== 0) fail(`npm pack ${spec} failed:\n${pack.stderr}`);
+      return path.join(into, packFilename(pack.stdout));
+    };
     for (const name of ENGINE_PACKAGES) {
       const spec = `${name}@${version}`;
       let want = fromDispatch ? payloadIntegrity(payload, name) : null;
@@ -172,29 +175,14 @@ function fetchEngine(args) {
         if (view.status !== 0) fail(`npm view ${spec} failed:\n${view.stderr}`);
         want = view.stdout.trim() || null;
       }
-      if (!want) fail(`no integrity for ${spec}`);
-      const pack = npm(
-        ["pack", spec, "--registry", source, "--pack-destination", out, "--json"],
-        npmEnv,
-      );
-      if (pack.status !== 0) fail(`npm pack ${spec} failed:\n${pack.stderr}`);
-      const tarball = describeTarball(path.join(out, packFilename(pack.stdout)));
-      if (tarball.integrity !== want) {
-        fail(`${spec} integrity mismatch: got ${tarball.integrity}, expected ${want}`);
-      }
-      const problems = checkEngineManifest(tarball.manifest, name, version);
-      if (problems.length > 0) fail(`${spec} ${problems.join("; ")}`);
-      const approved = `${name}@${rc}`;
-      const rcPack = npm(
-        ["pack", approved, "--registry", source, "--pack-destination", scratch, "--json"],
-        npmEnv,
-      );
-      if (rcPack.status !== 0) fail(`npm pack ${approved} failed:\n${rcPack.stderr}`);
-      const rcFile = path.join(scratch, packFilename(rcPack.stdout));
-      const differences = tarballRestampDifferences(rcFile, tarball.file, version);
-      if (differences.length > 0) {
-        fail(`${spec} is not the approved ${approved} restamped: ${differences.join(", ")}`);
-      }
+      const { tarball, approved } = checkEnginePackage({
+        name,
+        version,
+        rc,
+        want,
+        packStable: packInto(out),
+        packApproved: packInto(scratch),
+      });
       console.log(`verified ${spec} ${tarball.integrity}: the approved ${approved}, restamped`);
     }
   } finally {

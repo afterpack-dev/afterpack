@@ -9,6 +9,7 @@ import {
   BINDINGS,
   bindingPackage,
   checkEngineManifest,
+  checkEnginePackage,
   ENGINE_PACKAGES,
   EXPECTED_REPOSITORY,
   hostBinding,
@@ -17,6 +18,7 @@ import {
   restamped,
   tarballRestampDifferences,
 } from "../lib/engine.mjs";
+import { describeTarball } from "../lib/registry.mjs";
 
 describe("the engine package set", () => {
   it("is the seven native bindings, the wasm build and the core", () => {
@@ -141,6 +143,53 @@ describe("restamped tarballs", () => {
       tarballRestampDifferences(rc, promoted(restamped(rcManifest, "0.3.1")), "0.3.0"),
       ["~ package.json (beyond the version restamp)"],
     );
+  });
+
+  describe("checkEnginePackage, the check fetch-engine runs on each tarball", () => {
+    const check = (stable, overrides = {}) => {
+      const asked = [];
+      const result = checkEnginePackage({
+        name: "@afterpack/core",
+        version: "0.3.0",
+        rc: RC,
+        want: describeTarball(stable).integrity,
+        packStable: (spec) => {
+          asked.push(`stable ${spec}`);
+          return stable;
+        },
+        packApproved: (spec) => {
+          asked.push(`approved ${spec}`);
+          return rc;
+        },
+        ...overrides,
+      });
+      return { result, asked };
+    };
+
+    it("packs the stable and the approved RC, and accepts the RC restamped", () => {
+      const { result, asked } = check(promoted(restamped(rcManifest, "0.3.0")));
+      assert.deepEqual(asked, ["stable @afterpack/core@0.3.0", `approved @afterpack/core@${RC}`]);
+      assert.equal(result.approved, `@afterpack/core@${RC}`);
+    });
+
+    it("refuses a stable that is not the approved RC's bytes", () => {
+      const doctored = promoted(restamped(rcManifest, "0.3.0"), { "index.js": "evil();\n" });
+      assert.throws(
+        () => check(doctored),
+        new RegExp(
+          `^Error: @afterpack/core@0\\.3\\.0 is not the approved @afterpack/core@${RC.replaceAll(".", "\\.")} restamped: ~ index\\.js$`,
+        ),
+      );
+    });
+
+    it("refuses a tarball the release did not name, before it packs the RC", () => {
+      const stable = promoted(restamped(rcManifest, "0.3.0"));
+      assert.throws(() => check(stable, { want: "sha512-other" }), /integrity mismatch/);
+      assert.throws(
+        () => check(stable, { want: null }),
+        /no integrity for @afterpack\/core@0\.3\.0/,
+      );
+    });
   });
 });
 

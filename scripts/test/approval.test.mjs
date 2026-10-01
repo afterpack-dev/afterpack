@@ -11,6 +11,7 @@ import {
   approvalProblems,
   approvedTarget,
   approveRunId,
+  freshnessProblem,
   newestReleaseTag,
   releaseApproval,
   requiredReviewers,
@@ -217,6 +218,25 @@ describe("newestReleaseTag", () => {
     }));
     assert.deepEqual(newestReleaseTag(refs), { tag: "v0.10.0", sha: "1" });
     assert.equal(newestReleaseTag([]), null);
+  });
+});
+
+describe("freshnessProblem", () => {
+  const newest = { tag: "v0.2.0", sha: "b".repeat(40) };
+
+  it("releases only a commit ahead of the newest vX.Y.Z tag", () => {
+    assert.equal(freshnessProblem({ sha: SHA, newest, status: "ahead" }), null);
+    assert.equal(freshnessProblem({ sha: SHA, newest: null, status: undefined }), null);
+  });
+
+  it("refuses a commit the newest tag already holds, an older one and one off main", () => {
+    for (const status of ["identical", "behind", "diverged", undefined]) {
+      assert.equal(
+        freshnessProblem({ sha: SHA, newest, status }),
+        `the approved commit ${SHA} is ${status ?? "unknown"} against v0.2.0, so it is already released or not on main: approve a newer commit`,
+        String(status),
+      );
+    }
   });
 });
 

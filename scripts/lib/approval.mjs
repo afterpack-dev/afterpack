@@ -141,6 +141,11 @@ export function approvalDispatch(request) {
   throw new Error(`kind '${kind ?? ""}' is not engine or public`);
 }
 
+export function freshnessProblem({ sha, newest, status }) {
+  if (!newest || status === "ahead") return null;
+  return `the approved commit ${sha} is ${status ?? "unknown"} against ${newest.tag}, so it is already released or not on main: approve a newer commit`;
+}
+
 export function newestReleaseTag(refs) {
   const tags = (refs ?? [])
     .map((ref) => ({

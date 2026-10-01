@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { canonical, extractTarball, listFiles } from "./registry.mjs";
+import { canonical, describeTarball, extractTarball, listFiles } from "./registry.mjs";
 
 export const BINDINGS = {
   "darwin-arm64": { platform: "darwin", arch: "arm64", musl: false },
@@ -142,4 +142,21 @@ export function tarballRestampDifferences(rcFile, stableFile, version) {
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
   }
+}
+
+export function checkEnginePackage({ name, version, rc, want, packStable, packApproved }) {
+  const spec = `${name}@${version}`;
+  if (!want) throw new Error(`no integrity for ${spec}`);
+  const tarball = describeTarball(packStable(spec));
+  if (tarball.integrity !== want) {
+    throw new Error(`${spec} integrity mismatch: got ${tarball.integrity}, expected ${want}`);
+  }
+  const problems = checkEngineManifest(tarball.manifest, name, version);
+  if (problems.length > 0) throw new Error(`${spec} ${problems.join("; ")}`);
+  const approved = `${name}@${rc}`;
+  const differences = tarballRestampDifferences(packApproved(approved), tarball.file, version);
+  if (differences.length > 0) {
+    throw new Error(`${spec} is not the approved ${approved} restamped: ${differences.join(", ")}`);
+  }
+  return { tarball, approved };
 }
