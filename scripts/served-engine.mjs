@@ -29,7 +29,7 @@ if (problems.length > 0) {
 }
 
 console.log(`the API serves engine ${info.engineVersion} built from ${sha}`);
-appendFile("GITHUB_OUTPUT", `engine_version=${releaseOf(version)}\n`);
+appendFile("GITHUB_OUTPUT", `version=${version}\nengine_version=${releaseOf(version)}\n`);
 appendFile(
   "GITHUB_STEP_SUMMARY",
   `The API serves the Pro engine \`${info.engineVersion}\` built from \`${sha}\`, the source of \`${CORE}@${version}\`.\n\n`,

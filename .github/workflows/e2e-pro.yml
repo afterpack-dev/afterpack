@@ -71,7 +71,7 @@ jobs:
 
       - uses: ./.github/actions/candidate-workspace
         with:
-          version: ${{ github.event.client_payload.version || inputs.version }}
+          version: ${{ steps.engine.outputs.version }}
           registry: ${{ secrets.ENGINE_REGISTRY }}
           token: ${{ secrets.ENGINE_REGISTRY_TOKEN }}
 
