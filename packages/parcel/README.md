@@ -42,7 +42,9 @@ npx afterpack verify dist   # in the deploy step, before the upload
 reporter writes none when a bundle it shipped was not obfuscated in that build: the optimizer is
 missing from `.parcelrc`, `build.autorun` is off, or Parcel reused the bundle from `.parcel-cache`.
 Parcel's naming rule for plugins in `.parcelrc` leaves no place there for a reporter in this
-package, so it goes on the command line.
+package, so it goes on the command line. The optimizer leaves the reporter one small record per
+bundle in `.afterpack/parcel/`. The reporter clears them as each build starts; without it they stay
+there, ignored by git.
 
 ## Configuration
 
