@@ -35,7 +35,8 @@
       "**",
       "!packages/protection-map/demo",
       "!packages/protection-map/template.html",
-      "!packages/*/e2e"
+      "!packages/*/e2e",
+      "!!**/.claude"
     ],
     "ignoreUnknown": true
   }
