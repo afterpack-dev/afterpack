@@ -15,7 +15,7 @@ import {
   signatureFailures,
   unprotectedBaselineSignature,
 } from "@e2e/helpers/signatures.js";
-import { runSmoke } from "@e2e/helpers/smoke.js";
+import { collectConsoleErrors, fatalConsoleErrors, runSmoke } from "@e2e/helpers/smoke.js";
 import {
   expectSourceMap,
   servedSourceMapProblems,
@@ -230,6 +230,27 @@ test.describe("Next.js 16 App Router serves a dual bundle, full suite", () => {
       ).rejects.toThrow(/hydration mismatch/);
     },
   );
+
+  test("the smoke check still fails on a fetch WebKit refused while the page stayed put", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== "webkit", "the refused-fetch message is WebKit's");
+    const app = currentFixture();
+    if (!app.baseline) throw new Error(`${app.name} has no baseline build`);
+    const refused = `${app.baseline.baseURL}/about`;
+    const errors = collectConsoleErrors(page);
+    await page.goto(`${baseURLOf(app)}/about`);
+    const outcome = await page.evaluate(
+      (url) => fetch(url).then(() => "loaded", () => "refused"),
+      refused,
+    );
+    expect(outcome, "a cross-origin fetch with no CORS headers").toBe("refused");
+    const messages = () =>
+      errors.errors.filter((error) => error.refusedFetch === refused).map(({ text }) => text);
+    await expect.poll(messages, { message: "WebKit's refused-fetch message" }).not.toEqual([]);
+    expect(fatalConsoleErrors(errors)).toEqual(expect.arrayContaining(messages()));
+  });
 
   test("a rebuild with the same seed repeats the output byte for byte", { tag: "@node" }, () => {
     const app = currentFixture();

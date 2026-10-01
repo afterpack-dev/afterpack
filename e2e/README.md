@@ -84,7 +84,13 @@ that fixture's other browsers. To repeat one Firefox test, select only that brow
    output fails them.
 
    The same check must fail on the unprotected baseline build, which proves it can fail.
-3. The protected app renders, hydrates and responds (`runSmoke`).
+3. The protected app renders, hydrates and responds, and logs no console or page error
+   (`runSmoke`). One message is not an error of the app: WebKit reports a fetch that the page's
+   own navigation stopped as `Fetch API cannot load <url> due to access control checks.` The
+   smoke check dismisses that message only when it was raised while the page was leaving for
+   another document, or when Playwright saw the request for that URL cancelled. The same message
+   for a fetch refused at any other time, such as a real CORS failure, still fails the check;
+   next-app's full suite proves that in WebKit.
 4. For a fixture with a baseline build, its scenarios behave the same in both builds.
 
 ## Writing a scenario
