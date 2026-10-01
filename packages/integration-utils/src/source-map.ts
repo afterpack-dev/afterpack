@@ -5,8 +5,7 @@ const SOURCE_MAPPING_URL_RE = /\/\/[#@]\s*sourceMappingURL=(\S+)\s*$/gm;
 
 const SOURCE_MAPPING_URL_LINE_RE = /^[ \t]*\/\/[#@]\s*sourceMappingURL=\S+[ \t]*\r?\n?/gm;
 
-const CSS_SOURCE_MAPPING_URL_RE =
-  /[ \t]*\/\*[#@]\s*sourceMappingURL=[^\s*]+\s*\*\/[ \t]*(?:\r?\n)?/g;
+const CSS_SOURCE_MAPPING_URL_RE = /[ \t]*\/\*[#@]\s*sourceMappingURL=[^\s*]+\s*\*\/\s*$/;
 
 export function withSourceMappingURL(code: string, url: string | null): string {
   const stripped = code.replace(SOURCE_MAPPING_URL_LINE_RE, "");

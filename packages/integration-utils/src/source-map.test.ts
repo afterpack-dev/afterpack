@@ -50,6 +50,13 @@ describe("withoutCssSourceMappingURL", () => {
     const css = "/* theme */\na{color:red}\n/*! license */\n";
     expect(withoutCssSourceMappingURL(css)).toBe(css);
   });
+  it("drops only the trailer that ends the file, never the same text earlier on", () => {
+    const literal = 'a::after{content:"/*# sourceMappingURL=x.css.map */"}\nb{color:red}\n';
+    expect(withoutCssSourceMappingURL(literal)).toBe(literal);
+    expect(withoutCssSourceMappingURL(`${literal}/*# sourceMappingURL=y.css.map */\n`)).toBe(
+      literal,
+    );
+  });
 });
 
 describe("isRemoteSourceMappingURL", () => {
