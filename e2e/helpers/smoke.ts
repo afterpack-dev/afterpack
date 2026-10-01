@@ -12,11 +12,11 @@ export function collectConsoleErrors(page: Page): string[] {
   return errors;
 }
 
-async function contentContainsWithin(page: Page, needle: string, timeoutMs: number): Promise<void> {
+async function contentContains(page: Page, needle: string, where: string): Promise<void> {
   await expect
     .poll(async () => (await page.content()).includes(needle), {
-      timeout: timeoutMs,
-      message: `page content never contained ${JSON.stringify(needle)}`,
+      timeout: INTERACTION_TIMEOUT_MS,
+      message: `${where}: page content never contained ${JSON.stringify(needle)}`,
     })
     .toBe(true);
 }
@@ -27,11 +27,10 @@ export async function visitRoutes(
   smoke: SmokeExpectations,
 ): Promise<void> {
   for (const route of smoke.routes) {
-    const response = await page.goto(`${baseURL}${route.path}`, { waitUntil: "networkidle" });
+    const response = await page.goto(`${baseURL}${route.path}`);
     expect(response?.status(), `${route.path}: unexpected status`).toBe(route.status);
-    const content = await page.content();
     for (const needle of route.textContains ?? []) {
-      expect(content, `${route.path}: missing text ${JSON.stringify(needle)}`).toContain(needle);
+      await contentContains(page, needle, route.path);
     }
     for (const [selector, text] of Object.entries(route.selectors ?? {})) {
       await expect(page.locator(selector), `${route.path} ${selector}`).toHaveText(text);
@@ -55,10 +54,14 @@ export async function runInteractions(
   smoke: SmokeExpectations,
 ): Promise<void> {
   for (const interaction of smoke.interactions ?? []) {
-    await page.goto(`${baseURL}${interaction.route}`, { waitUntil: "networkidle" });
+    await page.goto(`${baseURL}${interaction.route}`);
     await page.locator(interaction.click).click();
     for (const needle of interaction.expectTextContains ?? []) {
-      await contentContainsWithin(page, needle, INTERACTION_TIMEOUT_MS);
+      await contentContains(
+        page,
+        needle,
+        `${interaction.route} after clicking ${interaction.click}`,
+      );
     }
   }
 }

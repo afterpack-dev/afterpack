@@ -47,7 +47,7 @@ test.describe("electron-vite emits main, preload and renderer", { tag: "@quick" 
         `info: async () => (${JSON.stringify(spec.bridge.expectInfo)}), ` +
         `label: () => ${JSON.stringify(spec.bridge.expectLabel.output)} };`,
     });
-    await page.goto(baseURLOf(app), { waitUntil: "networkidle" });
+    await page.goto(baseURLOf(app));
 
     await expect(page.locator('[data-testid="title"]')).toHaveText(spec.renderer.title);
     await page.locator('[data-testid="counter"]').click();

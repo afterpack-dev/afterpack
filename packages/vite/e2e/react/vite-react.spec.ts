@@ -165,7 +165,7 @@ test.describe("Vite 8 builds a React 19 SPA, full suite", () => {
   test("the same bundle drives the counter inside a separate iframe realm", async ({ page }) => {
     const base = baseURLOf(app);
     const errors = collectConsoleErrors(page);
-    await page.goto(base, { waitUntil: "networkidle" });
+    await page.goto(base);
     await page.evaluate((src) => {
       const iframe = document.createElement("iframe");
       iframe.id = "realm-probe";

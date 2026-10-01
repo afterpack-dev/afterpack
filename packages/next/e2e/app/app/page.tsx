@@ -13,13 +13,9 @@ export default function Home() {
       <p>
         <Link href="/about">About</Link>
       </p>
-      {/* prefetch={false}: `/dynamic` is force-dynamic (no cached RSC payload
-          to prefetch) -- Next.js's default viewport-triggered prefetch
-          against it kept issuing repeated aborted `?_rsc=` requests in
-          Playwright, which meant the network never went idle and every
-          `waitUntil: "networkidle"` navigation in the shared smoke runner
-          (e2e/helpers/smoke.ts) timed out. Confirmed via real testing this
-          session -- not a hypothetical. */}
+      {/* prefetch={false}: the App Router's prefetch of /legacy, a Pages Router page, never
+          completes, so the network never settles; its prefetch of the force-dynamic /dynamic is
+          aborted and reissued, so the requests a scenario run makes depend on timing. */}
       <p>
         <Link href="/dynamic" prefetch={false}>
           Dynamic
