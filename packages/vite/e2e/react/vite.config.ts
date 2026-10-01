@@ -21,6 +21,7 @@ export default defineConfig({
       seed: expectations.seed,
       protectionMap: reviewProtectionMap,
       sourceMap: { enabled: true },
+      directives: { enabled: Boolean(process.env.AFTERPACK_KEY) },
     }),
   ],
 });

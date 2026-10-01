@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { expectObfuscationPass, readBuildLog } from "@e2e/helpers/build-log.js";
 import { readExpectations, smokeOf } from "@e2e/helpers/expectations.js";
+import { candidateLaneTests } from "@e2e/helpers/lanes.js";
 import { baseURLOf, fixture } from "@e2e/helpers/registry.js";
 import {
   parityProblems,
@@ -160,6 +161,8 @@ test.describe("Vite 8 builds a React 19 SPA, as a user drives it", { tag: "@quic
     ).toEqual([]);
   });
 });
+
+candidateLaneTests();
 
 test.describe("Vite 8 builds a React 19 SPA, full suite", () => {
   test("the same bundle drives the counter inside a separate iframe realm", async ({ page }) => {

@@ -5,6 +5,7 @@ import { expectDeterministic } from "@e2e/helpers/build.js";
 import { expectObfuscationPass, readBuildLog } from "@e2e/helpers/build-log.js";
 import { currentFixture } from "@e2e/helpers/current.js";
 import { readExpectations, smokeOf } from "@e2e/helpers/expectations.js";
+import { candidateLaneTests } from "@e2e/helpers/lanes.js";
 import { expectNoPostbuildScript, expectProtectionReceipt } from "@e2e/helpers/receipt.js";
 import { baseURLOf, type Fixture } from "@e2e/helpers/registry.js";
 import { type ScenarioSteps, scenario } from "@e2e/helpers/scenario.js";
@@ -182,6 +183,8 @@ test.describe(
     );
   },
 );
+
+candidateLaneTests();
 
 test.describe("Next.js 16 App Router serves a dual bundle, full suite", () => {
   test(
