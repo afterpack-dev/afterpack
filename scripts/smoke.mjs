@@ -4,13 +4,14 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { BINDINGS, bindingPackage, CORE, SEMVER } from "./lib/engine.mjs";
-import { appendFile, npm, npmrcFor, registryHost } from "./lib/registry.mjs";
+import { appendFile, npm, npmrcFor, registryHost, sleep } from "./lib/registry.mjs";
 import {
   compareManifests,
   hostIsMusl,
   isInside,
   listFixtures,
   loadedAddons,
+  notServedYet,
   PRESETS,
   readFixture,
   resultKey,
@@ -51,15 +52,23 @@ async function withScratch(label, fn) {
   }
 }
 
-function install(project, spec, npmrcText) {
+async function install(project, spec, npmrcText, { patienceMs = 0 } = {}) {
   const npmrc = path.join(path.dirname(project), "npmrc");
   fs.writeFileSync(npmrc, npmrcText, { mode: 0o600 });
+  const deadline = Date.now() + patienceMs;
   try {
-    const result = npm(
-      ["install", spec, "--no-audit", "--no-fund", "--ignore-scripts", "--prefer-online"],
-      { cwd: project, env: { ...process.env, NPM_CONFIG_USERCONFIG: npmrc } },
-    );
-    if (result.status !== 0) fail(`npm install ${spec} failed:\n${result.stderr.slice(-4000)}`);
+    for (;;) {
+      const result = npm(
+        ["install", spec, "--no-audit", "--no-fund", "--ignore-scripts", "--prefer-online"],
+        { cwd: project, env: { ...process.env, NPM_CONFIG_USERCONFIG: npmrc } },
+      );
+      if (result.status === 0) return;
+      if (Date.now() >= deadline || !notServedYet(result.stderr)) {
+        fail(`npm install ${spec} failed:\n${result.stderr.slice(-4000)}`);
+      }
+      console.log(`npm does not serve ${spec} to this runner yet; trying again in 30 s`);
+      await sleep(30 * 1000);
+    }
   } finally {
     fs.rmSync(npmrc, { force: true });
   }
@@ -86,7 +95,7 @@ async function engine(args) {
   }
   const { manifest, problems } = await withScratch("engine-smoke", async ({ base, project }) => {
     console.log(`installing ${CORE}@${version} for ${binding} on node ${process.version}`);
-    install(project, `${CORE}@${version}`, sourceRegistryNpmrc());
+    await install(project, `${CORE}@${version}`, sourceRegistryNpmrc());
 
     delete process.env.NAPI_RS_NATIVE_LIBRARY_PATH;
     delete process.env.NAPI_RS_FORCE_WASI;
@@ -180,7 +189,7 @@ async function release(args) {
   if (!SEMVER.test(version)) fail(`'${version}' is not a version`);
   const count = await withScratch("release-verify", async ({ project }) => {
     console.log(`installing afterpack@${version} from npmjs on node ${process.version}`);
-    install(project, `afterpack@${version}`, "");
+    await install(project, `afterpack@${version}`, "", { patienceMs: 10 * 60 * 1000 });
     const require = createRequire(path.join(project, "package.json"));
     const bin = binPath(require, "afterpack");
     const reported = cli(bin, ["--version"], project).trim();

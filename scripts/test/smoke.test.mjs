@@ -11,6 +11,7 @@ import {
   listFixtures,
   loadedAddons,
   normalizeSource,
+  notServedYet,
   PRESETS,
   readFixture,
   resultKey,
@@ -99,5 +100,22 @@ describe("host detection", () => {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("notServedYet", () => {
+  it("is a version npm does not list yet, or a tarball it does not serve yet", () => {
+    assert.ok(
+      notServedYet(
+        "npm error code ETARGET\nnpm error notarget No matching version found for afterpack@0.2.1.",
+      ),
+    );
+    assert.ok(notServedYet("npm error code E404\nnpm error 404 Not Found - GET"));
+  });
+
+  it("is not any other install failure", () => {
+    assert.ok(!notServedYet("npm error code ECONNRESET"));
+    assert.ok(!notServedYet("npm error code EBADENGINE"));
+    assert.ok(!notServedYet("npm error code E401\nnpm error 401 Unauthorized"));
   });
 });

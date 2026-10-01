@@ -28,6 +28,10 @@ export function hostIsMusl(platform = process.platform, report = process.report?
   return platform === "linux" && !report?.header?.glibcVersionRuntime;
 }
 
+export function notServedYet(stderr) {
+  return /\b(?:ETARGET|E404)\b|No matching version found/.test(stderr);
+}
+
 export function loadedAddons(cache) {
   return Object.keys(cache).filter((key) => key.endsWith(".node"));
 }
