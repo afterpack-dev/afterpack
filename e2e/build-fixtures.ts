@@ -12,6 +12,7 @@ export interface BuildJob {
   env: Record<string, string>;
   clean: string[];
   log: string;
+  exitCodeFile: string;
 }
 
 export function buildJobsOf(fixture: Fixture): BuildJob[] {
@@ -23,6 +24,7 @@ export function buildJobsOf(fixture: Fixture): BuildJob[] {
       env: fixture.env,
       clean: fixture.clean,
       log: fixture.buildLog,
+      exitCodeFile: `${fixture.buildLog}.exit`,
     },
   ];
   if (fixture.baseline) {
@@ -33,6 +35,7 @@ export function buildJobsOf(fixture: Fixture): BuildJob[] {
       env: fixture.baseline.env,
       clean: [],
       log: fixture.baseline.buildLog,
+      exitCodeFile: `${fixture.baseline.buildLog}.exit`,
     });
   }
   return jobs;
@@ -46,6 +49,7 @@ interface JobResult {
 }
 
 function runJob(job: BuildJob): Promise<JobResult> {
+  rmSync(job.exitCodeFile, { force: true });
   for (const path of job.clean) rmSync(path, { recursive: true, force: true });
   const started = Date.now();
   return new Promise((resolve) => {
@@ -66,6 +70,7 @@ function runJob(job: BuildJob): Promise<JobResult> {
       const log = `${captured}${extra}`;
       mkdirSync(dirname(job.log), { recursive: true });
       writeFileSync(job.log, log);
+      writeFileSync(job.exitCodeFile, `${code}\n`);
       resolve({ job, code, seconds: (Date.now() - started) / 1000, tail: log.slice(-4000) });
     };
     child.on("error", (error) => finish(1, `\n${String(error)}`));

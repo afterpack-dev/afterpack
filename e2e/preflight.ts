@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { buildJobsOf } from "./build-fixtures.js";
 import { type Fixture, fixtureDirs, REPO_ROOT } from "./helpers/registry.js";
@@ -12,14 +12,19 @@ export function assertFixturesInstalled(fixtures: Fixture[]): void {
   );
 }
 
+function exitCodeOf(file: string): string | null {
+  return existsSync(file) ? readFileSync(file, "utf8").trim() : null;
+}
+
 export function assertFixturesBuilt(fixtures: Fixture[]): void {
-  const missing = fixtures
-    .flatMap(buildJobsOf)
-    .filter((job) => !existsSync(job.log))
-    .map((job) => `  ${job.label}`);
-  if (missing.length === 0) return;
+  const unusable = fixtures.flatMap(buildJobsOf).flatMap((job) => {
+    const code = exitCodeOf(job.exitCodeFile);
+    if (code === "0") return [];
+    return [`  ${job.label}: ${code === null ? "never built" : `failed (exit ${code})`}`];
+  });
+  if (unusable.length === 0) return;
   throw new Error(
-    `${missing.length} e2e fixture build(s) never ran:\n${missing.join("\n")}\n\n` +
+    `${unusable.length} e2e fixture build(s) did not succeed:\n${unusable.join("\n")}\n\n` +
       "Run the suite through `pnpm e2e` or `pnpm e2e:quick`, or build first with:\n  pnpm e2e:build\n",
   );
 }
