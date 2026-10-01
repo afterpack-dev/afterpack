@@ -31,8 +31,8 @@ e2e/                    the e2e harness: registry, parallel fixture builds, scen
                         helpers; e2e/README.md explains lanes, sharding and how to write a scenario
 test/core-fake.ts       the shared `@afterpack/core` test double, aliased in by every vitest.config.ts
 scripts/                set-version.ts, release-plan.mjs, bump-engine.mjs, npm-release.mjs,
-                        smoke.mjs (+ smoke-fixtures/), served-engine.mjs, check-hygiene.mjs,
-                        check-comments.mjs;
+                        approve.mjs, smoke.mjs (+ smoke-fixtures/), served-engine.mjs,
+                        check-hygiene.mjs, check-comments.mjs;
                         lib/ holds their logic, test/ its node:test suites (run by pnpm test)
 .github/workflows/      ci (contributor), release, publish-engine, rc-smoke, approve
 .github/ISSUE_TEMPLATE/ bug report form, issue config

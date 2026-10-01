@@ -60,30 +60,36 @@ full suite, in Chromium, Firefox and WebKit, runs on push to `main`.
 
 One lane publishes to `latest`; there is no release-candidate channel for the CLI and plugins.
 
-- **`Release`** decides the version, runs the checks, the full e2e suite and the Pro path on one
-  commit, publishes every package with provenance, then installs the published CLI from npm on
-  Ubuntu, macOS and Windows and runs it on `scripts/smoke-fixtures`. A manual run releases the
-  commit it runs on with the `bump` it names. It releases nothing when no package ships a change
-  against its npm `latest`: it packs each package and compares the tarball with the one npm
-  serves, so tests, fixtures, CI and the root readme never cause a release.
+- **`Release`** checks the operator's approval, decides the version, runs the checks, the full e2e
+  suite and the Pro path on one commit, publishes every package with provenance, then installs the
+  published CLI from npm on Ubuntu, macOS and Windows and runs it on `scripts/smoke-fixtures`. It
+  releases nothing when no package ships a change against its npm `latest`: it packs each package
+  and compares the tarball with the one npm serves, so tests, fixtures, CI and the root readme never
+  cause a release.
 - **engine** — `@afterpack/core`, its platform packages and `@afterpack/wasm` are built outside
   this repository and published to npm by `Publish engine`, without provenance, because their
-  source is not here. Once npmjs serves a `latest` engine it sends `core-published`, and
-  `Release` repins `@afterpack/core` in every package, waits for npmjs, rewrites the lockfile,
-  runs the gates, pushes the bump to `main` and releases it. A new release line (a minor under
-  major 0) also moves every package version and `MIN_CORE_VERSION` to that line:
-  `node scripts/bump-engine.mjs <version>` makes the same change locally.
+  source is not here. Once npmjs serves the engine it sends `core-published` with the approval it
+  published under, and `Release` repins `@afterpack/core` in every package, waits for npmjs,
+  rewrites the lockfile, runs the gates, pushes the bump to `main` and releases it. A new release
+  line (a minor under major 0) also moves every package version and `MIN_CORE_VERSION` to that
+  line: `node scripts/bump-engine.mjs <version>` makes the same change locally.
 - **`RC smoke`** installs an engine build on every OS it ships a native binding for, and fails
   unless each binding loads natively, reports its version, and produces protected output that
   still runs and matches Linux byte for byte.
-- **`Approve`** is the single human approval for a production ship: the release tooling
-  dispatches it, waits until the required reviewer of the `ship-approval` environment approves
-  it, and only then goes to production. `Publish engine` publishes nothing without one: it first
-  checks, with this repository's own token, that the `approve_run_id` it was given (in the
-  dispatch payload, or as the manual run's input) is a successful `Approve` run on `main`, titled
-  for an RC of the version it publishes, and approved in `ship-approval` by that environment's
-  required reviewer. Dispatching `Release` directly publishes the CLI and plugins with no further
-  approval.
+- **`Approve`** is the single human approval for a production release. GitHub notifies the required
+  reviewer of the `ship-approval` environment, and approving starts what the run approves. Kind
+  `engine` (`Approve shipping <rc>`) is requested by the engine's release-candidate run, or by hand,
+  and starts that RC's production ship in the repository that builds the engine
+  (`scripts/approve.mjs`, with the environment's `SHIP_DISPATCH_TOKEN` and `SHIP_DISPATCH_REPO`
+  secrets; it fails if either is empty). Kind `public`
+  (`Approve releasing the CLI and plugins (<bump>) at <commit>`) starts `Release` for the commit the
+  run ran on. A `dry_run` checks the token and starts nothing; its `(dry run)` title approves
+  nothing. Both publishing workflows check the approval by run id, with this repository's own token,
+  before they publish: a successful `Approve` run on `main`, approved in `ship-approval` by that
+  environment's required reviewer. `Publish engine` requires an RC of the version it publishes and
+  that every tarball unpacks to that RC's files byte for byte, with only the version restamped in
+  `package.json`. `Release` requires the engine's approval (from `core-published`) or a `public`
+  approval of its bump and of a commit newer than the newest `vX.Y.Z` tag.
 
 Both publishing workflows are safe to re-run: every step checks npmjs first, skips a version it
 already serves with the same files, treats "cannot publish over" (E403/E409) as published, and
