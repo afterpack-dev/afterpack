@@ -2,6 +2,8 @@ import { expect, type Page } from "@playwright/test";
 import type { SmokeExpectations } from "./expectations.js";
 
 const INTERACTION_TIMEOUT_MS = 15_000;
+const SETTLE_TIMEOUT_MS = 5_000;
+const HYDRATION_ERROR = /hydrat|Minified React error #(?:418|422|423|425)\b/i;
 
 export function collectConsoleErrors(page: Page): string[] {
   const errors: string[] = [];
@@ -10,6 +12,20 @@ export function collectConsoleErrors(page: Page): string[] {
   });
   page.on("pageerror", (error) => errors.push(String(error)));
   return errors;
+}
+
+async function settle(page: Page): Promise<void> {
+  await page.evaluate(
+    (timeout) =>
+      new Promise<void>((resolve) => {
+        if (typeof requestIdleCallback === "function") {
+          requestIdleCallback(() => resolve(), { timeout });
+        } else {
+          setTimeout(resolve, 50);
+        }
+      }),
+    SETTLE_TIMEOUT_MS,
+  );
 }
 
 async function contentContains(page: Page, needle: string, where: string): Promise<void> {
@@ -35,6 +51,7 @@ export async function visitRoutes(
     for (const [selector, text] of Object.entries(route.selectors ?? {})) {
       await expect(page.locator(selector), `${route.path} ${selector}`).toHaveText(text);
     }
+    await settle(page);
   }
 }
 
@@ -63,13 +80,14 @@ export async function runInteractions(
         `${interaction.route} after clicking ${interaction.click}`,
       );
     }
+    await settle(page);
   }
 }
 
 export function expectNoHydrationMismatch(errors: string[], smoke: SmokeExpectations): void {
   if (!smoke.hydration?.assertNoMismatch) return;
   expect(
-    errors.filter((error) => /hydrat/i.test(error)),
+    errors.filter((error) => HYDRATION_ERROR.test(error)),
     "hydration mismatch (server-bundle class failure)",
   ).toEqual([]);
 }

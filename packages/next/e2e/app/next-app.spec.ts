@@ -29,6 +29,7 @@ const NAME_ERROR = "Tell us a name of at least 2 characters.";
 const MESSAGE_ERROR = "Leave a message.";
 const EMAIL_ERROR = "Enter an email address like ada@example.com.";
 const MESSAGE = "Hello from the protected build";
+const ABOUT_INTRO = "A second route, so the smoke test can navigate between pages.";
 
 function navLink(page: Page, name: string) {
   return page.getByRole("navigation", { name: "Main" }).getByRole("link", { name });
@@ -194,6 +195,31 @@ test.describe("Next.js 16 App Router serves a dual bundle, full suite", () => {
       const base = baseURLOf(currentFixture());
       await expectGenuinelyDynamic(base, "/dynamic", "dynamic-timestamp");
       await expectGenuinelyDynamic(base, "/legacy", "legacy-timestamp");
+    },
+  );
+
+  test(
+    "the smoke check fails on a hydration mismatch of a route it only visits, on a slow CPU",
+    async ({ page, browserName }) => {
+      test.skip(browserName !== "chromium", "CPU throttling is a Chromium DevTools call");
+      const base = baseURLOf(currentFixture());
+      const smoke = smokeOf(expectations);
+      const served = await (await fetch(`${base}/about`)).text();
+      expect(served, "the text this test tampers with").toContain(ABOUT_INTRO);
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
+      await page.route(`${base}/about`, async (route) => {
+        const response = await route.fetch();
+        const html = await response.text();
+        await route.fulfill({ response, body: html.replace(ABOUT_INTRO, "Tampered in transit.") });
+      });
+      const routes = [
+        { path: "/about", status: 200 },
+        { path: "/stats", status: 200 },
+      ];
+      await expect(
+        runSmoke(page, base, { ...smoke, routes, apiRoutes: [], interactions: [] }),
+      ).rejects.toThrow(/hydration mismatch/);
     },
   );
 
