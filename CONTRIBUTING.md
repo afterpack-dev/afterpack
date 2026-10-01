@@ -89,7 +89,10 @@ One lane publishes to `latest`; there is no release-candidate channel for the CL
   environment's required reviewer. `Publish engine` requires an RC of the version it publishes and
   that every tarball unpacks to that RC's files byte for byte, with only the version restamped in
   `package.json`. `Release` requires the engine's approval (from `core-published`) or a `public`
-  approval of its bump and of a commit newer than the newest `vX.Y.Z` tag.
+  approval of its bump and of a commit newer than the newest `vX.Y.Z` tag. An engine approval
+  releases the CLI and plugins once: `Release` refuses it once `afterpack@latest` pins
+  `@afterpack/core` at or above that engine, and a re-run of `Publish engine` then sends no
+  `core-published`.
 
 Both publishing workflows are safe to re-run: every step checks npmjs first, skips a version it
 already serves with the same files, treats "cannot publish over" (E403/E409) as published, and

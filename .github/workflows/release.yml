@@ -10,7 +10,9 @@ name: Release
 #
 #  * `repository_dispatch` type `core-published`, sent by the Publish engine
 #    workflow once npmjs serves a stable engine, carries the Approve run that
-#    approved shipping an RC of that engine. It first repins
+#    approved shipping an RC of that engine. That approval releases the CLI
+#    and plugins once: it is refused once `afterpack@latest` pins
+#    @afterpack/core at or above that engine. It first repins
 #    @afterpack/core across every package. A new release line (a minor under
 #    major 0) also raises every package version and MIN_CORE_VERSION to it.
 #    The bump waits until npmjs serves the engine, writes the lockfile

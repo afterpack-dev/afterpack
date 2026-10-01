@@ -6,6 +6,7 @@ import {
   approvalProblems,
   approvedTarget,
   approveRunId,
+  engineReleaseProblem,
   freshnessProblem,
   newestReleaseTag,
   releaseApproval,
@@ -16,11 +17,13 @@ import {
   ENGINE_PACKAGES,
   payloadIntegrity,
   resolveEngineRelease,
+  STABLE,
 } from "./lib/engine.mjs";
 import {
   alreadyPublished,
   appendFile,
   describeTarball,
+  latestManifest,
   npm,
   npmrcFor,
   packFilename,
@@ -120,7 +123,12 @@ async function verifyReleaseApproval() {
     inputApproveRunId: env.INPUT_APPROVE_RUN_ID,
   });
   const run = await checkedApproval(id, expect);
-  if (expect.kind !== "public") return;
+  if (expect.kind === "engine") {
+    const problem = engineReleaseProblem(await latestManifest("afterpack"), expect.version);
+    if (problem) fail(`Approve run ${id} is spent: ${problem}`);
+    console.log(`no release has repinned the CLI to ${expect.version} yet`);
+    return;
+  }
   const { sha } = approvedTarget(run.display_title);
   const repository = env.GITHUB_REPOSITORY;
   const newest = newestReleaseTag((await githubGet(repository, "/git/matching-refs/tags/v")) ?? []);
@@ -129,6 +137,18 @@ async function verifyReleaseApproval() {
   if (problem) fail(problem);
   appendFile("GITHUB_OUTPUT", `sha=${sha}\n`);
   console.log(`releasing the approved commit ${sha}`);
+}
+
+async function handOver() {
+  const version = process.env.VERSION ?? "";
+  if (!STABLE.test(version)) fail(`VERSION '${version}' is not a stable engine version`);
+  const problem = engineReleaseProblem(await latestManifest("afterpack"), version);
+  appendFile("GITHUB_OUTPUT", `send=${!problem}\n`);
+  const line = problem
+    ? `Not sending core-published: ${problem}`
+    : `Sending core-published: no release has repinned the CLI to ${version} yet.`;
+  appendFile("GITHUB_STEP_SUMMARY", `${line}\n\n`);
+  console.log(problem ? `::notice::${line}` : line);
 }
 
 function fetchEngine(args) {
@@ -286,6 +306,7 @@ const COMMANDS = {
   "verify-approval": verifyApproval,
   "verify-release-approval": verifyReleaseApproval,
   "fetch-engine": fetchEngine,
+  "hand-over": handOver,
   publish,
   wait,
 };
@@ -293,7 +314,7 @@ const [command, ...args] = process.argv.slice(2);
 try {
   if (!COMMANDS[command]) {
     fail(
-      "usage: node scripts/npm-release.mjs verify-approval | verify-release-approval | fetch-engine --out <dir> | publish --dir <dir> --tag <tag> [--provenance] [--dry-run] | wait (--dir <dir> | --version <v> [--packages a,b]) [--tag <tag>] [--deadline-minutes 45]",
+      "usage: node scripts/npm-release.mjs verify-approval | verify-release-approval | fetch-engine --out <dir> | hand-over | publish --dir <dir> --tag <tag> [--provenance] [--dry-run] | wait (--dir <dir> | --version <v> [--packages a,b]) [--tag <tag>] [--deadline-minutes 45]",
     );
   }
   await COMMANDS[command](args);

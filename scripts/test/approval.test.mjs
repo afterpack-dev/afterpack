@@ -11,8 +11,10 @@ import {
   approvalProblems,
   approvedTarget,
   approveRunId,
+  engineReleaseProblem,
   freshnessProblem,
   newestReleaseTag,
+  rangeFloor,
   releaseApproval,
   requiredReviewers,
 } from "../lib/approval.mjs";
@@ -237,6 +239,38 @@ describe("freshnessProblem", () => {
         String(status),
       );
     }
+  });
+});
+
+describe("engineReleaseProblem", () => {
+  const cli = (range) => ({ version: "0.2.0", dependencies: { "@afterpack/core": range } });
+
+  it("lets an engine approval release the CLI while afterpack@latest is on an older engine", () => {
+    assert.equal(engineReleaseProblem(cli("~0.2.0"), "0.2.1"), null);
+    assert.equal(engineReleaseProblem(cli("~0.2.1"), "0.3.0"), null);
+    assert.equal(engineReleaseProblem(null, "0.2.1"), null, "nothing released yet");
+  });
+
+  it("refuses a replay once a release repinned the CLI to that engine or a later one", () => {
+    assert.match(
+      engineReleaseProblem(cli("~0.2.1"), "0.2.1"),
+      /^afterpack@0\.2\.0 already pins @afterpack\/core ~0\.2\.1, so a release already repinned the engine to 0\.2\.1 or later\. An engine approval releases the CLI and plugins once/,
+    );
+    assert.match(engineReleaseProblem(cli("~0.2.1"), "0.2.0"), /already pins/);
+  });
+
+  it("refuses a pin it cannot compare", () => {
+    assert.match(engineReleaseProblem(cli("workspace:*"), "0.2.1"), /names no version/);
+    assert.match(engineReleaseProblem({ version: "0.2.0" }, "0.2.1"), /'\(nothing\)'/);
+  });
+
+  it("reads the floor of a pinned range", () => {
+    assert.equal(rangeFloor("~0.2.0"), "0.2.0");
+    assert.equal(rangeFloor("^1.2.3"), "1.2.3");
+    assert.equal(rangeFloor(">=0.2.1"), "0.2.1");
+    assert.equal(rangeFloor("0.2.1"), "0.2.1");
+    assert.equal(rangeFloor("~0.2.0 || ~0.3.0"), null);
+    assert.equal(rangeFloor(undefined), null);
   });
 });
 

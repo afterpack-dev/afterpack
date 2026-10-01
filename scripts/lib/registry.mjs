@@ -194,6 +194,18 @@ export async function request(url, init = {}, attempts = 4) {
   throw lastError;
 }
 
+export async function latestManifest(name, registry = NPMJS) {
+  const response = await request(versionUrl(name, "latest", registry), {
+    headers: { accept: "application/json" },
+  });
+  if (response.status === 404) {
+    await response.body?.cancel();
+    return null;
+  }
+  if (!response.ok) throw new Error(`${name}@latest: the registry answered ${response.status}`);
+  return response.json();
+}
+
 export async function versionState(name, version, registry = NPMJS) {
   const response = await request(versionUrl(name, version, registry), {
     headers: { accept: "application/json" },

@@ -1,4 +1,5 @@
 import { compareVersions } from "./bump.mjs";
+import { CORE } from "./engine.mjs";
 
 export const APPROVE_WORKFLOW = ".github/workflows/approve.yml";
 
@@ -144,6 +145,21 @@ export function approvalDispatch(request) {
 export function freshnessProblem({ sha, newest, status }) {
   if (!newest || status === "ahead") return null;
   return `the approved commit ${sha} is ${status ?? "unknown"} against ${newest.tag}, so it is already released or not on main: approve a newer commit`;
+}
+
+export function rangeFloor(range) {
+  return /^\s*(?:[~^]|>=|=)?\s*v?(\d+\.\d+\.\d+)\s*$/.exec(range ?? "")?.[1] ?? null;
+}
+
+export function engineReleaseProblem(cli, version) {
+  if (!cli) return null;
+  const range = cli.dependencies?.[CORE];
+  const floor = rangeFloor(range);
+  if (!floor) {
+    return `afterpack@${cli.version} depends on ${CORE} '${range ?? "(nothing)"}', which names no version to compare with ${version}`;
+  }
+  if (compareVersions(floor, version) < 0) return null;
+  return `afterpack@${cli.version} already pins ${CORE} ${range}, so a release already repinned the engine to ${version} or later. An engine approval releases the CLI and plugins once; another release needs its own approval (kind public)`;
 }
 
 export function newestReleaseTag(refs) {

@@ -20,9 +20,11 @@ name: Publish engine
 # publish npmjs refuses because it already holds that version (E403 "cannot
 # publish over", E409) counts as published, and nothing moves on until
 # npmjs serves every tarball, for up to 45 minutes. It then hands the engine
-# and the approval on to the CLI and plugins (core-published). The trusted
-# publishers are bound to this file name and to the `npm` environment:
-# rename neither.
+# and the approval on to the CLI and plugins (core-published), unless a
+# release already repinned the CLI to this engine: an engine approval
+# releases the CLI and plugins once, and release.yml refuses a replay.
+# The trusted publishers are bound to this file name and to the `npm`
+# environment: rename neither.
 on:
   repository_dispatch:
     types: [engine-release]
@@ -94,7 +96,12 @@ jobs:
       - name: Wait until npmjs serves every tarball
         run: node scripts/npm-release.mjs wait --dir "$RUNNER_TEMP/engine" --tag latest
 
+      - name: Does a release still have to repin the CLI to this engine?
+        id: handover
+        run: node scripts/npm-release.mjs hand-over
+
       - name: Hand the engine and its approval to the CLI and plugins
+        if: steps.handover.outputs.send == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
