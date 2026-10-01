@@ -29,42 +29,27 @@ describe("the engine package set", () => {
 });
 
 describe("resolveEngineRelease", () => {
-  it("takes the dispatch payload, stripping a leading v and defaulting to latest", () => {
+  it("takes the dispatch payload, stripping a leading v", () => {
     assert.deepEqual(
       resolveEngineRelease({ event: "repository_dispatch", payload: { version: "v0.3.0" } }),
-      { version: "0.3.0", tag: "latest", fromDispatch: true },
-    );
-    assert.equal(
-      resolveEngineRelease({
-        event: "repository_dispatch",
-        payload: { version: "0.3.0", tag: "rc" },
-      }).tag,
-      "rc",
+      { version: "0.3.0", fromDispatch: true },
     );
   });
 
   it("takes the inputs of a manual run", () => {
-    assert.deepEqual(
-      resolveEngineRelease({ event: "workflow_dispatch", inputVersion: "0.2.1", inputTag: "" }),
-      { version: "0.2.1", tag: "latest", fromDispatch: false },
-    );
+    assert.deepEqual(resolveEngineRelease({ event: "workflow_dispatch", inputVersion: "0.2.1" }), {
+      version: "0.2.1",
+      fromDispatch: false,
+    });
   });
 
-  it("refuses a prerelease, a malformed version and an unknown dist-tag", () => {
+  it("refuses a prerelease and a malformed version", () => {
     for (const version of ["0.3.0-rc.1", "0.3", "", undefined]) {
       assert.throws(
         () => resolveEngineRelease({ event: "workflow_dispatch", inputVersion: version }),
         /is not a stable version/,
       );
     }
-    assert.throws(
-      () =>
-        resolveEngineRelease({
-          event: "repository_dispatch",
-          payload: { version: "0.3.0", tag: "beta" },
-        }),
-      /not latest or rc/,
-    );
   });
 });
 

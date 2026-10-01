@@ -1,13 +1,11 @@
 name: Publish engine
 
 # Publishes a stable engine release (@afterpack/core, its platform packages
-# and @afterpack/wasm) to npmjs with trusted publishing. The engine's source
-# is not in this repository, so these packages carry no provenance. The
-# release arrives as a repository_dispatch naming each tarball's integrity
-# and the dist-tag (`latest` when absent, or `rc` to publish without moving
-# `latest`); a manual run retries a version and checks it against the
-# integrity the source registry reports instead. Only a `latest` publish
-# hands the engine on to the CLI and plugins.
+# and @afterpack/wasm) to npmjs under `latest` with trusted publishing. The
+# engine's source is not in this repository, so these packages carry no
+# provenance. The release arrives as a repository_dispatch naming each
+# tarball's integrity; a manual run retries a version and checks it against
+# the integrity the source registry reports instead.
 #
 # Nothing publishes without the operator's approval: before any download, the
 # job checks, with this repository's own token, that approve_run_id (in the
@@ -30,18 +28,12 @@ on:
         description: "The stable engine version to publish, e.g. 0.1.1"
         required: true
         type: string
-      tag:
-        description: "The npm dist-tag to publish under"
-        required: true
-        default: latest
-        type: choice
-        options: [latest, rc]
       approve_run_id:
         description: "The Approve run in which the operator approved shipping an RC of this version"
         required: true
         type: string
 
-run-name: "Publish engine ${{ github.event.client_payload.version || inputs.version }} (${{ github.event.client_payload.tag || inputs.tag || 'latest' }})"
+run-name: "Publish engine ${{ github.event.client_payload.version || inputs.version }} (latest)"
 
 concurrency:
   group: ${{ github.workflow }}
@@ -76,7 +68,6 @@ jobs:
           EVENT: ${{ github.event_name }}
           PAYLOAD: ${{ toJSON(github.event.client_payload) }}
           INPUT_VERSION: ${{ inputs.version }}
-          INPUT_TAG: ${{ inputs.tag }}
           INPUT_APPROVE_RUN_ID: ${{ inputs.approve_run_id }}
           GH_TOKEN: ${{ github.token }}
         run: node scripts/npm-release.mjs verify-approval
@@ -86,7 +77,6 @@ jobs:
           EVENT: ${{ github.event_name }}
           PAYLOAD: ${{ toJSON(github.event.client_payload) }}
           INPUT_VERSION: ${{ inputs.version }}
-          INPUT_TAG: ${{ inputs.tag }}
           ENGINE_REGISTRY: ${{ secrets.ENGINE_REGISTRY }}
           ENGINE_REGISTRY_TOKEN: ${{ secrets.ENGINE_REGISTRY_TOKEN }}
         run: |
@@ -95,22 +85,12 @@ jobs:
           node scripts/npm-release.mjs fetch-engine --out "$RUNNER_TEMP/engine"
 
       - name: Publish to npmjs
-        run: node scripts/npm-release.mjs publish --dir "$RUNNER_TEMP/engine" --tag "$DIST_TAG"
+        run: node scripts/npm-release.mjs publish --dir "$RUNNER_TEMP/engine" --tag latest
 
       - name: Wait until npmjs serves every tarball
-        run: node scripts/npm-release.mjs wait --dir "$RUNNER_TEMP/engine" --tag "$DIST_TAG"
-
-      - name: Say how to move latest
-        if: env.DIST_TAG == 'rc'
-        run: |
-          {
-            echo "\`latest\` did not move, and the CLI and plugins were not bumped. Once it has been tried,"
-            echo "move \`latest\` by hand, then run this workflow again for \`$VERSION\` with tag \`latest\`:"
-            echo "every package is already there, so it only hands the engine on to the CLI and plugins."
-          } >> "$GITHUB_STEP_SUMMARY"
+        run: node scripts/npm-release.mjs wait --dir "$RUNNER_TEMP/engine" --tag latest
 
       - name: Hand the engine to the CLI and plugins
-        if: env.DIST_TAG == 'latest'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

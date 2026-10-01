@@ -31,13 +31,11 @@ export function hostBinding({ platform, arch, musl }) {
   return match ? match[0] : null;
 }
 
-export function resolveEngineRelease({ event, payload, inputVersion, inputTag }) {
+export function resolveEngineRelease({ event, payload, inputVersion }) {
   const fromDispatch = event === "repository_dispatch";
   const version = String((fromDispatch ? payload?.version : inputVersion) ?? "").replace(/^v/, "");
-  const tag = (fromDispatch ? payload?.tag : inputTag) || "latest";
   if (!STABLE.test(version)) throw new Error(`'${version}' is not a stable version`);
-  if (tag !== "latest" && tag !== "rc") throw new Error(`dist-tag '${tag}' is not latest or rc`);
-  return { version, tag, fromDispatch };
+  return { version, fromDispatch };
 }
 
 export function payloadIntegrity(payload, name) {

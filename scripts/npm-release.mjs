@@ -68,7 +68,6 @@ async function verifyApproval() {
     event: env.EVENT,
     payload,
     inputVersion: env.INPUT_VERSION,
-    inputTag: env.INPUT_TAG,
   });
   const id = approveRunId(fromDispatch ? payload?.approve_run_id : env.INPUT_APPROVE_RUN_ID);
   const repository = env.GITHUB_REPOSITORY ?? fail("GITHUB_REPOSITORY is not set");
@@ -88,11 +87,10 @@ function fetchEngine(args) {
   const out = flag(args, "out") ?? fail("fetch-engine needs --out <dir>");
   const env = process.env;
   const payload = env.PAYLOAD ? JSON.parse(env.PAYLOAD) : null;
-  const { version, tag, fromDispatch } = resolveEngineRelease({
+  const { version, fromDispatch } = resolveEngineRelease({
     event: env.EVENT,
     payload,
     inputVersion: env.INPUT_VERSION,
-    inputTag: env.INPUT_TAG,
   });
   if (!env.ENGINE_REGISTRY || !env.ENGINE_REGISTRY_TOKEN) {
     fail("ENGINE_REGISTRY and ENGINE_REGISTRY_TOKEN must be set in the npm environment");
@@ -137,8 +135,8 @@ function fetchEngine(args) {
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });
   }
-  appendFile("GITHUB_ENV", `VERSION=${version}\nDIST_TAG=${tag}\n`);
-  console.log(`engine ${version} (${tag}) is ready to publish from ${out}`);
+  appendFile("GITHUB_ENV", `VERSION=${version}\n`);
+  console.log(`engine ${version} is ready to publish from ${out}`);
 }
 
 async function publish(args) {
