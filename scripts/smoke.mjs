@@ -44,12 +44,21 @@ function scratchProject(label) {
   return { base, project };
 }
 
+function removeScratch(dir) {
+  try {
+    fs.rmSync(dir, { recursive: true, force: true });
+  } catch (error) {
+    if (process.platform !== "win32" || !["EPERM", "EBUSY"].includes(error.code)) throw error;
+    console.log(`left ${dir} behind: Windows keeps the loaded native binding locked`);
+  }
+}
+
 async function withScratch(label, fn) {
   const scratch = scratchProject(label);
   try {
     return await fn(scratch);
   } finally {
-    fs.rmSync(scratch.base, { recursive: true, force: true });
+    removeScratch(scratch.base);
   }
 }
 
