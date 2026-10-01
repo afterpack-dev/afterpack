@@ -13,4 +13,5 @@ require(["calc", "greeter"], function (calc, greeter) {
     var parity = count % 2 === 0 ? "even" : "odd";
     button.textContent = "count is " + count + " (" + parity + ")";
   });
+  document.body.setAttribute("data-app-ready", "");
 });

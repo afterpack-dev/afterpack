@@ -91,6 +91,12 @@ that fixture's other browsers. To repeat one Firefox test, select only that brow
    another document, or when Playwright saw the request for that URL cancelled. The same message
    for a fetch refused at any other time, such as a real CORS failure, still fails the check;
    next-app's full suite proves that in WebKit.
+
+   An app that wires itself only after the page's load event declares `smoke.readySelector` in
+   its `expectations.json` and matches it once it is wired: `cli-requirejs-amd`, whose modules
+   require.js loads after `load`, sets `<body data-app-ready>` once its click handler is
+   attached. After every navigation the smoke check waits for that selector before it checks or
+   clicks anything, and fails if the served HTML already matches it.
 4. For a fixture with a baseline build, its scenarios behave the same in both builds.
 
 ## Writing a scenario

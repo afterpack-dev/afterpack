@@ -1,4 +1,4 @@
-import { expect, type Page, type Request } from "@playwright/test";
+import { expect, type Page, type Request, type Response } from "@playwright/test";
 import type { SmokeExpectations } from "./expectations.js";
 
 const INTERACTION_TIMEOUT_MS = 15_000;
@@ -81,6 +81,26 @@ async function contentContains(page: Page, needle: string, where: string): Promi
     .toBe(true);
 }
 
+async function waitUntilReady(
+  page: Page,
+  response: Response | null,
+  smoke: SmokeExpectations,
+  where: string,
+): Promise<void> {
+  const ready = smoke.readySelector;
+  if (!ready) return;
+  const served = (await response?.text()) ?? "";
+  const readyAsServed = await page.evaluate(
+    ([html, selector]) =>
+      new DOMParser().parseFromString(html, "text/html").querySelector(selector) !== null,
+    [served, ready],
+  );
+  expect(readyAsServed, `${where}: the served HTML already matches ${ready}`).toBe(false);
+  await expect(page.locator(ready), `${where}: the page never matched ${ready}`).toBeAttached({
+    timeout: INTERACTION_TIMEOUT_MS,
+  });
+}
+
 export async function visitRoutes(
   page: Page,
   baseURL: string,
@@ -89,6 +109,7 @@ export async function visitRoutes(
   for (const route of smoke.routes) {
     const response = await page.goto(`${baseURL}${route.path}`);
     expect(response?.status(), `${route.path}: unexpected status`).toBe(route.status);
+    await waitUntilReady(page, response, smoke, route.path);
     for (const needle of route.textContains ?? []) {
       await contentContains(page, needle, route.path);
     }
@@ -115,7 +136,8 @@ export async function runInteractions(
   smoke: SmokeExpectations,
 ): Promise<void> {
   for (const interaction of smoke.interactions ?? []) {
-    await page.goto(`${baseURL}${interaction.route}`);
+    const response = await page.goto(`${baseURL}${interaction.route}`);
+    await waitUntilReady(page, response, smoke, interaction.route);
     await page.locator(interaction.click).click();
     for (const needle of interaction.expectTextContains ?? []) {
       await contentContains(

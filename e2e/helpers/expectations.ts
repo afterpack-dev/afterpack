@@ -23,6 +23,7 @@ export interface ApiRouteExpectation {
 }
 
 export interface SmokeExpectations {
+  readySelector?: string;
   routes: RouteExpectation[];
   interactions?: InteractionExpectation[];
   apiRoutes?: ApiRouteExpectation[];

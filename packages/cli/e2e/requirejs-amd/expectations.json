@@ -1,7 +1,7 @@
 {
   "framework": "requirejs-amd",
   "frameworkClass": "vanilla",
-  "description": "Legacy AMD app: vendored require.js (2.3.7) loads define()/require() modules at runtime, no bundler. The `afterpack` CLI obfuscates dist/modules/ directly, since no plugin covers this case. Proves AfterPack preserves AMD define/require semantics (globals + encoded module ids still resolve).",
+  "description": "Legacy AMD app: vendored require.js (2.3.7) loads define()/require() modules at runtime, no bundler. The `afterpack` CLI obfuscates dist/modules/ directly, since no plugin covers this case. Proves AfterPack preserves AMD define/require semantics (globals + encoded module ids still resolve). require.js loads the modules after the page's load event, so main.js sets <body data-app-ready> once the click handler is wired, and the smoke check waits for smoke.readySelector before it clicks.",
   "seed": 641928375,
   "deterministicOutput": true,
   "build": {
@@ -16,6 +16,7 @@
     "passes": 1
   },
   "smoke": {
+    "readySelector": "body[data-app-ready]",
     "routes": [
       {
         "path": "/",
