@@ -370,11 +370,13 @@ jobs:
         run: node scripts/npm-release.mjs publish --dir "$RUNNER_TEMP/release" --tag latest --provenance
 
       # The tag names the SOURCE commit, not the version bump, which is never
-      # committed. A re-run finds its own tag and moves on.
+      # committed. A re-run finds its own tag and moves on; an annotated tag
+      # is compared by the commit it points at.
       - name: Tag the source commit
         run: |
           set -euo pipefail
-          TAGGED=$(git ls-remote --tags origin "refs/tags/v$VERSION" | cut -f1)
+          TAGGED=$(git ls-remote --tags origin "refs/tags/v$VERSION" "refs/tags/v$VERSION^{}" \
+            | awk -v ref="refs/tags/v$VERSION" '$2 == ref "^{}" { peeled = $1 } $2 == ref { plain = $1 } END { print (peeled != "" ? peeled : plain) }')
           if [ -z "$TAGGED" ]; then
             git tag "v$VERSION" "$SHA"
             git push origin "v$VERSION"
