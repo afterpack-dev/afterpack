@@ -34,7 +34,7 @@
     "@parcel/core": ">=2.9.0"
   },
   "dependencies": {
-    "@afterpack/core": "~0.2.2",
+    "@afterpack/core": "~0.2.3",
     "@afterpack/integration-utils": "workspace:*",
     "@parcel/diagnostic": "^2.9.0",
     "@parcel/plugin": "^2.9.0",

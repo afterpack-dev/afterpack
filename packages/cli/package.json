@@ -22,7 +22,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@afterpack/core": "~0.2.2",
+    "@afterpack/core": "~0.2.3",
     "@afterpack/integration-utils": "workspace:*"
   },
   "devDependencies": {
