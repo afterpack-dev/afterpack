@@ -1024,7 +1024,6 @@ details[open] > .details-summary::before { transform: rotate(90deg); }
 .chain-delta { flex: 0 0 auto; margin-left: auto; padding-left: 6px; color: var(--text-muted); font-family: var(--font-mono); font-size: 10px; white-space: nowrap; }
 .chain-caption { font-size: 11px; line-height: 1.4; color: var(--text-muted); margin-top: 2px; }
 .chain-caption [data-tip] { cursor: help; }
-.chain-credit { color: var(--text-secondary); font-weight: 600; white-space: nowrap; }
 .chain-more { margin-top: 6px; font-size: 10.5px; color: var(--text-muted); font-style: italic; padding-left: 22px; }
 .chip {
   font-family: var(--font-mono);
@@ -1386,7 +1385,6 @@ async function afterpackInflateBase64Gzip(b64) {
     readMap: "/docs/protection-map#how-to-read-it",
     mapLives: "/docs/protection-map#where-your-map-lives",
     classes: "/docs/reversal-classes#the-classes",
-    attackers: "/docs/threat-model#attacker-classes",
     secret: "/docs/threat-model#protecting-a-secret",
     antiTamper: "/docs/threat-model#anti-tamper",
     directives: "/docs/directives#writing-one",
@@ -1467,16 +1465,13 @@ async function afterpackInflateBase64Gzip(b64) {
   };
 
   var INSP_COPY = {
-    complexity: "How complex this code is after protection, on the same scale as --complexity. Higher means harder to reverse.",
+    complexity: "How complex this code is after protection, on the same scale as --complexity.",
     noComplexity: "This map doesn't record the complexity each part of your code reached, only the build's target.",
     target: "The complexity this build aimed for, set by --complexity or your preset.",
-    resists: "Estimated chance that at least one transform here survives free automated deobfuscation tools, combined from each transform's measured rate.",
     addedSize: "Roughly how many bytes protection added here.",
     decoders: "Small decoders that run here to rebuild strings or values.",
     leakInside: "Readable text sits inside this code. The complexity shown is for the code around it, not the text.",
     transforms: "Each transform applied to this code, oldest first.",
-    transformsRates: "A transform with no rate has no measured resistance on its own.",
-    credit: "Measured on test builds: how much of this transform's work the best free deobfuscation tool could not undo.",
     detailsOff: "Step details were left out to keep this map small. Set protectionMap.detailed to true to include them.",
     noPosition: "The map can't point to where this sits in your source.",
     preservedLowered: "Syntax was rewritten, but names and values stay readable.",
@@ -2963,16 +2958,6 @@ async function afterpackInflateBase64Gzip(b64) {
     });
     return { hasLane: CX_LANE, avg: n ? sum / n : null, count: n };
   })();
-  var SCORES_ARE_RATES = (function () {
-    var v = /^(\d+)\.(\d+)\.(\d+)/.exec(String(engineOf(FILES[0] || null).version || ""));
-    if (v && (Number(v[1]) > 0 || Number(v[2]) > 1 || (Number(v[2]) === 1 && Number(v[3]) >= 1))) return true;
-    return FILES.some(function (f) {
-      return f.regions.some(function (r) {
-        return (r.raw.lineage || []).some(function (s) { return typeof s.credit === "number" && s.credit > 0; });
-      });
-    });
-  })();
-  function scorePct(score) { return score >= 100 ? "99%+" : Math.round(score) + "%"; }
 
   function fileMeterHtml(file, indent, ignored) {
     var c = file.coverage;
@@ -3053,8 +3038,7 @@ async function afterpackInflateBase64Gzip(b64) {
     if (BUILD_CX.hasLane && BUILD_CX.avg != null) {
       el.innerHTML = cxDotHtml(complexityBand(BUILD_CX.avg)) + 'Complexity <span class="tag-em">' + escapeHtml(fmtCx(BUILD_CX.avg)) + "</span>" +
         (t != null ? " · target " + escapeHtml(fmtCx(t)) : "");
-      tip = "Average complexity of your code in this build" + (t != null ? ", next to the target set by --complexity or your preset" : "") +
-        ". Higher means harder to reverse.";
+      tip = "Average complexity of your code in this build" + (t != null ? ", next to the target set by --complexity or your preset" : "") + ".";
     } else if (t != null) {
       el.innerHTML = 'Complexity target <span class="tag-em">' + escapeHtml(fmtCx(t)) + "</span>" +
         (preset ? " · " + escapeHtml(String(preset)) : "");
@@ -3129,7 +3113,7 @@ async function afterpackInflateBase64Gzip(b64) {
     document.getElementById("cx-legend").innerHTML = rows.join("");
     var t = buildTarget();
     var note = BUILD_CX.hasLane
-      ? "Hotter means more complex, so harder to reverse. Red is strong, not a problem." +
+      ? "Hotter means more complex. Red is the most complex, not a problem." +
         (BUILD_CX.avg != null ? " This build: average " + fmtCx(BUILD_CX.avg) + (t != null ? ", target " + fmtCx(t) : "") + "." : "")
       : "This map doesn't record complexity per token, so all protected code shares one color." +
         (t != null ? " This build targeted " + fmtCx(t) + "." : "");
@@ -3223,29 +3207,19 @@ async function afterpackInflateBase64Gzip(b64) {
       if (g) {
         g.count++;
         g.sizeDeltaEst += step.sizeDeltaEst || 0;
-        if (g.credit == null && step.credit != null) g.credit = step.credit;
       } else {
-        g = byName[key] = { transform: key, category: step.category, phase: step.phase, count: 1, sizeDeltaEst: step.sizeDeltaEst || 0, credit: step.credit };
+        g = byName[key] = { transform: key, category: step.category, phase: step.phase, count: 1, sizeDeltaEst: step.sizeDeltaEst || 0 };
         groups.push(g);
       }
     });
     return groups;
   }
 
-  function creditPct(permille) {
-    if (typeof permille !== "number" || isNaN(permille) || permille <= 0) return null;
-    var p = permille / 10;
-    return (p >= 10 ? Math.round(p) : Math.round(p * 10) / 10) + "%";
-  }
   function breakCamel(name) { return escapeHtml(name).replace(/([a-z0-9])([A-Z])/g, "$1<wbr>$2"); }
 
   var CHAIN_VISIBLE_CAP = 6;
   function chainStepHtml(g) {
     var cat = categoryMeta(g);
-    var credit = creditPct(g.credit);
-    var caption = [];
-    if (cat) caption.push("<span" + (cat.tip ? tipAttrs(cat.tip, cat.doc) : "") + ">" + escapeHtml(cat.label) + "</span>");
-    if (credit) caption.push('<span class="chain-credit"' + tipAttrs(INSP_COPY.credit, "attackers") + ">resists deobfuscators " + credit + "</span>");
     return '<div class="chain-step">' +
       '<div class="chain-rail"><span class="chain-dot"></span><span class="chain-line"></span></div>' +
       '<div class="chain-body">' +
@@ -3254,7 +3228,7 @@ async function afterpackInflateBase64Gzip(b64) {
           (g.count > 1 ? '<span class="chain-count"' + tipAttrs("Applied " + g.count + " times.") + ">×" + g.count + "</span>" : "") +
           (g.sizeDeltaEst ? '<span class="chain-delta">' + escapeHtml((g.sizeDeltaEst > 0 ? "+" : "") + fmtNum(g.sizeDeltaEst) + " B") + "</span>" : "") +
         "</div>" +
-        (caption.length ? '<div class="chain-caption">' + caption.join(" · ") + "</div>" : "") +
+        (cat ? '<div class="chain-caption"><span' + (cat.tip ? tipAttrs(cat.tip, cat.doc) : "") + ">" + escapeHtml(cat.label) + "</span></div>" : "") +
       "</div>" +
     "</div>";
   }
@@ -3283,8 +3257,7 @@ async function afterpackInflateBase64Gzip(b64) {
     if (!region) return "";
     var label = transformsLabel(region);
     if (label == null) return "";
-    var tip = INSP_COPY.transforms + (SCORES_ARE_RATES ? " " + INSP_COPY.transformsRates : "");
-    return '<details class="insp-chain"><summary class="details-summary"' + tipAttrs(tip, "cfgTransforms") +
+    return '<details class="insp-chain"><summary class="details-summary"' + tipAttrs(INSP_COPY.transforms, "cfgTransforms") +
       '>Transforms <span class="chip">' + escapeHtml(label) + "</span></summary>" + renderChainBody(region) + "</details>";
   }
 
@@ -3384,8 +3357,6 @@ async function afterpackInflateBase64Gzip(b64) {
       cxTip: complexityTip(region),
       facts: [
         cx == null ? missingComplexityFact() : null,
-        SCORES_ARE_RATES && typeof r.score === "number" && r.score > 0
-          ? { k: "Resists deobfuscators", v: scorePct(r.score), tip: INSP_COPY.resists, doc: "attackers" } : null,
         typeof r.sizeDeltaEst === "number" && r.sizeDeltaEst !== 0
           ? { k: "Added size", v: (r.sizeDeltaEst > 0 ? "+" : "") + fmtNum(r.sizeDeltaEst) + " B", tip: INSP_COPY.addedSize, doc: "sizeBudget" } : null,
         perf.decodeOps > 0 ? { k: "Runtime decoders", v: perf.decodeOps, tip: INSP_COPY.decoders, doc: "perf" } : null

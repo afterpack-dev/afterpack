@@ -957,7 +957,6 @@ test("M4. without the lane, the viewer shows the build target and invents no per
   const insp = v.byId("inspector").innerHTML;
   assert.ok(!insp.includes("<small>complexity</small>"), "no per-token number");
   assert.match(insp, /<span class="k">Complexity target<\/span><span class="v">5</);
-  assert.match(insp, /<span class="k">Resists deobfuscators<\/span><span class="v">71%</);
 });
 
 function regionWithChain() {
@@ -996,7 +995,7 @@ test("N. the region card drops location, Pro upsell, and the rows the transforms
   const file = v.FILES[0];
   const html = v.cardRegion(file, file.regions[0], { cx: null });
   const keys = [...html.matchAll(/<span class="k">([^<]*)<\/span>/g)].map((m) => m[1]);
-  assert.deepEqual(keys, ["Complexity target", "Resists deobfuscators", "Added size"]);
+  assert.deepEqual(keys, ["Complexity target", "Added size"]);
   for (const gone of [
     "chars ",
     "Copy Pro directive",
@@ -1016,7 +1015,7 @@ test("N. the region card drops location, Pro upsell, and the rows the transforms
   );
 });
 
-test("N2. the transforms list groups by name and puts the measured rate on its own line", async () => {
+test("N2. the transforms list groups by name and captions each with what it does, never a rate", async () => {
   const doc = docWithMachineryAsLastFile();
   doc.files[0].regions[0] = regionWithChain();
   const v = await loadViewer(doc);
@@ -1041,13 +1040,12 @@ test("N2. the transforms list groups by name and puts the measured rate on its o
   );
   assert.match(
     body,
-    /<\/div><div class="chain-caption">.*Hides values.*resists deobfuscators 78%/,
-    "the rate sits on the caption line under the name, not beside it",
+    /<\/div><div class="chain-caption"><span[^>]*>Hides values<\/span><\/div>/,
+    "the category sits on the caption line under the name, alone",
   );
-  assert.match(body, /resists deobfuscators 0\.9%/);
   assert.match(body, />×4<\/span>/);
-  assert.match(body, /Rewrites syntax<\/span><\/div>/, "a 0-credit rewrite shows no rate");
-  assert.ok(!/data-doc="attackers"[^>]*>resists deobfuscators 0%/.test(body));
+  assert.match(body, /Rewrites syntax<\/span><\/div>/);
+  assert.ok(!/\d%/.test(body), "no transform carries a percentage");
 
   const off = { raw: { lineage: [], transformCount: 3 } };
   assert.match(v.renderChainBody(off), /protectionMap\.detailed/);
@@ -1131,36 +1129,58 @@ test("P. the copy a reader sees carries no internal jargon or overclaims", async
   for (const re of banned) assert.doesNotMatch(pieces, re);
 });
 
-test("Q. a map from an engine older than 0.1.1 never presents its score as a resistance rate", async () => {
+test("Q. no map presents a region's score as a rate, whatever engine wrote it", async () => {
   const rows = (html) => [...html.matchAll(/<span class="k">([^<]*)<\/span>/g)].map((m) => m[1]);
-  const old = docWithMachineryAsLastFile();
-  old.engine.version = "0.1.0";
-  const legacy = await loadViewer(old);
-  const oldCard = legacy.cardRegion(legacy.FILES[0], legacy.FILES[0].regions[1], { cx: null });
-  assert.ok(
-    !rows(oldCard).includes("Resists deobfuscators"),
-    "an entropy score is not a survival rate",
-  );
-  assert.ok(!oldCard.includes("no measured resistance"));
+  for (const [version, withChain] of [
+    ["0.1.0", false],
+    ["0.1.0-rc.1", true],
+    ["0.1.1", false],
+    ["0.2.0", true],
+  ]) {
+    const doc = docWithMachineryAsLastFile();
+    doc.engine.version = version;
+    if (withChain) doc.files[0].regions[0] = regionWithChain();
+    doc.files[0].regions[1].score = 100;
+    const v = await loadViewer(doc);
+    for (const region of v.FILES[0].regions.slice(0, 2)) {
+      const card = v.cardRegion(v.FILES[0], region, { cx: null });
+      assert.deepEqual(
+        rows(card).filter(
+          (k) => !["Complexity target", "Added size", "Runtime decoders"].includes(k),
+        ),
+        [],
+        `${version}: the card lists what the region went through, not a score`,
+      );
+      assert.ok(!/\d%/.test(card), `${version}: no percentage on the region card`);
+    }
+  }
+});
 
-  const oldWithRates = docWithMachineryAsLastFile();
-  oldWithRates.engine.version = "0.1.0-rc.1";
-  oldWithRates.files[0].regions[0] = regionWithChain();
-  const rated = await loadViewer(oldWithRates);
-  assert.ok(
-    rows(rated.cardRegion(rated.FILES[0], rated.FILES[0].regions[0], { cx: null })).includes(
-      "Resists deobfuscators",
-    ),
-    "per-transform rates in the map mark the score as a rate",
-  );
+test("Q2. the viewer reports coverage, never a chance of resisting deobfuscation", async () => {
+  const template = readFileSync(new URL("./template.html", import.meta.url), "utf8");
+  const banned = [/resist/i, /\bchance/i, /harder to reverse/i];
+  for (const re of banned) assert.doesNotMatch(template, re, `the template never says ${re}`);
 
-  const current = docWithMachineryAsLastFile();
-  current.engine.version = "0.1.1";
-  current.files[0].regions[1].score = 100;
-  const now = await loadViewer(current);
-  const card = now.cardRegion(now.FILES[0], now.FILES[0].regions[1], { cx: null });
-  assert.match(card, /<span class="k">Resists deobfuscators<\/span><span class="v">99%\+</);
-  assert.ok(!/>100%</.test(card), "never a flat 100%");
+  const doc = docWithComplexityLane();
+  doc.files[0].regions[1] = regionWithChain();
+  doc.files[0].regions[1].span = [CX_SRC.indexOf("beta"), CX_SRC.indexOf("beta") + 4];
+  const v = await loadViewer(doc);
+  const file = v.FILES[0];
+  v.state.selection = { regionIdx: 1, spotlightIdx: null, cx: 12 };
+  v.renderInspector();
+  const shown = [
+    v.byId("inspector").innerHTML,
+    v.byId("cx-legend-note").innerHTML,
+    v.byId("build-cx").getAttribute("data-tip"),
+    v.cardRegion(file, file.regions[1], { cx: 12 }),
+    v.renderChainBody(file.regions[1]),
+  ].join("\n");
+  for (const re of banned) assert.doesNotMatch(shown, re);
+  assert.match(
+    shown,
+    /Transforms <span class="chip">4<\/span>/,
+    "what the region went through stays",
+  );
 });
 
 test("R. a weak spot the map cannot place offers no jump, and says so", async () => {

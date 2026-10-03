@@ -1024,7 +1024,6 @@ details[open] > .details-summary::before { transform: rotate(90deg); }
 .chain-delta { flex: 0 0 auto; margin-left: auto; padding-left: 6px; color: var(--text-muted); font-family: var(--font-mono); font-size: 10px; white-space: nowrap; }
 .chain-caption { font-size: 11px; line-height: 1.4; color: var(--text-muted); margin-top: 2px; }
 .chain-caption [data-tip] { cursor: help; }
-.chain-credit { color: var(--text-secondary); font-weight: 600; white-space: nowrap; }
 .chain-more { margin-top: 6px; font-size: 10.5px; color: var(--text-muted); font-style: italic; padding-left: 22px; }
 .chip {
   font-family: var(--font-mono);
@@ -1311,6 +1310,8 @@ function afterpackDecodeDocument(c) {
       renamedSpans: fc.renamedSpans || [],
       extractedSpans: fc.extractedSpans || [],
       complexitySpans: fc.complexitySpans || [],
+      declarationKinds: fc.declarationKinds || [],
+      declarationSpans: fc.declarationSpans || [],
     };
   });
 
@@ -1384,7 +1385,6 @@ async function afterpackInflateBase64Gzip(b64) {
     readMap: "/docs/protection-map#how-to-read-it",
     mapLives: "/docs/protection-map#where-your-map-lives",
     classes: "/docs/reversal-classes#the-classes",
-    attackers: "/docs/threat-model#attacker-classes",
     secret: "/docs/threat-model#protecting-a-secret",
     antiTamper: "/docs/threat-model#anti-tamper",
     directives: "/docs/directives#writing-one",
@@ -1465,16 +1465,13 @@ async function afterpackInflateBase64Gzip(b64) {
   };
 
   var INSP_COPY = {
-    complexity: "How complex this code is after protection, on the same scale as --complexity. Higher means harder to reverse.",
+    complexity: "How complex this code is after protection, on the same scale as --complexity.",
     noComplexity: "This map doesn't record the complexity each part of your code reached, only the build's target.",
     target: "The complexity this build aimed for, set by --complexity or your preset.",
-    resists: "Estimated chance that at least one transform here survives free automated deobfuscation tools, combined from each transform's measured rate.",
     addedSize: "Roughly how many bytes protection added here.",
     decoders: "Small decoders that run here to rebuild strings or values.",
     leakInside: "Readable text sits inside this code. The complexity shown is for the code around it, not the text.",
     transforms: "Each transform applied to this code, oldest first.",
-    transformsRates: "A transform with no rate has no measured resistance on its own.",
-    credit: "Measured on test builds: how much of this transform's work the best free deobfuscation tool could not undo.",
     detailsOff: "Step details were left out to keep this map small. Set protectionMap.detailed to true to include them.",
     noPosition: "The map can't point to where this sits in your source.",
     preservedLowered: "Syntax was rewritten, but names and values stay readable.",
@@ -2133,6 +2130,22 @@ async function afterpackInflateBase64Gzip(b64) {
       }
     }
     cxRanges.sort(function (a, b) { return a.startChar - b.startChar || b.endChar - a.endChar || b.c - a.c; });
+
+    var declKinds = Array.isArray(fdoc.declarationKinds) ? fdoc.declarationKinds : [];
+    var declFlat = Array.isArray(fdoc.declarationSpans) ? fdoc.declarationSpans : [];
+    var declRanges = [], declByKey = {};
+    for (var dk = 0; dk + 2 < declFlat.length; dk += 3) {
+      var dsc = byteToChar(declFlat[dk]);
+      var dec = Math.max(byteToChar(declFlat[dk + 1]), dsc);
+      var dname = declKinds[declFlat[dk + 2]];
+      if (dec <= dsc || typeof dname !== "string") continue;
+      var dr = declByKey[dsc + ":" + dec];
+      if (!dr) {
+        dr = declByKey[dsc + ":" + dec] = { startChar: dsc, endChar: dec, names: [] };
+        declRanges.push(dr);
+      }
+      if (dr.names.indexOf(dname) < 0) dr.names.push(dname);
+    }
     var cxSum = 0;
     cxRanges.forEach(function (r) { cxSum += r.c; });
 
@@ -2156,6 +2169,7 @@ async function afterpackInflateBase64Gzip(b64) {
     extractedRanges.forEach(function (r) { addB(r.startChar); addB(r.endChar); });
     directives.forEach(function (d) { addB(d.startChar); addB(d.endChar); });
     cxRanges.forEach(function (r) { addB(r.startChar); addB(r.endChar); });
+    declRanges.forEach(function (r) { addB(r.startChar); addB(r.endChar); });
     var boundaries = Object.keys(boundarySet).map(Number).sort(function (a, b) { return a - b; });
 
     function winnerFor(start, end) {
@@ -2192,6 +2206,7 @@ async function afterpackInflateBase64Gzip(b64) {
     }
     var renamedAt = coverSweep(renamedRanges);
     var extractedAt = coverSweep(extractedRanges);
+    var declarationAt = coverSweep(declRanges);
     function directiveForRange(start, end) {
       var best = -1, bestW = Infinity;
       for (var i = 0; i < directives.length; i++) {
@@ -2234,6 +2249,7 @@ async function afterpackInflateBase64Gzip(b64) {
       var extIdx = winner ? -1 : extAt;
       var renIdx = winner || extIdx >= 0 ? -1 : renAt;
       var dirIdx = directiveForRange(segStart, segEnd);
+      var declIdx = declarationAt(segStart, segEnd);
       runs.push({
         start: segStart, end: segEnd,
         regionIdx: winner ? winner.idx : null,
@@ -2242,6 +2258,7 @@ async function afterpackInflateBase64Gzip(b64) {
         extractedIdx: extIdx >= 0 ? extIdx : null,
         named: extAt >= 0 ? "hidden" : renAt >= 0 ? "renamed" : null,
         directiveIdx: dirIdx >= 0 ? dirIdx : null,
+        declIdx: declIdx >= 0 ? declIdx : null,
         cx: cx,
         isSpotlightStart: !!(spot && spot.startChar === segStart)
       });
@@ -2249,7 +2266,7 @@ async function afterpackInflateBase64Gzip(b64) {
     var mergedRuns = [];
     runs.forEach(function (run) {
       var last = mergedRuns[mergedRuns.length - 1];
-      if (last && last.regionIdx === run.regionIdx && last.spotlightIdx === run.spotlightIdx && last.renamedIdx === run.renamedIdx && last.extractedIdx === run.extractedIdx && (!CX_LANE || last.named === run.named) && last.directiveIdx === run.directiveIdx && last.cx === run.cx && last.end === run.start) {
+      if (last && last.regionIdx === run.regionIdx && last.spotlightIdx === run.spotlightIdx && last.renamedIdx === run.renamedIdx && last.extractedIdx === run.extractedIdx && (!CX_LANE || last.named === run.named) && last.directiveIdx === run.directiveIdx && last.declIdx === run.declIdx && last.cx === run.cx && last.end === run.start) {
         last.end = run.end;
       } else {
         mergedRuns.push(run);
@@ -2282,7 +2299,7 @@ async function afterpackInflateBase64Gzip(b64) {
       fileIdx: fileIdx, doc: fdoc, source: source, sourceLen: sourceLen,
       regions: regions, realRegions: realRegions, machinery: machinery,
       spotlights: spotlights, mergedRuns: mergedRuns,
-      renamedRanges: renamedRanges, extractedRanges: extractedRanges, directives: directives,
+      renamedRanges: renamedRanges, extractedRanges: extractedRanges, directives: directives, declRanges: declRanges,
       renamedCount: (fdoc.aggregate && fdoc.aggregate.renamedCount != null) ? fdoc.aggregate.renamedCount : renamedRanges.length,
       extractedCount: (fdoc.aggregate && fdoc.aggregate.extractedCount != null) ? fdoc.aggregate.extractedCount : extractedRanges.length,
       leakCount: leakCount, weakSpotCount: weakSpotCount,
@@ -2689,6 +2706,7 @@ async function afterpackInflateBase64Gzip(b64) {
         (run.renamedIdx == null ? "" : ' data-renamed-idx="' + run.renamedIdx + '"') +
         (run.extractedIdx == null ? "" : ' data-extracted-idx="' + run.extractedIdx + '"') +
         (run.cx == null ? "" : ' data-cx="' + run.cx + '"') +
+        (run.declIdx == null ? "" : ' data-decl-idx="' + run.declIdx + '"') +
         (attributed ? "" : ' data-unlit="' + run.start + '" data-ue="' + run.end + '" data-ut="?"') +
         (directive ? ' data-directive="' + directive.kind + '"' : "") +
         (paint.band ? ' data-band="' + paint.band + '"' : "") +
@@ -2940,16 +2958,6 @@ async function afterpackInflateBase64Gzip(b64) {
     });
     return { hasLane: CX_LANE, avg: n ? sum / n : null, count: n };
   })();
-  var SCORES_ARE_RATES = (function () {
-    var v = /^(\d+)\.(\d+)\.(\d+)/.exec(String(engineOf(FILES[0] || null).version || ""));
-    if (v && (Number(v[1]) > 0 || Number(v[2]) > 1 || (Number(v[2]) === 1 && Number(v[3]) >= 1))) return true;
-    return FILES.some(function (f) {
-      return f.regions.some(function (r) {
-        return (r.raw.lineage || []).some(function (s) { return typeof s.credit === "number" && s.credit > 0; });
-      });
-    });
-  })();
-  function scorePct(score) { return score >= 100 ? "99%+" : Math.round(score) + "%"; }
 
   function fileMeterHtml(file, indent, ignored) {
     var c = file.coverage;
@@ -3030,8 +3038,7 @@ async function afterpackInflateBase64Gzip(b64) {
     if (BUILD_CX.hasLane && BUILD_CX.avg != null) {
       el.innerHTML = cxDotHtml(complexityBand(BUILD_CX.avg)) + 'Complexity <span class="tag-em">' + escapeHtml(fmtCx(BUILD_CX.avg)) + "</span>" +
         (t != null ? " · target " + escapeHtml(fmtCx(t)) : "");
-      tip = "Average complexity of your code in this build" + (t != null ? ", next to the target set by --complexity or your preset" : "") +
-        ". Higher means harder to reverse.";
+      tip = "Average complexity of your code in this build" + (t != null ? ", next to the target set by --complexity or your preset" : "") + ".";
     } else if (t != null) {
       el.innerHTML = 'Complexity target <span class="tag-em">' + escapeHtml(fmtCx(t)) + "</span>" +
         (preset ? " · " + escapeHtml(String(preset)) : "");
@@ -3106,7 +3113,7 @@ async function afterpackInflateBase64Gzip(b64) {
     document.getElementById("cx-legend").innerHTML = rows.join("");
     var t = buildTarget();
     var note = BUILD_CX.hasLane
-      ? "Hotter means more complex, so harder to reverse. Red is strong, not a problem." +
+      ? "Hotter means more complex. Red is the most complex, not a problem." +
         (BUILD_CX.avg != null ? " This build: average " + fmtCx(BUILD_CX.avg) + (t != null ? ", target " + fmtCx(t) : "") + "." : "")
       : "This map doesn't record complexity per token, so all protected code shares one color." +
         (t != null ? " This build targeted " + fmtCx(t) + "." : "");
@@ -3200,29 +3207,19 @@ async function afterpackInflateBase64Gzip(b64) {
       if (g) {
         g.count++;
         g.sizeDeltaEst += step.sizeDeltaEst || 0;
-        if (g.credit == null && step.credit != null) g.credit = step.credit;
       } else {
-        g = byName[key] = { transform: key, category: step.category, phase: step.phase, count: 1, sizeDeltaEst: step.sizeDeltaEst || 0, credit: step.credit };
+        g = byName[key] = { transform: key, category: step.category, phase: step.phase, count: 1, sizeDeltaEst: step.sizeDeltaEst || 0 };
         groups.push(g);
       }
     });
     return groups;
   }
 
-  function creditPct(permille) {
-    if (typeof permille !== "number" || isNaN(permille) || permille <= 0) return null;
-    var p = permille / 10;
-    return (p >= 10 ? Math.round(p) : Math.round(p * 10) / 10) + "%";
-  }
   function breakCamel(name) { return escapeHtml(name).replace(/([a-z0-9])([A-Z])/g, "$1<wbr>$2"); }
 
   var CHAIN_VISIBLE_CAP = 6;
   function chainStepHtml(g) {
     var cat = categoryMeta(g);
-    var credit = creditPct(g.credit);
-    var caption = [];
-    if (cat) caption.push("<span" + (cat.tip ? tipAttrs(cat.tip, cat.doc) : "") + ">" + escapeHtml(cat.label) + "</span>");
-    if (credit) caption.push('<span class="chain-credit"' + tipAttrs(INSP_COPY.credit, "attackers") + ">resists deobfuscators " + credit + "</span>");
     return '<div class="chain-step">' +
       '<div class="chain-rail"><span class="chain-dot"></span><span class="chain-line"></span></div>' +
       '<div class="chain-body">' +
@@ -3231,7 +3228,7 @@ async function afterpackInflateBase64Gzip(b64) {
           (g.count > 1 ? '<span class="chain-count"' + tipAttrs("Applied " + g.count + " times.") + ">×" + g.count + "</span>" : "") +
           (g.sizeDeltaEst ? '<span class="chain-delta">' + escapeHtml((g.sizeDeltaEst > 0 ? "+" : "") + fmtNum(g.sizeDeltaEst) + " B") + "</span>" : "") +
         "</div>" +
-        (caption.length ? '<div class="chain-caption">' + caption.join(" · ") + "</div>" : "") +
+        (cat ? '<div class="chain-caption"><span' + (cat.tip ? tipAttrs(cat.tip, cat.doc) : "") + ">" + escapeHtml(cat.label) + "</span></div>" : "") +
       "</div>" +
     "</div>";
   }
@@ -3260,8 +3257,7 @@ async function afterpackInflateBase64Gzip(b64) {
     if (!region) return "";
     var label = transformsLabel(region);
     if (label == null) return "";
-    var tip = INSP_COPY.transforms + (SCORES_ARE_RATES ? " " + INSP_COPY.transformsRates : "");
-    return '<details class="insp-chain"><summary class="details-summary"' + tipAttrs(tip, "cfgTransforms") +
+    return '<details class="insp-chain"><summary class="details-summary"' + tipAttrs(INSP_COPY.transforms, "cfgTransforms") +
       '>Transforms <span class="chip">' + escapeHtml(label) + "</span></summary>" + renderChainBody(region) + "</details>";
   }
 
@@ -3361,8 +3357,6 @@ async function afterpackInflateBase64Gzip(b64) {
       cxTip: complexityTip(region),
       facts: [
         cx == null ? missingComplexityFact() : null,
-        SCORES_ARE_RATES && typeof r.score === "number" && r.score > 0
-          ? { k: "Resists deobfuscators", v: scorePct(r.score), tip: INSP_COPY.resists, doc: "attackers" } : null,
         typeof r.sizeDeltaEst === "number" && r.sizeDeltaEst !== 0
           ? { k: "Added size", v: (r.sizeDeltaEst > 0 ? "+" : "") + fmtNum(r.sizeDeltaEst) + " B", tip: INSP_COPY.addedSize, doc: "sizeBudget" } : null,
         perf.decodeOps > 0 ? { k: "Runtime decoders", v: perf.decodeOps, tip: INSP_COPY.decoders, doc: "perf" } : null
@@ -3514,7 +3508,20 @@ async function afterpackInflateBase64Gzip(b64) {
       : sel.renamedIdx != null ? cardRenamed(file, sel.renamedIdx, sel)
       : typeof sel.cx === "number" ? cardComplexityOnly(file, sel)
       : "";
-    el.innerHTML = '<div class="insp">' + html + "</div>";
+    el.innerHTML = '<div class="insp">' + html + declarationNote(file, sel) + "</div>";
+  }
+
+  function declarationNote(file, sel) {
+    var idx = sel.declIdx;
+    if (idx == null && sel.unlit) {
+      var end = sel.unlit.end != null ? sel.unlit.end : sel.unlit.pos + 1;
+      file.declRanges.forEach(function (r, i) {
+        if (idx == null && r.startChar <= sel.unlit.pos && r.endChar >= end) idx = i;
+      });
+    }
+    var decl = idx != null ? file.declRanges[idx] : null;
+    if (!decl) return "";
+    return '<p class="insp-note insp-also">Also rewritten: ' + decl.names.map(breakCamel).join(", ") + "</p>";
   }
 
   function highlightSelectionRing() {
@@ -3546,13 +3553,14 @@ async function afterpackInflateBase64Gzip(b64) {
     if (syntaxToggleText) syntaxToggleText.textContent = g ? "Syntax · " + g.label : "Syntax";
   }
 
-  function selectFromRun(regionIdx, spotlightIdx, renamedIdx, extractedIdx, cx) {
+  function selectFromRun(regionIdx, spotlightIdx, renamedIdx, extractedIdx, cx, declIdx) {
     state.selection = {
       regionIdx: regionIdx == null || isNaN(regionIdx) ? null : regionIdx,
       spotlightIdx: spotlightIdx == null || isNaN(spotlightIdx) ? null : spotlightIdx,
       renamedIdx: renamedIdx == null || isNaN(renamedIdx) ? null : renamedIdx,
       extractedIdx: extractedIdx == null || isNaN(extractedIdx) ? null : extractedIdx,
       cx: typeof cx === "number" && !isNaN(cx) ? cx : null,
+      declIdx: declIdx == null || isNaN(declIdx) ? null : declIdx,
       unlit: null
     };
     revealInspectorSection();
@@ -3583,7 +3591,8 @@ async function afterpackInflateBase64Gzip(b64) {
     var rn = tokEl.dataset.renamedIdx == null || tokEl.dataset.renamedIdx === "" ? null : Number(tokEl.dataset.renamedIdx);
     var ex = tokEl.dataset.extractedIdx == null || tokEl.dataset.extractedIdx === "" ? null : Number(tokEl.dataset.extractedIdx);
     var cx = tokEl.dataset.cx == null || tokEl.dataset.cx === "" ? null : Number(tokEl.dataset.cx);
-    selectFromRun(r, s, rn, ex, cx);
+    var dl = tokEl.dataset.declIdx == null || tokEl.dataset.declIdx === "" ? null : Number(tokEl.dataset.declIdx);
+    selectFromRun(r, s, rn, ex, cx, dl);
   }
   function jumpToSpotlight(idx) {
     var file = activeFile();
@@ -3593,7 +3602,7 @@ async function afterpackInflateBase64Gzip(b64) {
       target.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
       target.focus({ preventScroll: true });
     }
-    selectFromRun(run ? run.regionIdx : null, idx, null, null, run ? run.cx : null);
+    selectFromRun(run ? run.regionIdx : null, idx, null, null, run ? run.cx : null, run ? run.declIdx : null);
   }
 
   function copyText(text, btn) {
