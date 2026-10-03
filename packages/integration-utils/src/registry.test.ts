@@ -16,6 +16,7 @@ import {
   CONFIG_KEYS,
   DIRECTIVES_ENABLED_DEFAULT,
   getPath,
+  sourceTypeForOutputFormat,
   toEngineConfig,
   validateConfig,
 } from "./registry.js";
@@ -581,5 +582,26 @@ describe("a boolean written on a group name", () => {
     const message = parseCliOptions(["--protectionMap=on"]).issues[0].message;
     expect(message).toContain("is a group of configuration keys");
     expect(message).toContain("a boolean here means `protectionMap.enabled`");
+  });
+});
+
+describe("sourceTypeForOutputFormat", () => {
+  it("maps ES-module output formats to module", () => {
+    for (const format of ["es", "esm", "esmodule", "module", "system", "ES", "EsModule"]) {
+      expect(sourceTypeForOutputFormat(format)).toBe("module");
+    }
+  });
+
+  it("leaves classic and unknown formats unset", () => {
+    for (const format of ["cjs", "commonjs", "iife", "umd", "amd", "global", "", undefined, null]) {
+      expect(sourceTypeForOutputFormat(format)).toBeUndefined();
+    }
+  });
+
+  it("validates sourceType as an engine enum key the registry forwards", () => {
+    const { config, issues } = validateConfig({ sourceType: "module" }, "afterpack.json");
+    expect(issues).toEqual([]);
+    expect(toEngineConfig(config).sourceType).toBe("module");
+    expect(validateConfig({ sourceType: "nope" }, "afterpack.json").issues).toHaveLength(1);
   });
 });

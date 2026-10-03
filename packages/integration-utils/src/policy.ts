@@ -4,6 +4,7 @@ import {
   type CoreConfigSubset,
   mergeInto,
   PRESET_VALUES,
+  type SourceType,
   type TRANSFORM_KIND_VALUES,
 } from "./registry.js";
 
@@ -134,6 +135,7 @@ export interface BuildEngineConfigOptions {
   policy: ReportPolicy;
   preset?: Preset;
   complexity?: number;
+  sourceType?: SourceType;
   seed?: number | string;
   sourcesContent?: boolean;
   regions?: RegionConfig[];
@@ -167,10 +169,12 @@ export function buildEngineConfig(options: BuildEngineConfigOptions): CoreConfig
   const defaults: {
     preset?: Preset;
     complexity?: number;
+    sourceType?: SourceType;
   } = {};
   if (options.complexity !== undefined) defaults.complexity = options.complexity;
   if (options.preset !== undefined) defaults.preset = options.preset;
   else if (options.complexity === undefined) defaults.preset = DEFAULT_PRESET;
+  if (options.sourceType !== undefined) defaults.sourceType = options.sourceType;
   const config = mergeInto<CoreConfig>(
     { ...defaults, sourceMap, protectionMap: { enabled: policy.protectionMap } },
     (engine ?? {}) as Record<string, unknown>,

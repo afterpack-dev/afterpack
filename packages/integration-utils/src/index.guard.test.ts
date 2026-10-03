@@ -83,6 +83,8 @@ const SURFACE = [
   "SEED_ENV_VAR",
   "SeedOption",
   "SeedOrigin",
+  "SourceType",
+  "sourceTypeForOutputFormat",
   "TelemetryContext",
   "TelemetryDiagnostic",
   "TelemetryDiagnosticData",

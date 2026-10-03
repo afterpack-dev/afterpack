@@ -15,6 +15,7 @@ import {
   resolvePluginConfig,
   runObfuscationPass,
   scanDirectives,
+  sourceTypeForOutputFormat,
   type WriteProtectionReceiptInput,
   withoutCssSourceMappingURL,
   withSourceMappingURL,
@@ -204,6 +205,7 @@ export class AfterpackWebpackPlugin {
     this.captureDiagnostics.length = 0;
 
     const devtool = compiler.options.devtool;
+    const outputModule = compiler.options.output?.module === true;
     const result = await runObfuscationPass({
       files,
       inputs,
@@ -220,6 +222,7 @@ export class AfterpackWebpackPlugin {
         afterpackDir: join(context, ".afterpack"),
       },
       ...passSettings({ options: this.settings, engineConfig: this.engineConfig }),
+      sourceType: sourceTypeForOutputFormat(outputModule ? "module" : undefined),
       hasBundlerSourcemap: typeof devtool === "string" && devtool.includes("source-map"),
       messages: {
         autoEnableBundlerSourcemap:

@@ -21,6 +21,7 @@ import {
   type ResolvedPluginConfig,
   resolvePluginConfig,
   runObfuscationPass,
+  type SourceType,
   serverAddsInfo,
   UnreadableReceiptError,
 } from "@afterpack/integration-utils";
@@ -70,6 +71,7 @@ import {
 import { detectPackageManager } from "./package-manager.js";
 import { withProgress } from "./progress.js";
 import { RESTORE_HELP, restore } from "./restore.js";
+import { detectCliSourceType } from "./source-type.js";
 import { readBuildId, VERIFY_HELP, verify } from "./verify.js";
 
 export interface CliLogger {
@@ -427,6 +429,7 @@ async function runObfuscationAndBackup(input: {
   engine: ObfuscationEngine;
   cwd: string;
   buildDir: string;
+  sourceType?: SourceType;
   startedAt: number;
   version: string;
   parsed: CliRunOptions;
@@ -479,6 +482,7 @@ async function runObfuscationAndBackup(input: {
           complexity: input.parsed.complexity,
           diagnostics: input.parsed.diagnostics?.level,
           engineConfig: input.parsed.engineConfig,
+          sourceType: input.sourceType,
           directivesEnabled: false,
           receipt: { buildId: readBuildId(input.buildDir) },
           logger: input.report,
@@ -900,6 +904,7 @@ export async function run(deps: CliDeps): Promise<number> {
     engine,
     cwd,
     buildDir,
+    sourceType: detectCliSourceType({ files, buildDir }),
     startedAt,
     version,
     parsed,

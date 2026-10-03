@@ -13,6 +13,7 @@ import {
   assertSupportedCore,
   type ClientIdentity,
   clientString,
+  coreSupportsSourceType,
   safeVersionString,
   toCloudApiError,
 } from "./compat.js";
@@ -54,7 +55,7 @@ import {
   type WriteProtectionReceiptInput,
   writeProtectionReceipt,
 } from "./receipt.js";
-import type { CoreConfigSubset } from "./registry.js";
+import type { CoreConfigSubset, SourceType } from "./registry.js";
 import { resolveBuildSeed, type SeedOption, type SeedOrigin } from "./seed.js";
 import { discoverInputSourceMap } from "./source-map.js";
 import { formatPassSummary, type PassSummaryStyle } from "./summary.js";
@@ -142,6 +143,7 @@ export interface ObfuscationPassOptions {
   buildLeg?: string;
   preset?: Preset;
   complexity?: number;
+  sourceType?: SourceType;
   regions?: RegionConfig[];
   engineConfig?: CoreConfigSubset;
   directivesEnabled?: boolean;
@@ -456,11 +458,18 @@ export async function runObfuscationPass(
       ? null
       : detectGitContext(artifactOptions.git ?? null, { env, cwd });
 
+  const localEngineVersion = await readEngineVersion(engine);
+  const derivedSourceType =
+    options.sourceType !== undefined &&
+    coreSupportsSourceType(localEngineVersion ?? options.client?.coreVersion)
+      ? options.sourceType
+      : undefined;
   const engineConfig = buildEngineConfig({
     policy,
     seed,
     preset: options.preset,
     complexity: options.complexity,
+    sourceType: derivedSourceType,
     regions: capture.regions,
     engine: options.engineConfig,
     renameGlobals: capture.renameGlobals,
@@ -513,7 +522,7 @@ export async function runObfuscationPass(
     telemetry != null && resolveTelemetryEnabled(artifactOptions.telemetry?.enabled, env);
   const engineVersion =
     (batch.source === "cloud" ? safeVersionString(batch.engineVersion) : null) ??
-    (await readEngineVersion(engine));
+    localEngineVersion;
   if (telemetry && telemetryEnabled) {
     const facts: TelemetryFacts = {
       label,

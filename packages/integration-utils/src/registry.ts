@@ -36,6 +36,26 @@ export interface ConfigKeyDef {
 
 export const PRESET_VALUES = ["minify", "light", "medium", "hard", "extreme"] as const;
 
+export const SOURCE_TYPE_VALUES = ["auto", "module", "script"] as const;
+
+export type SourceType = (typeof SOURCE_TYPE_VALUES)[number];
+
+const MODULE_OUTPUT_FORMATS: ReadonlySet<string> = new Set([
+  "es",
+  "esm",
+  "esmodule",
+  "module",
+  "system",
+]);
+
+export function sourceTypeForOutputFormat(
+  format: string | null | undefined,
+): SourceType | undefined {
+  return typeof format === "string" && MODULE_OUTPUT_FORMATS.has(format.toLowerCase())
+    ? "module"
+    : undefined;
+}
+
 export const TRANSFORM_KIND_VALUES = [
   "stringEncoding",
   "controlFlowFlatten",
@@ -89,6 +109,15 @@ export const CONFIG_KEYS = [
     surface: "engine",
     item: { kind: "enum", values: PRESET_VALUES },
     default: "light",
+  },
+  {
+    path: "sourceType",
+    shape: "scalar",
+    scope: "program",
+    tier: "free",
+    surface: "engine",
+    item: { kind: "enum", values: SOURCE_TYPE_VALUES },
+    default: "auto",
   },
   {
     path: "complexity",
@@ -875,6 +904,7 @@ export type ReflectionAllow = (typeof REFLECTION_ALLOW_VALUES)[number];
 export interface CoreConfigSubset {
   seed?: number | string;
   preset?: Preset;
+  sourceType?: SourceType;
   complexity?: number;
   inflation?: { max?: number | "unlimited" };
   strings?: {

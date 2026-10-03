@@ -52,6 +52,7 @@ interface FakeResult {
 function makeEngine(
   impl: (source: string) => FakeResult,
   source: "local" | "cloud" | "wasm" = "local",
+  version?: string,
 ): {
   engine: ObfuscationEngine;
   calls: { inputs: EngineFileInput[]; config: CoreConfig; buildContext?: BuildContext }[];
@@ -95,6 +96,7 @@ function makeEngine(
       };
     },
   };
+  if (version !== undefined) engine.version = async () => version;
   return { engine, calls };
 }
 
@@ -1573,5 +1575,57 @@ describe("runObfuscationPass — the protection receipt it writes", () => {
 
     expect(receiptIn(outDir).files.map((f) => f.path)).toEqual(["a.js"]);
     expect(verifyProtectionReceipt(outDir).problems).toEqual([]);
+  });
+});
+
+describe("sourceType (R-227)", () => {
+  async function configSentWith(input: {
+    version?: string;
+    client?: { coreVersion: string | null } | null;
+    sourceType?: "auto" | "module" | "script";
+    engineConfig?: { sourceType?: "auto" | "module" | "script" };
+  }): Promise<CoreConfig> {
+    const a = join(outDir, "a.js");
+    writeFileSync(a, "export const a = 1;");
+    const { engine, calls } = makeEngine(() => ({}), "local", input.version);
+    await runObfuscationPass({
+      ...baseOptions([a], engine),
+      sourceType: input.sourceType,
+      engineConfig: input.engineConfig,
+      client: input.client as never,
+      logger: silentLogger().logger,
+    });
+    return calls[0].config;
+  }
+
+  it("sends a derived sourceType when the engine reports 0.2.3 or newer", async () => {
+    const config = await configSentWith({ version: "0.2.3", sourceType: "module" });
+    expect(config.sourceType).toBe("module");
+  });
+
+  it("drops a derived sourceType when the engine is older than 0.2.3", async () => {
+    const config = await configSentWith({ version: "0.2.2", sourceType: "module" });
+    expect(config.sourceType).toBeUndefined();
+  });
+
+  it("drops a derived sourceType when no version can be read", async () => {
+    const config = await configSentWith({ sourceType: "module" });
+    expect(config.sourceType).toBeUndefined();
+  });
+
+  it("falls back to the client core version when the engine does not report one", async () => {
+    const config = await configSentWith({
+      client: { coreVersion: "0.2.3" },
+      sourceType: "module",
+    });
+    expect(config.sourceType).toBe("module");
+  });
+
+  it("passes an explicitly configured sourceType through regardless of engine version", async () => {
+    const config = await configSentWith({
+      version: "0.2.2",
+      engineConfig: { sourceType: "script" },
+    });
+    expect(config.sourceType).toBe("script");
   });
 });

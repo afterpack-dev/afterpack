@@ -13,6 +13,8 @@ import { isPlainObject } from "./registry.js";
 
 export const MIN_CORE_VERSION = "0.2.0";
 
+export const SOURCE_TYPE_MIN_CORE_VERSION = "0.2.3";
+
 export const CORE_PACKAGE = "@afterpack/core";
 
 export interface ClientIdentity {
@@ -95,6 +97,10 @@ export function isBelowVersion(version: string | null | undefined, minimum: stri
     if (have[i] !== need[i]) return have[i] < need[i];
   }
   return false;
+}
+
+export function coreSupportsSourceType(coreVersion: string | null | undefined): boolean {
+  return coreVersion != null && !isBelowVersion(coreVersion, SOURCE_TYPE_MIN_CORE_VERSION);
 }
 
 export const CLI_PACKAGE = "afterpack";

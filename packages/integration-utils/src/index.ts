@@ -129,6 +129,8 @@ export {
   getPath,
   mergeConfig,
   type PluginOptionsView,
+  type SourceType,
+  sourceTypeForOutputFormat,
   toEngineConfig,
   toPluginOptions,
   type ValidationResult,

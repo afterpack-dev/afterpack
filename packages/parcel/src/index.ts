@@ -13,6 +13,7 @@ import {
   parseEnvOptions,
   resolveClientIdentity,
   runObfuscationPass,
+  sourceTypeForOutputFormat,
   toEngineConfig,
   toPluginOptions,
   validateConfig,
@@ -141,6 +142,7 @@ export default new Optimizer<ParcelConfig, void>({
         fileName: `${bundleLegIdentity}.protectionMap.html`,
       },
       buildLeg: bundleLegIdentity,
+      sourceType: sourceTypeForOutputFormat(bundle.env.outputFormat),
       artifactOptions: {
         ...config.options.artifactOptions,
         build: {

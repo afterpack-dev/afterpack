@@ -9,6 +9,7 @@ import {
   resolveClientIdentity,
   resolvePluginConfig,
   runObfuscationPass,
+  sourceTypeForOutputFormat,
 } from "@afterpack/integration-utils";
 import type { BuildOptions, BuildResult, Plugin, PluginBuild } from "esbuild";
 
@@ -61,6 +62,7 @@ export function afterpackEsbuild(options: AfterpackEsbuildOptions = {}): Plugin 
           startedAt: startedBeforeOutputWalk,
           combinedProtectionMap: { buildDir, afterpackDir: gitignoredNonServedAfterpackDir },
           ...passSettings(resolved),
+          sourceType: sourceTypeForOutputFormat(io.format),
           hasBundlerSourcemap: Boolean(io.sourcemap),
           postMinify: POST_MINIFY_DIRECTIVE_RECOVERY,
           messages: {

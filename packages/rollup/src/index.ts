@@ -13,6 +13,7 @@ import {
   resolvePluginConfig,
   runObfuscationPass,
   scanDirectives,
+  sourceTypeForOutputFormat,
   stripBundleCssSourceMaps,
   type WriteProtectionReceiptInput,
   writeDeferredProtectionReceipt,
@@ -129,6 +130,7 @@ export function afterpackRollup(options: AfterpackRollupOptions = {}): Plugin {
             afterpackDir: gitignoredNonServedAfterpackDir,
           },
           ...passSettings(resolved),
+          sourceType: sourceTypeForOutputFormat(outputOptions.format),
           hasBundlerSourcemap: Boolean(outputOptions.sourcemap),
           messages: {
             autoEnableBundlerSourcemap:

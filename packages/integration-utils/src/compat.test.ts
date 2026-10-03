@@ -12,11 +12,13 @@ import {
   CloudApiError,
   CoreVersionError,
   clientString,
+  coreSupportsSourceType,
   isBelowVersion,
   MIN_CORE_VERSION,
   npxAlternative,
   releaseTriple,
   resolveClientIdentity,
+  SOURCE_TYPE_MIN_CORE_VERSION,
   toCloudApiError,
   updateCommand,
 } from "./compat.js";
@@ -298,5 +300,21 @@ describe("updateCommand", () => {
     expect(npxAlternative(as("afterpack"))).toBe("npx afterpack@latest");
     expect(npxAlternative(as("@afterpack/vite"))).toBeNull();
     expect(npxAlternative(null)).toBeNull();
+  });
+});
+
+describe("coreSupportsSourceType", () => {
+  it("accepts the minimum version and newer", () => {
+    expect(coreSupportsSourceType(SOURCE_TYPE_MIN_CORE_VERSION)).toBe(true);
+    expect(coreSupportsSourceType("0.2.3")).toBe(true);
+    expect(coreSupportsSourceType("0.2.4")).toBe(true);
+    expect(coreSupportsSourceType("1.0.0")).toBe(true);
+  });
+
+  it("rejects an older version and an unknown one", () => {
+    expect(coreSupportsSourceType("0.2.2")).toBe(false);
+    expect(coreSupportsSourceType("0.1.0")).toBe(false);
+    expect(coreSupportsSourceType(null)).toBe(false);
+    expect(coreSupportsSourceType(undefined)).toBe(false);
   });
 });
