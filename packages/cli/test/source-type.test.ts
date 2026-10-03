@@ -79,19 +79,18 @@ describe("detectCliSourceType", () => {
     ).toBe("module");
   });
 
-  it("is module when the nearest package.json is type module", () => {
+  it("does not label a classic IIFE build module just because package.json is type module", () => {
     const root = project({
       "package.json": '{ "type": "module" }',
-      "dist/a.js": "export const a = 1;",
+      "dist/a.js": "(function () { window.x = 1; })();",
     });
     expect(
       detectCliSourceType({ files: [join(root, "dist/a.js")], buildDir: join(root, "dist") }),
-    ).toBe("module");
+    ).toBeUndefined();
   });
 
-  it("is unset for a type module package when a .cjs file is in the batch", () => {
+  it("is unset when a .cjs file is in the batch", () => {
     const root = project({
-      "package.json": '{ "type": "module" }',
       "dist/a.js": "export const a = 1;",
       "dist/b.cjs": "module.exports = 1;",
     });
@@ -123,6 +122,20 @@ describe("detectCliSourceType", () => {
     expect(
       detectCliSourceType({
         files: [join(root, "dist/app.js"), join(root, "dist/legacy.js")],
+        buildDir: join(root, "dist"),
+      }),
+    ).toBeUndefined();
+  });
+
+  it("is unset when a batch file is not loaded as a module script", () => {
+    const root = project({
+      "dist/index.html": '<script type="module" src="/app.js"></script>',
+      "dist/app.js": "export const a = 1;",
+      "dist/worker.js": "self.onmessage = () => {};",
+    });
+    expect(
+      detectCliSourceType({
+        files: [join(root, "dist/app.js"), join(root, "dist/worker.js")],
         buildDir: join(root, "dist"),
       }),
     ).toBeUndefined();

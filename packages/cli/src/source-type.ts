@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, join } from "node:path";
 import type { SourceType } from "@afterpack/integration-utils";
 
 const CLASSIC_SCRIPT_TYPES = new Set([
@@ -32,23 +32,6 @@ function endsWith(file: string, extension: string): boolean {
   return file.toLowerCase().endsWith(extension);
 }
 
-function nearestPackageType(start: string): string | undefined {
-  let dir = start;
-  for (let i = 0; i < 64; i++) {
-    try {
-      const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as {
-        type?: unknown;
-      };
-      if (typeof pkg.type === "string") return pkg.type;
-      return undefined;
-    } catch {}
-    const parent = dirname(dir);
-    if (parent === dir) return undefined;
-    dir = parent;
-  }
-  return undefined;
-}
-
 function attribute(tag: string, name: string): string | null {
   const match = new RegExp(`(?:^|\\s)${name}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s"'>]+))`, "i").exec(
     tag,
@@ -57,18 +40,26 @@ function attribute(tag: string, name: string): string | null {
   return match[2] ?? match[3] ?? match[4] ?? "";
 }
 
+export type HtmlScriptRefs = { module: string[]; classic: string[] };
+
+export function htmlScriptRefs(html: string): HtmlScriptRefs {
+  const refs: HtmlScriptRefs = { module: [], classic: [] };
+  for (const match of html.matchAll(/<script\b([^>]*)>/gi)) {
+    const tag = match[1];
+    const src = attribute(tag, "src");
+    if (src === null) continue;
+    const type = (attribute(tag, "type") ?? "").trim().toLowerCase();
+    if (type === "module") refs.module.push(src);
+    else if (CLASSIC_SCRIPT_TYPES.has(type)) refs.classic.push(src);
+  }
+  return refs;
+}
+
 export type HtmlScriptKinds = { module: boolean; classic: boolean };
 
 export function htmlScriptKinds(html: string): HtmlScriptKinds {
-  const kinds: HtmlScriptKinds = { module: false, classic: false };
-  for (const match of html.matchAll(/<script\b([^>]*)>/gi)) {
-    const tag = match[1];
-    if (attribute(tag, "src") === null) continue;
-    const type = (attribute(tag, "type") ?? "").trim().toLowerCase();
-    if (type === "module") kinds.module = true;
-    else if (CLASSIC_SCRIPT_TYPES.has(type)) kinds.classic = true;
-  }
-  return kinds;
+  const refs = htmlScriptRefs(html);
+  return { module: refs.module.length > 0, classic: refs.classic.length > 0 };
 }
 
 function htmlFilesUnder(dir: string, depth: number): string[] {
@@ -95,8 +86,17 @@ function htmlFilesUnder(dir: string, depth: number): string[] {
   return out;
 }
 
-function scanBuiltHtml(buildDir: string): "module" | "mixed" | undefined {
-  let sawModule = false;
+function srcFileName(src: string): string {
+  const path = src.split(/[?#]/)[0];
+  return path.slice(path.lastIndexOf("/") + 1);
+}
+
+type BuiltHtmlRefs = { module: Set<string>; classic: Set<string> };
+
+function scanBuiltHtml(buildDir: string): BuiltHtmlRefs | undefined {
+  const module = new Set<string>();
+  const classic = new Set<string>();
+  let sawScript = false;
   for (const file of htmlFilesUnder(buildDir, 0)) {
     let html: string;
     try {
@@ -104,22 +104,29 @@ function scanBuiltHtml(buildDir: string): "module" | "mixed" | undefined {
     } catch {
       continue;
     }
-    const kinds = htmlScriptKinds(html);
-    if (kinds.classic) return "mixed";
-    if (kinds.module) sawModule = true;
+    const refs = htmlScriptRefs(html);
+    for (const src of refs.module) {
+      module.add(srcFileName(src));
+      sawScript = true;
+    }
+    for (const src of refs.classic) {
+      classic.add(srcFileName(src));
+      sawScript = true;
+    }
   }
-  return sawModule ? "module" : undefined;
+  return sawScript ? { module, classic } : undefined;
 }
 
 export function detectCliSourceType(input: SourceTypeDetectionInput): SourceType | undefined {
   if (input.files.length === 0) return undefined;
-  const hasCjs = input.files.some((file) => endsWith(file, ".cjs"));
+
+  if (input.files.every((file) => endsWith(file, ".mjs"))) return "module";
 
   const html = scanBuiltHtml(input.buildDir);
-  if (html === "mixed") return undefined;
-
-  if (!hasCjs && nearestPackageType(input.buildDir) === "module") return "module";
-  if (input.files.every((file) => endsWith(file, ".mjs"))) return "module";
-  if (!hasCjs && html === "module") return "module";
-  return undefined;
+  if (html === undefined || html.classic.size > 0) return undefined;
+  for (const file of input.files) {
+    if (endsWith(file, ".mjs")) continue;
+    if (!html.module.has(basename(file))) return undefined;
+  }
+  return "module";
 }
