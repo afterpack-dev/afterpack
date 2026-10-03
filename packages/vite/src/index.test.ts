@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __reset,
   __setProcessResult,
+  __setVersion,
   type EngineCall,
   engineCalls,
 } from "../../../test/core-fake.js";
@@ -58,12 +59,13 @@ function bundleOf(...entries: BundleEntry[]): Record<string, BundleEntry> {
 async function runPlugin(
   options: AfterpackViteOptions,
   bundle: Record<string, BundleEntry> = bundleOf(chunk("a.js", "export const a = 1;")),
+  outputOptions: Record<string, unknown> = {},
 ): Promise<Record<string, BundleEntry>> {
   const plugin = afterpackVite(options);
   // biome-ignore lint/suspicious/noExplicitAny: exercising Vite hooks directly in a test.
   const p = plugin as any;
   p.configResolved({ root, build: { outDir } });
-  await p.generateBundle.handler.call({}, { dir: outDir }, bundle);
+  await p.generateBundle.handler.call({}, { dir: outDir, ...outputOptions }, bundle);
   return bundle;
 }
 
@@ -524,5 +526,42 @@ describe("afterpack.json", () => {
       JSON.stringify({ paths: { include: ["**/node_modules/**"] } }),
     );
     expect(() => afterpackVite({})).toThrow(/`paths.include` is not supported here/);
+  });
+});
+
+describe("afterpackVite sourceType", () => {
+  beforeEach(() => {
+    __setVersion("0.2.3");
+  });
+
+  it("sends module for ES output whose bundle holds only chunks", async () => {
+    await runPlugin({}, bundleOf(chunk("assets/index.js", "const a = 1;")), { format: "es" });
+    expect(sharedConfig().sourceType).toBe("module");
+  });
+
+  it("withholds it when the bundle also carries a JS asset such as a classic worker", async () => {
+    await runPlugin(
+      {},
+      bundleOf(chunk("assets/index.js", "const a = 1;"), {
+        type: "asset",
+        fileName: "assets/worker.js",
+        source: "(function(){self.x = 1;})();",
+      }),
+      { format: "es" },
+    );
+    expect(sharedConfig().sourceType).toBeUndefined();
+  });
+
+  it("withholds it for the SystemJS output of a legacy build", async () => {
+    await runPlugin({}, bundleOf(chunk("assets/index-legacy.js", "System.register([], 0);")), {
+      format: "system",
+    });
+    expect(sharedConfig().sourceType).toBeUndefined();
+  });
+
+  it("withholds it from an engine older than 0.2.3", async () => {
+    __setVersion("0.2.2");
+    await runPlugin({}, bundleOf(chunk("assets/index.js", "const a = 1;")), { format: "es" });
+    expect(sharedConfig().sourceType).toBeUndefined();
   });
 });

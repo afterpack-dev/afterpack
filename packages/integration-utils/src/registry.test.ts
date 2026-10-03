@@ -587,13 +587,25 @@ describe("a boolean written on a group name", () => {
 
 describe("sourceTypeForOutputFormat", () => {
   it("maps ES-module output formats to module", () => {
-    for (const format of ["es", "esm", "esmodule", "module", "system", "ES", "EsModule"]) {
+    for (const format of ["es", "esm", "esmodule", "module", "ES", "EsModule"]) {
       expect(sourceTypeForOutputFormat(format)).toBe("module");
     }
   });
 
-  it("leaves classic and unknown formats unset", () => {
-    for (const format of ["cjs", "commonjs", "iife", "umd", "amd", "global", "", undefined, null]) {
+  it("leaves classic, SystemJS and unknown formats unset", () => {
+    for (const format of [
+      "cjs",
+      "commonjs",
+      "iife",
+      "umd",
+      "amd",
+      "system",
+      "systemjs",
+      "global",
+      "",
+      undefined,
+      null,
+    ]) {
       expect(sourceTypeForOutputFormat(format)).toBeUndefined();
     }
   });

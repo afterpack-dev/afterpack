@@ -16,7 +16,7 @@ import {
   validateConfig,
 } from "@afterpack/integration-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { __reset, __setProcessResult, engineCalls } from "../../../test/core-fake.js";
+import { __reset, __setProcessResult, __setVersion, engineCalls } from "../../../test/core-fake.js";
 import { resetBuildSessions } from "../../integration-utils/src/seed.js";
 import afterpackParcel from "./index.js";
 import { readBundleRecord, writeBundleRecord } from "./records.js";
@@ -76,6 +76,7 @@ interface BundleOverrides {
   type?: string;
   shouldOptimize?: boolean;
   sourceMap?: unknown;
+  outputFormat?: string;
 }
 
 function fakeBundle(o: BundleOverrides = {}): unknown {
@@ -85,7 +86,11 @@ function fakeBundle(o: BundleOverrides = {}): unknown {
     displayName: o.displayName ?? "app.[hash].js",
     publicId: o.publicId ?? "aBcDe",
     type: o.type ?? "js",
-    env: { shouldOptimize: o.shouldOptimize ?? true, sourceMap: o.sourceMap ?? {} },
+    env: {
+      shouldOptimize: o.shouldOptimize ?? true,
+      sourceMap: o.sourceMap ?? {},
+      outputFormat: o.outputFormat ?? "global",
+    },
     target: { distDir },
   };
 }
@@ -518,5 +523,21 @@ describe("the shared .afterpack/ self-ignore still runs on the in-memory path", 
 
     expect(readFileSync(join(root, ".afterpack", ".gitignore"), "utf8")).toBe("*\n");
     expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe("");
+  });
+});
+
+describe("afterpack parcel optimizer sourceType", () => {
+  beforeEach(() => {
+    __setVersion("0.2.3");
+  });
+
+  it("sends module for an esmodule bundle", async () => {
+    await run({ bundle: fakeBundle({ outputFormat: "esmodule" }) });
+    expect(engineCalls[0].config.sourceType).toBe("module");
+  });
+
+  it.each(["global", "commonjs"])("withholds it for a %s bundle", async (outputFormat) => {
+    await run({ bundle: fakeBundle({ outputFormat }) });
+    expect(engineCalls[0].config.sourceType).toBeUndefined();
   });
 });

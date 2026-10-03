@@ -84,6 +84,7 @@ const SURFACE = [
   "SeedOption",
   "SeedOrigin",
   "SourceType",
+  "sourceTypeForBundle",
   "sourceTypeForOutputFormat",
   "TelemetryContext",
   "TelemetryDiagnostic",

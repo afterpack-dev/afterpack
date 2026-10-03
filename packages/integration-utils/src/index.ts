@@ -11,6 +11,7 @@ export {
   type BundleJs,
   collectBundleJs,
   type OutputBundleLike,
+  sourceTypeForBundle,
   stripBundleCssSourceMaps,
 } from "./bundle.js";
 export {

@@ -170,6 +170,14 @@ function defaultResult(input: string): Record<string, unknown> {
 
 let impl: ProcessImpl = (input) => defaultResult(input);
 
+const DEFAULT_VERSION = "0.0.0-test";
+
+let fakeVersion = DEFAULT_VERSION;
+
+export function __setVersion(value: string): void {
+  fakeVersion = value;
+}
+
 export function __setProcessImpl(fn: ProcessImpl): void {
   impl = fn;
 }
@@ -186,6 +194,7 @@ export function __reset(): void {
   decorate = null;
   batchError = null;
   impl = (input) => defaultResult(input);
+  fakeVersion = DEFAULT_VERSION;
 }
 
 export async function processBatch(
@@ -247,5 +256,5 @@ export async function processBatch(
 }
 
 export async function version(): Promise<string> {
-  return "0.0.0-test";
+  return fakeVersion;
 }

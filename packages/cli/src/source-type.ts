@@ -2,7 +2,25 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { SourceType } from "@afterpack/integration-utils";
 
-const CLASSIC_SCRIPT_TYPES = new Set(["", "text/javascript", "application/javascript", "module"]);
+const CLASSIC_SCRIPT_TYPES = new Set([
+  "",
+  "application/ecmascript",
+  "application/javascript",
+  "application/x-ecmascript",
+  "application/x-javascript",
+  "text/ecmascript",
+  "text/javascript",
+  "text/javascript1.0",
+  "text/javascript1.1",
+  "text/javascript1.2",
+  "text/javascript1.3",
+  "text/javascript1.4",
+  "text/javascript1.5",
+  "text/jscript",
+  "text/livescript",
+  "text/x-ecmascript",
+  "text/x-javascript",
+]);
 const MAX_HTML_SCAN_DEPTH = 4;
 
 export interface SourceTypeDetectionInput {
@@ -32,7 +50,9 @@ function nearestPackageType(start: string): string | undefined {
 }
 
 function attribute(tag: string, name: string): string | null {
-  const match = new RegExp(`\\b${name}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s"'>]+))`, "i").exec(tag);
+  const match = new RegExp(`(?:^|\\s)${name}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s"'>]+))`, "i").exec(
+    tag,
+  );
   if (!match) return null;
   return match[2] ?? match[3] ?? match[4] ?? "";
 }

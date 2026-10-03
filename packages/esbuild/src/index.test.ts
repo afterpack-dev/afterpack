@@ -10,7 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { __reset, __setProcessResult, engineCalls } from "../../../test/core-fake.js";
+import { __reset, __setProcessResult, __setVersion, engineCalls } from "../../../test/core-fake.js";
 import { type AfterpackEsbuildOptions, afterpackEsbuild } from "./index.js";
 
 let root: string;
@@ -227,5 +227,22 @@ describe("afterpackEsbuild afterpack.json (resolved from process.cwd, not esbuil
   it("fails the build on an unknown key instead of silently dropping it", () => {
     writeFileSync(join(root, "afterpack.json"), JSON.stringify({ level: "medium" }));
     expect(() => afterpackEsbuild({})).toThrow(/unknown configuration key `level`/);
+  });
+});
+
+describe("afterpackEsbuild sourceType", () => {
+  beforeEach(() => {
+    __setVersion("0.2.3");
+    writeFileSync(join(outDir, "app.js"), "const a = 1;");
+  });
+
+  it("sends module for esm output", async () => {
+    await applyPlugin({}, { outdir: outDir, absWorkingDir: root, format: "esm" })();
+    expect(engineCalls[0].config.sourceType).toBe("module");
+  });
+
+  it.each(["iife", "cjs", undefined])("withholds it for format %s", async (format) => {
+    await applyPlugin({}, { outdir: outDir, absWorkingDir: root, format })();
+    expect(engineCalls[0].config.sourceType).toBeUndefined();
   });
 });

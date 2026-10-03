@@ -10,7 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { __reset, __setProcessResult, engineCalls } from "../../../test/core-fake.js";
+import { __reset, __setProcessResult, __setVersion, engineCalls } from "../../../test/core-fake.js";
 import { type AfterpackRollupOptions, afterpackRollup } from "./index.js";
 
 let root: string;
@@ -352,5 +352,34 @@ describe("afterpackRollup afterpack.json", () => {
       JSON.stringify({ paths: { include: ["**/node_modules/**"] } }),
     );
     expect(() => afterpackRollup({})).toThrow(/`paths.include` is not supported here/);
+  });
+});
+
+describe("afterpackRollup sourceType", () => {
+  beforeEach(() => {
+    __setVersion("0.2.3");
+  });
+
+  it("sends module for ES output whose bundle holds only chunks", async () => {
+    await runPlugin(
+      {},
+      { dir: outDir, format: "es" },
+      bundleOf(chunk("index.js", "const a = 1;"), chunk("dep.js", "const b = 2;")),
+    );
+    expect(engineCalls.map((c) => c.config.sourceType)).toEqual(["module", "module"]);
+  });
+
+  it("withholds it when the bundle also carries a JS asset", async () => {
+    await runPlugin(
+      {},
+      { dir: outDir, format: "es" },
+      bundleOf(chunk("index.js", "const a = 1;"), asset("worker.js", "self.x = 1;")),
+    );
+    expect(engineCalls.map((c) => c.config.sourceType)).toEqual([undefined, undefined]);
+  });
+
+  it.each(["system", "iife", "cjs", "umd", "amd"])("withholds it for format %s", async (format) => {
+    await runPlugin({}, { dir: outDir, format }, bundleOf(chunk("index.js", "const a = 1;")));
+    expect(engineCalls[0].config.sourceType).toBeUndefined();
   });
 });

@@ -40,13 +40,7 @@ export const SOURCE_TYPE_VALUES = ["auto", "module", "script"] as const;
 
 export type SourceType = (typeof SOURCE_TYPE_VALUES)[number];
 
-const MODULE_OUTPUT_FORMATS: ReadonlySet<string> = new Set([
-  "es",
-  "esm",
-  "esmodule",
-  "module",
-  "system",
-]);
+const MODULE_OUTPUT_FORMATS: ReadonlySet<string> = new Set(["es", "esm", "esmodule", "module"]);
 
 export function sourceTypeForOutputFormat(
   format: string | null | undefined,

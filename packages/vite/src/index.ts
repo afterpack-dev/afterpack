@@ -13,7 +13,7 @@ import {
   resolvePluginConfig,
   runObfuscationPass,
   scanDirectives,
-  sourceTypeForOutputFormat,
+  sourceTypeForBundle,
   stripBundleCssSourceMaps,
   type WriteProtectionReceiptInput,
   writeDeferredProtectionReceipt,
@@ -151,7 +151,7 @@ export function afterpackVite(options: AfterpackViteOptions = {}): Plugin {
               : join(projectRoot, ".afterpack"),
           },
           ...passSettings(resolved),
-          sourceType: sourceTypeForOutputFormat(outputOptions.format),
+          sourceType: sourceTypeForBundle(outputOptions.format, entries.values()),
           hasBundlerSourcemap: buildSourcemap,
           messages: {
             autoEnableBundlerSourcemap:

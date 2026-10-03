@@ -100,7 +100,10 @@ export function isBelowVersion(version: string | null | undefined, minimum: stri
 }
 
 export function coreSupportsSourceType(coreVersion: string | null | undefined): boolean {
-  return coreVersion != null && !isBelowVersion(coreVersion, SOURCE_TYPE_MIN_CORE_VERSION);
+  return (
+    releaseTriple(coreVersion) !== null &&
+    !isBelowVersion(coreVersion, SOURCE_TYPE_MIN_CORE_VERSION)
+  );
 }
 
 export const CLI_PACKAGE = "afterpack";

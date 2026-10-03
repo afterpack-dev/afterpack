@@ -1,6 +1,7 @@
 import { basename, resolve } from "node:path";
 import type { InMemoryInput, InMemoryOutput } from "./pass.js";
 import type { ReportPolicy } from "./policy.js";
+import { type SourceType, sourceTypeForOutputFormat } from "./registry.js";
 import { withoutCssSourceMappingURL, withSourceMappingURL } from "./source-map.js";
 
 export interface BundleEntryLike {
@@ -44,6 +45,16 @@ export function collectBundleJs(bundle: OutputBundleLike, outDir: string): Bundl
     inputs.set(filePath, { source, sourceMap: entry.map ? entry.map.toString() : null });
   }
   return { files, inputs, entries };
+}
+
+export function sourceTypeForBundle(
+  format: string | null | undefined,
+  entries: Iterable<BundleEntryLike>,
+): SourceType | undefined {
+  for (const entry of entries) {
+    if (entry.type !== "chunk") return undefined;
+  }
+  return sourceTypeForOutputFormat(format);
 }
 
 function dataUri(json: string): string {

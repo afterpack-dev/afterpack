@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { type OutputBundleLike, stripBundleCssSourceMaps } from "./bundle.js";
+import {
+  type BundleEntryLike,
+  type OutputBundleLike,
+  sourceTypeForBundle,
+  stripBundleCssSourceMaps,
+} from "./bundle.js";
 
 describe("stripBundleCssSourceMaps", () => {
   it("deletes every CSS map and the trailer that points at it, and nothing else", () => {
@@ -34,5 +39,24 @@ describe("stripBundleCssSourceMaps", () => {
     expect(bundle["assets/theme.css"].source).toBe("b{}\n");
     expect(bundle["assets/plain.css"].source).toBe("c{}\n");
     expect(bundle["assets/index.js"].code).toBe("x()");
+  });
+});
+
+describe("sourceTypeForBundle", () => {
+  const chunk: BundleEntryLike = { type: "chunk", fileName: "a.js", code: "" };
+  const asset: BundleEntryLike = { type: "asset", fileName: "w.js", source: "" };
+
+  it("is module for ES output made only of chunks", () => {
+    expect(sourceTypeForBundle("es", [chunk, chunk])).toBe("module");
+  });
+
+  it("is unset when any entry is an asset, whatever the format", () => {
+    expect(sourceTypeForBundle("es", [chunk, asset])).toBeUndefined();
+  });
+
+  it("is unset for a non-module format", () => {
+    expect(sourceTypeForBundle("system", [chunk])).toBeUndefined();
+    expect(sourceTypeForBundle("iife", [chunk])).toBeUndefined();
+    expect(sourceTypeForBundle(undefined, [chunk])).toBeUndefined();
   });
 });

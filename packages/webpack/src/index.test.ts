@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PROTECTION_RECEIPT_FILE } from "@afterpack/integration-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { __reset, __setProcessResult, engineCalls } from "../../../test/core-fake.js";
+import { __reset, __setProcessResult, __setVersion, engineCalls } from "../../../test/core-fake.js";
 import { AfterpackWebpackPlugin } from "./index.js";
 
 let root: string;
@@ -370,5 +370,23 @@ describe("AfterpackWebpackPlugin afterpack.json", () => {
       JSON.stringify({ paths: { include: ["**/node_modules/**"] } }),
     );
     expect(() => new AfterpackWebpackPlugin()).toThrow(/`paths.include` is not supported here/);
+  });
+});
+
+describe("AfterpackWebpackPlugin sourceType", () => {
+  beforeEach(() => {
+    __setVersion("0.2.3");
+  });
+
+  it("sends module when output.module is on", async () => {
+    const invoke = applyPlugin(new AfterpackWebpackPlugin({}), { output: { module: true } });
+    await invoke(fixture({ "main.js": "const a = 1;" }, ["main.js"]));
+    expect(engineCalls[0].config.sourceType).toBe("module");
+  });
+
+  it("withholds it for classic output", async () => {
+    const invoke = applyPlugin(new AfterpackWebpackPlugin({}), { output: { module: false } });
+    await invoke(fixture({ "main.js": "const a = 1;" }, ["main.js"]));
+    expect(engineCalls[0].config.sourceType).toBeUndefined();
   });
 });

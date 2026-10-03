@@ -50,6 +50,24 @@ describe("htmlScriptKinds", () => {
       module: false,
       classic: false,
     });
+    expect(htmlScriptKinds('<script type="text/ecmascript" src="/a.js"></script>')).toEqual({
+      module: false,
+      classic: true,
+    });
+  });
+
+  it("does not read data-src or data-type as src or type", () => {
+    expect(htmlScriptKinds('<script data-src="/a.js"></script>')).toEqual({
+      module: false,
+      classic: false,
+    });
+    expect(htmlScriptKinds('<script data-type="module" src="/a.js"></script>')).toEqual({
+      module: false,
+      classic: true,
+    });
+    expect(
+      htmlScriptKinds('<script src="/a.js" data-type="text/javascript" type="module">'),
+    ).toEqual({ module: true, classic: false });
   });
 });
 
