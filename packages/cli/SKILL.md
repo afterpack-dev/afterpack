@@ -107,7 +107,6 @@ minification.
 | [`protectionMap.enabled`][protectionMap.enabled] | write the Protection Map | on when an input map exists |
 | [`diagnostics.format`][diagnostics.format] | `text` or `json` | `text` |
 | [`diagnostics.level`][diagnostics.level] | `summary`, `all` or `none` (errors still print) | `summary` |
-| [`allowUnobfuscated`][allowUnobfuscated] | ship a file that could not be processed, instead of failing (exit `2`) | `false` |
 | [`build.autorun`][build.autorun] | `false` turns AfterPack off for the project, CLI and plugins alike | `true` |
 | [`telemetry.enabled`][telemetry.enabled] | anonymous diagnostics, sent only when a build is refused or partial | `true` |
 
@@ -126,7 +125,6 @@ https://www.afterpack.dev/docs/config
 [protectionMap.enabled]: https://www.afterpack.dev/docs/config#protectionMap-enabled
 [diagnostics.format]: https://www.afterpack.dev/docs/config#diagnostics-format
 [diagnostics.level]: https://www.afterpack.dev/docs/config#diagnostics-level
-[allowUnobfuscated]: https://www.afterpack.dev/docs/config#allowUnobfuscated
 [build.autorun]: https://www.afterpack.dev/docs/config#build-autorun
 [telemetry.enabled]: https://www.afterpack.dev/docs/config#telemetry-enabled
 [inflation.max]: https://www.afterpack.dev/docs/config#inflation-max
@@ -164,7 +162,7 @@ it too. Add `--diagnostics.level=none` for a run that prints nothing else.
 }
 ```
 
-`status` is `obfuscated`, `unchanged`, `unobfuscated` or `failed`. A failure is a document too,
+`status` is `obfuscated`, `unchanged` or `failed`. A failure is a document too,
 with the same exit code and a `fix` field to act on:
 
 ```json
@@ -231,8 +229,10 @@ exits `1`. Anonymous use is rate-limited per 24 hours. Docs: https://www.afterpa
 | --- | --- |
 | `0` | Success. Also `--help` and `--version`. |
 | `1` | Failure: bad path, no JavaScript found, an engine error, an already-obfuscated tree, a failed `verify`, `restore` or scan, or an unreachable cloud on a Pro build. |
-| `2` | Partial: some files shipped unobfuscated. Only with [`allowUnobfuscated`][allowUnobfuscated]. |
+| `2` | Partial. Reserved for a quota-exhausted build; no build returns it today. |
 | `3` | Size cap: [`inflation.max`][inflation.max] stopped the run before it reached the protection level. |
+| `4` | Pro required: a region directive that raises protection needs a Pro key (`DIAG_PRO_DIRECTIVE_REQUIRES_KEY`). |
+| `5` | Reflection: a runtime-reflection pattern was not acknowledged (`DIAG_REFLECTION_NOT_ACKNOWLEDGED`). |
 | `6` | Update required. Run the install command it prints, for example `npm install afterpack@latest @afterpack/core@<version>`. Nothing was written. |
 | `64` | Misuse: unknown flag or command, malformed value, or two path arguments. |
 

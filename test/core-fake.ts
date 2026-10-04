@@ -42,7 +42,6 @@ export interface FakeFileResult {
   protectionMap?: ProtectionMap;
   status: "success" | "failure";
   error?: string;
-  unobfuscated: boolean;
   diagnostics?: FakeDiagnostic[];
 }
 
@@ -219,7 +218,6 @@ export async function processBatch(
       code: string;
       sourceMap?: string | null;
       protectionMap?: ProtectionMap | null;
-      unobfuscated?: boolean;
       diagnostics?: FakeDiagnostic[];
     };
     const fatal = pr.diagnostics?.find((d) => d.severity === "error" || d.severity === "critical");
@@ -230,7 +228,6 @@ export async function processBatch(
         code: "",
         status: "failure" as const,
         error: fatal.message,
-        unobfuscated: false,
         diagnostics: pr.diagnostics ?? [],
       };
     }
@@ -241,7 +238,6 @@ export async function processBatch(
       sourceMap: pr.sourceMap ?? undefined,
       protectionMap: pr.protectionMap ?? undefined,
       status: "success" as const,
-      unobfuscated: pr.unobfuscated === true,
       diagnostics: pr.diagnostics ?? [],
     };
   });

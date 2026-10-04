@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { basename } from "node:path";
 import type { ProtectionMap } from "@afterpack/protection-map";
 import {
   DEFAULT_LOGGER,
@@ -79,7 +78,7 @@ export interface EngineFileResult {
   protectionMap?: ProtectionMap;
   status: "success" | "failure";
   error?: string;
-  unobfuscated: boolean;
+  unobfuscated?: boolean;
   diagnostics?: EngineDiagnostic[];
 }
 
@@ -220,8 +219,8 @@ function fileFailure(f: EngineFileResult, source: string): string | null {
       ? "empty output"
       : `the engine reported status "${sanitizeServerText(f.status, 32)}"`;
   }
-  if (typeof f.unobfuscated !== "boolean") {
-    return "the engine result does not say whether the file was obfuscated";
+  if (f.unobfuscated === true) {
+    return "the engine could not obfuscate it and returned the original source — update @afterpack/core";
   }
   if (f.code === "" && source.trim() !== "") return sanitizeServerText(f.error) || "empty output";
   return null;
@@ -543,7 +542,6 @@ export async function runObfuscationPass(
   const outputs: InMemoryOutput[] = [];
   let inputBytes = 0;
   let outputBytes = 0;
-  const unobfuscatedFiles: string[] = [];
   let noOp = 0;
   const transformedFiles: string[] = [];
   const verified: { result: EngineFileResult; source: string }[] = [];
@@ -559,35 +557,13 @@ export async function runObfuscationPass(
 
     inputBytes += Buffer.byteLength(source);
     outputBytes += Buffer.byteLength(f.code);
-    if (f.unobfuscated === true) unobfuscatedFiles.push(basename(f.path));
-    else if (f.code === source) noOp += 1;
+    if (f.code === source) noOp += 1;
     else transformedFiles.push(f.path);
 
     if (policy.protectionMap && f.protectionMap != null) {
       protectionMapDocs.push(f.protectionMap);
     }
     verified.push({ result: f, source });
-  }
-
-  if (unobfuscatedFiles.length > 0) {
-    if (artifactOptions.allowUnobfuscated === true) {
-      for (const name of unobfuscatedFiles) {
-        logger.warn(
-          prefix(
-            `${name} could not be obfuscated and SHIPPED AS CLEARTEXT ` +
-              "(allowUnobfuscated:true). This is an engine bug — please report it.",
-          ),
-        );
-      }
-    } else {
-      throw new Error(
-        prefix(
-          `${unobfuscatedFiles.length} file(s) could not be obfuscated and would ship ` +
-            `as cleartext: ${unobfuscatedFiles.join(", ")} — fix the engine or set ` +
-            "allowUnobfuscated:true",
-        ),
-      );
-    }
   }
 
   const writtenFiles: string[] = [];
@@ -685,7 +661,6 @@ export async function runObfuscationPass(
         fileCount: files.length,
         inputBytes,
         outputBytes,
-        unobfuscatedCount: unobfuscatedFiles.length,
         noOpCount: noOp,
         elapsedMs: totalMs,
       },

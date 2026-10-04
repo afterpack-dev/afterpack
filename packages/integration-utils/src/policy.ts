@@ -26,7 +26,6 @@ export interface AfterpackArtifactOptions {
     backup?: boolean;
     mode?: BuildMode;
   };
-  allowUnobfuscated?: boolean;
   telemetry?: {
     enabled?: boolean;
   };

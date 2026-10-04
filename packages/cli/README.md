@@ -105,7 +105,6 @@ the [configuration reference](https://www.afterpack.dev/docs/config). The
 [build.backup]: https://www.afterpack.dev/docs/config#build-backup
 [protectionMap.enabled]: https://www.afterpack.dev/docs/config#protectionMap-enabled
 [diagnostics.format]: https://www.afterpack.dev/docs/config#diagnostics-format
-[allowUnobfuscated]: https://www.afterpack.dev/docs/config#allowUnobfuscated
 [inflation.max]: https://www.afterpack.dev/docs/config#inflation-max
 [key]: https://www.afterpack.dev/docs/config#key
 
@@ -136,8 +135,10 @@ Pro](https://www.afterpack.dev/docs/pro).
 | --- | --- |
 | `0` | Success. |
 | `1` | Failure. Nothing was changed, or `verify`, `restore` or `audit` failed. |
-| `2` | Some files shipped unobfuscated. Only possible with [`allowUnobfuscated`][allowUnobfuscated]. |
+| `2` | Partial. Reserved for a quota-exhausted build; no build returns it today. |
 | `3` | The size limit ([`inflation.max`][inflation.max]) stopped AfterPack before it reached the protection level. |
+| `4` | A region directive that raises protection needs a Pro key. |
+| `5` | A runtime-reflection pattern was not acknowledged. |
 | `6` | An update is required. The CLI prints the install command to run. |
 | `64` | Misuse: an unknown option or command, or a malformed value. |
 

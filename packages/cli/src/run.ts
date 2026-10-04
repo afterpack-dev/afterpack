@@ -48,7 +48,14 @@ import {
 } from "./backup.js";
 import { frameworkDocsUrl } from "./detect.js";
 import { commandLine, commandRow, planBareRun } from "./dispatch.js";
-import { EXIT, type ExitCode, failureExitCode, SIZE_CAP_CODE } from "./exit.js";
+import {
+  EXIT,
+  type ExitCode,
+  failureExitCode,
+  PRO_REQUIRED_CODE,
+  REFLECTION_CODE,
+  SIZE_CAP_CODE,
+} from "./exit.js";
 import { colorSupported, dim, green, isCiTruthy, red, setColorEnabled, yellow } from "./format.js";
 import { printHeader } from "./header.js";
 import {
@@ -130,7 +137,6 @@ interface CapturedFile {
   bytesIn: number;
   bytesOut: number;
   status: string;
-  unobfuscated: boolean;
   diagnostics: EngineDiagnostic[];
 }
 
@@ -152,7 +158,6 @@ function captureFile(file: EngineFileResult, bytesIn: number): CapturedFile {
     bytesIn,
     bytesOut: Buffer.byteLength(file.code),
     status: file.status,
-    unobfuscated: file.unobfuscated === true,
     diagnostics: sanitizeEngineDiagnostics(file.diagnostics).map((d) => ({
       ...d,
       file: d.file ?? file.path,
@@ -166,10 +171,41 @@ function alignRow(label: string, value: string): string {
 
 function fileStatus(file: CapturedFile): string {
   if (file.status !== "success") return "failed";
-  if (file.unobfuscated) return "unobfuscated";
   return file.bytesOut === file.bytesIn && file.diagnostics.length === 0
     ? "unchanged"
     : "obfuscated";
+}
+
+function failureDetail(exitCode: ExitCode): { code: string; fix: string } {
+  switch (exitCode) {
+    case EXIT.sizeCap:
+      return {
+        code: SIZE_CAP_CODE,
+        fix: "Raise --inflation.max, or lower --complexity, so the target fits the size budget.",
+      };
+    case EXIT.proRequired:
+      return {
+        code: PRO_REQUIRED_CODE,
+        fix:
+          "A region directive raises protection, which needs a Pro key. Add --key=<ap_live_…>, " +
+          "or remove the directive.",
+      };
+    case EXIT.reflection:
+      return {
+        code: REFLECTION_CODE,
+        fix:
+          "Acknowledge the runtime-reflection pattern with --reflection.allow=<value> (the " +
+          "diagnostic above names the value), carve the file out with --paths.exclude=<glob>, " +
+          "or (Pro) mark it with an @afterpack allow-reflection directive.",
+      };
+    default:
+      return {
+        code: "BUILD_FAILED",
+        fix:
+          "Fix the diagnostic(s) above, or carve the file out with --paths.exclude=<glob>. " +
+          "Your build output was left exactly as your bundler wrote it.",
+      };
+  }
 }
 
 function buildDocument(input: {
@@ -206,7 +242,6 @@ function buildDocument(input: {
     summary: {
       files: files.length,
       transformed: input.transformed.size,
-      unobfuscated: files.filter((f) => f.unobfuscated).length,
       failed: files.filter((f) => f.status !== "success").length,
       bytesIn: files.reduce((n, f) => n + f.bytesIn, 0),
       bytesOut: files.reduce((n, f) => n + f.bytesOut, 0),
@@ -936,19 +971,9 @@ export async function run(deps: CliDeps): Promise<number> {
   const diagnostics = captured.flatMap((f) => f.diagnostics);
   if (failure !== null) {
     const exitCode = failureExitCode(diagnostics);
-    return refuseHere(
-      exitCode,
-      exitCode === EXIT.sizeCap ? SIZE_CAP_CODE : "BUILD_FAILED",
-      failure,
-      exitCode === EXIT.sizeCap
-        ? "Raise --inflation.max, or lower --complexity, so the target fits the size budget."
-        : "Fix the diagnostic(s) above, or carve the file out with --paths.exclude=<glob>. " +
-            "Your build output was left exactly as your bundler wrote it.",
-    );
+    const { code, fix } = failureDetail(exitCode);
+    return refuseHere(exitCode, code, failure, fix);
   }
-
-  const unobfuscated = captured.filter((f) => f.unobfuscated);
-  const exitCode: ExitCode = unobfuscated.length > 0 ? EXIT.partial : EXIT.ok;
 
   if (mode.format === "json") {
     emitJson(
@@ -956,23 +981,13 @@ export async function run(deps: CliDeps): Promise<number> {
       buildDocument({
         version,
         cwd,
-        exitCode,
+        exitCode: EXIT.ok,
         files: captured,
         result,
         transformed: new Set(result?.transformedFiles ?? []),
       }),
     );
-    return exitCode;
-  }
-
-  if (exitCode === EXIT.partial) {
-    logger.error(
-      `${yellow("⚠")} ${unobfuscated.length} ${unobfuscated.length === 1 ? "file" : "files"} shipped UNOBFUSCATED — ` +
-        "drop --allowUnobfuscated to fail closed instead.",
-    );
-    logger.error("");
-    logger.error(dim(CONTACT_FOOTER));
-    return exitCode;
+    return EXIT.ok;
   }
 
   renderNextSteps({
@@ -985,7 +1000,7 @@ export async function run(deps: CliDeps): Promise<number> {
     backupWritten,
     hasConfiguredKey,
   });
-  return exitCode;
+  return EXIT.ok;
 }
 
 const SUBCOMMAND_HELP: Readonly<Record<"verify" | "audit" | "restore", string>> = {

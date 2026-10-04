@@ -61,8 +61,8 @@ that fixture's other browsers. To repeat one Firefox test, select only that brow
 
 ## What every fixture proves
 
-1. The build log shows an obfuscation pass that covered the expected files, shipped nothing
-   unobfuscated, and changed at least one file (`expectObfuscationPass`).
+1. The build log shows an obfuscation pass that covered the expected files and changed at least one
+   file (`expectObfuscationPass`).
 2. The files its protection receipt names carry obfuscation signatures, not just minification
    (`expectObfuscationSignatures`). The thresholds sit well outside what engine 0.2.1 measured on
    all 20 fixture legs:

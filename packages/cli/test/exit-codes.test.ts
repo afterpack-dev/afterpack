@@ -85,16 +85,46 @@ describe("the exit-code contract", () => {
     expect(readFileSync(join(buildDir, "app.js"), "utf8")).toBe("export const a = 1;");
   });
 
-  it("2 — a file shipped unobfuscated, which only `allowUnobfuscated` permits", async () => {
-    __setProcessResult((input) => ({ code: input, unobfuscated: true }));
-    expect(await invoke(["dist", ...QUIET])).toBe(1);
+  it("4 — a Pro region directive on a Free build maps to proRequired, with the key fix", async () => {
+    __setProcessResult(() => ({
+      code: "",
+      diagnostics: [
+        {
+          severity: "error",
+          code: "DIAG_PRO_DIRECTIVE_REQUIRES_KEY",
+          message: "a region directive raises protection; provide a Pro key",
+        },
+      ],
+    }));
+    expect(await invoke(["dist", ...QUIET])).toBe(4);
+    expect(err.join("\n")).toContain("--key=");
+    expect(readFileSync(join(buildDir, "app.js"), "utf8")).toBe("export const a = 1;");
+  });
 
-    __reset();
-    __setProcessResult((input) => ({ code: input, unobfuscated: true }));
-    err = [];
-    expect(await invoke(["dist", ...QUIET, "--allowUnobfuscated"])).toBe(2);
-    expect(err.join("\n")).toContain("shipped UNOBFUSCATED");
-    expect(err.join("\n")).toContain("drop --allowUnobfuscated");
+  it("5 — an unacknowledged runtime-reflection pattern maps to reflection", async () => {
+    __setProcessResult(() => ({
+      code: "",
+      diagnostics: [
+        {
+          severity: "error",
+          code: "DIAG_REFLECTION_NOT_ACKNOWLEDGED",
+          message: "Unacknowledged runtime-reflection pattern FunctionToStringIntrospection",
+        },
+      ],
+    }));
+    expect(await invoke(["dist", ...QUIET])).toBe(5);
+    expect(err.join("\n")).toContain("--reflection.allow");
+  });
+
+  it("4 precedes 5 when a build carries both (O6)", async () => {
+    __setProcessResult(() => ({
+      code: "",
+      diagnostics: [
+        { severity: "error", code: "DIAG_REFLECTION_NOT_ACKNOWLEDGED", message: "reflection" },
+        { severity: "error", code: "DIAG_PRO_DIRECTIVE_REQUIRES_KEY", message: "pro" },
+      ],
+    }));
+    expect(await invoke(["dist", ...QUIET])).toBe(4);
   });
 
   it("3 — the size cap was reached, reported from the diagnostic on the throwing path", async () => {
@@ -112,12 +142,13 @@ describe("the exit-code contract", () => {
     expect(err.join("\n")).toContain("Raise --inflation.max");
   });
 
-  it("4 and 5 are not documented at all — never emitted, never named", async () => {
-    expect(EXIT_CODE_HELP).not.toContain("RESERVED");
+  it("every code 0–6 and 64 is documented, and an Info reflection code is not a failure", async () => {
     expect(EXIT_CODE_HELP).toContain("0   success");
     expect(EXIT_CODE_HELP).toContain("1   total failure");
     expect(EXIT_CODE_HELP).toContain("2   partial");
     expect(EXIT_CODE_HELP).toContain("3   size cap");
+    expect(EXIT_CODE_HELP).toContain("4   Pro required");
+    expect(EXIT_CODE_HELP).toContain("5   reflection");
     expect(EXIT_CODE_HELP).toContain("6   update required");
     expect(EXIT_CODE_HELP).toContain("64  misuse");
     expect(HELP_ALL).toContain(EXIT_CODE_HELP);

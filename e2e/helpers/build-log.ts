@@ -24,7 +24,6 @@ export interface ObfuscationPass {
   passLabel: string;
   files: number;
   ratioPercent: number;
-  unobfuscated: boolean;
   noOp: number;
   seed: string | null;
   seedOrigin: string | null;
@@ -43,7 +42,6 @@ export function parseObfuscationPasses(log: string): ObfuscationPass[] {
       passLabel: match[1] ?? "afterpack",
       files: Number(match[3]),
       ratioPercent: Math.round((bytesOut / bytesIn) * 100),
-      unobfuscated: tail.includes("shipped UNOBFUSCATED"),
       noOp: noOp ? Number(noOp[1]) : 0,
       seed: seed ? seed[1] : null,
       seedOrigin: seed ? seed[2] : null,
@@ -72,9 +70,6 @@ export function expectObfuscationPass(
     passes.length,
     `${name}: the build printed no "obfuscated N file(s)" summary — the AfterPack pass never ran`,
   ).toBeGreaterThanOrEqual(expected.passes);
-
-  const cleartext = passes.filter((p) => p.unobfuscated).map((p) => p.passLabel);
-  expect(cleartext, `${name}: ${cleartext.join(", ")} shipped UNOBFUSCATED files`).toEqual([]);
 
   const files = passes.reduce((n, p) => n + p.files, 0);
   expect(files, `${name}: the pass covered fewer files than expected`).toBeGreaterThanOrEqual(

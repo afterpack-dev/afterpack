@@ -5,7 +5,6 @@ export interface PassSummaryInput {
   fileCount: number;
   inputBytes: number;
   outputBytes: number;
-  unobfuscatedCount: number;
   noOpCount: number;
   elapsedMs: number;
 }
@@ -27,10 +26,7 @@ export function formatPassSummary(
 ): string {
   const head = style === "cli" ? colorGlyph("✓") : `[${input.label}]`;
   const files = input.fileCount === 1 ? "file" : "files";
-  const tail =
-    (input.unobfuscatedCount > 0
-      ? ` · ${input.unobfuscatedCount} shipped UNOBFUSCATED (fallback, cleartext)`
-      : "") + (input.noOpCount > 0 ? ` · ${input.noOpCount} no-op (unchanged)` : "");
+  const tail = input.noOpCount > 0 ? ` · ${input.noOpCount} no-op (unchanged)` : "";
   return (
     `${head} Protected ${input.fileCount} ${files} · ` +
     `${fmtBytes(input.inputBytes)} → ${fmtBytes(input.outputBytes)}${tail} · ${fmtElapsed(input.elapsedMs)}`

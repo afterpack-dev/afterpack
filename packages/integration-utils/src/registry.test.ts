@@ -398,8 +398,8 @@ describe("the environment mapper", () => {
     expect(parseEnvOptions({ AFTERPACK_COMPLEXITY: "40" }).issues[0].message).toContain(
       "write `AFTERPACK_complexity`",
     );
-    expect(parseEnvOptions({ AFTERPACK_ALLOW_UNOBFUSCATED: "1" }).issues[0].message).toContain(
-      "write `AFTERPACK_allowUnobfuscated`",
+    expect(parseEnvOptions({ AFTERPACK_SOURCE_TYPE: "module" }).issues[0].message).toContain(
+      "write `AFTERPACK_sourceType`",
     );
     expect(parseEnvOptions({ AFTERPACK_IDENTIFIERS: "x" }).issues[0].message).toContain(
       "its keys are `AFTERPACK_identifiers_rename`",

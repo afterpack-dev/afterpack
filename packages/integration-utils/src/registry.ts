@@ -432,15 +432,6 @@ export const CONFIG_KEYS = [
     default: "true",
   },
   {
-    path: "allowUnobfuscated",
-    shape: "scalar",
-    scope: "program",
-    tier: "free",
-    surface: "build",
-    item: { kind: "boolean" },
-    default: "false",
-  },
-  {
     path: "key",
     shape: "scalar",
     scope: "program",
@@ -967,7 +958,6 @@ export function toPluginOptions(config: AfterpackConfig): PluginOptionsView {
         emitUrl: read<boolean>("sourceMap.emitUrl"),
       }),
       build: set({ backup: read<boolean>("build.backup"), mode: read<BuildMode>("build.mode") }),
-      allowUnobfuscated: read<boolean>("allowUnobfuscated"),
       telemetry: set({ enabled: read<boolean>("telemetry.enabled") }),
     },
     seed: read<number | string>("seed"),
