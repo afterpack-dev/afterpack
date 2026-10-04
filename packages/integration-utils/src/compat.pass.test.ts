@@ -299,27 +299,15 @@ describe("the result status rule", () => {
     expect(readFileSync(file, "utf8")).toBe("export const a = 1;");
   });
 
-  it("fails a file whose result does not say whether it was obfuscated", async () => {
+  it("fails a file that came back with empty output on non-empty source", async () => {
     __setBatchDecorator((result) => ({
       ...result,
-      files: result.files.map(
-        ({ unobfuscated: _drop, ...f }) => f as unknown as (typeof result.files)[number],
-      ),
+      files: result.files.map((f) => ({ ...f, code: "" })),
     }));
     await expect(runObfuscationPass(options({ logger: capture().logger }))).rejects.toThrow(
-      /does not say whether the file was obfuscated/,
+      /empty output/,
     );
     expect(readFileSync(file, "utf8")).toBe("export const a = 1;");
-  });
-
-  it("fails a file whose unobfuscated flag is not a boolean", async () => {
-    __setBatchDecorator((result) => ({
-      ...result,
-      files: result.files.map((f) => ({ ...f, unobfuscated: "no" as unknown as boolean })),
-    }));
-    await expect(runObfuscationPass(options({ logger: capture().logger }))).rejects.toThrow(
-      /does not say whether the file was obfuscated/,
-    );
   });
 });
 

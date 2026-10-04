@@ -45,7 +45,6 @@ interface FakeResult {
   sourceMap?: string | null;
   protectionMap?: ProtectionMap;
   fail?: string;
-  unobfuscated?: boolean;
   diagnostics?: EngineDiagnostic[];
 }
 
@@ -73,7 +72,6 @@ function makeEngine(
             code: "",
             status: "failure",
             error: r.fail,
-            unobfuscated: false,
             diagnostics: r.diagnostics,
           };
         }
@@ -83,7 +81,6 @@ function makeEngine(
           sourceMap: r.sourceMap ?? undefined,
           protectionMap: r.protectionMap ?? undefined,
           status: "success",
-          unobfuscated: r.unobfuscated ?? false,
           diagnostics: r.diagnostics ?? [],
         };
       });
@@ -253,7 +250,7 @@ describe("runObfuscationPass fail-closed", () => {
     const engine: ObfuscationEngine = {
       async processBatch() {
         return {
-          files: [{ path: "/ghost.js", code: "x", status: "success", unobfuscated: false }],
+          files: [{ path: "/ghost.js", code: "x", status: "success" }],
           totalFiles: 1,
           successCount: 1,
           failureCount: 0,
@@ -267,36 +264,17 @@ describe("runObfuscationPass fail-closed", () => {
   });
 });
 
-describe("runObfuscationPass fail-closed on the unparseable fallback", () => {
-  it("throws naming the file when a result carries the unobfuscated marker (strict default)", async () => {
+describe("runObfuscationPass fail-closed cleartext guard", () => {
+  it("throws naming the file when a success comes back with empty code on non-empty source", async () => {
     const a = join(outDir, "leaky.js");
     writeFileSync(a, "export const a = 1;");
-    const { engine } = makeEngine((s) => ({ code: s, unobfuscated: true }));
+    const { engine } = makeEngine(() => ({ code: "" }));
     await expect(
       runObfuscationPass({ ...baseOptions([a], engine), logger: silentLogger().logger }),
-    ).rejects.toThrow(/could not be obfuscated and would ship as cleartext: leaky\.js/);
+    ).rejects.toThrow(/leaky\.js: empty output/);
   });
 
-  it("with allowUnobfuscated:true, ships + logs a per-file warning instead of throwing", async () => {
-    const a = join(outDir, "leaky.js");
-    writeFileSync(a, "export const a = 1;");
-    const { engine } = makeEngine((s) => ({ code: s, unobfuscated: true }));
-    const cap = silentLogger();
-    const result = await runObfuscationPass({
-      ...baseOptions([a], engine),
-      artifactOptions: { allowUnobfuscated: true },
-      logger: cap.logger,
-    });
-    expect(result.fileCount).toBe(1);
-    expect(readFileSync(a, "utf8")).toContain("export const a = 1;");
-    expect(
-      cap.warnings.some((w) =>
-        /leaky\.js could not be obfuscated and SHIPPED AS CLEARTEXT/.test(w),
-      ),
-    ).toBe(true);
-  });
-
-  it("does NOT throw on a benign no-op (code === source without the fallback marker)", async () => {
+  it("does NOT throw on a benign no-op (code === source, non-empty output)", async () => {
     const a = join(outDir, "reexport.js");
     writeFileSync(a, "export {};");
     const { engine } = makeEngine((s) => ({ code: s }));
@@ -308,14 +286,12 @@ describe("runObfuscationPass fail-closed on the unparseable fallback", () => {
 });
 
 describe("runObfuscationPass buffer -> verify -> write", () => {
-  it("writes NOTHING for any file when a LATER file trips the cleartext gate", async () => {
+  it("writes NOTHING for any file when a LATER file comes back empty (fail closed)", async () => {
     const good = join(outDir, "good.js");
     const leaky = join(outDir, "zz-leaky.js");
     writeFileSync(good, "export const g = 1;");
     writeFileSync(leaky, "export const l = 2;");
-    const { engine } = makeEngine((s) =>
-      s.includes("l = 2") ? { code: s, unobfuscated: true } : {},
-    );
+    const { engine } = makeEngine((s) => (s.includes("l = 2") ? { code: "" } : {}));
 
     await expect(
       runObfuscationPass({
@@ -323,7 +299,7 @@ describe("runObfuscationPass buffer -> verify -> write", () => {
         artifactOptions: { build: { backup: true }, protectionMap: { enabled: true } },
         logger: silentLogger().logger,
       }),
-    ).rejects.toThrow(/would ship as cleartext/);
+    ).rejects.toThrow(/failed to obfuscate/);
 
     expect(readFileSync(good, "utf8")).toBe("export const g = 1;");
     expect(readdirSync(outDir).sort()).toEqual(["good.js", "zz-leaky.js"]);
@@ -347,24 +323,6 @@ describe("runObfuscationPass buffer -> verify -> write", () => {
 
     expect(readFileSync(good, "utf8")).toBe("export const g = 1;");
     expect(readdirSync(outDir).sort()).toEqual(["good.js", "zz-bad.js"]);
-  });
-
-  it("still writes every file when allowUnobfuscated opts in", async () => {
-    const good = join(outDir, "good.js");
-    const leaky = join(outDir, "zz-leaky.js");
-    writeFileSync(good, "export const g = 1;");
-    writeFileSync(leaky, "export const l = 2;");
-    const { engine } = makeEngine((s) =>
-      s.includes("l = 2") ? { code: s, unobfuscated: true } : {},
-    );
-
-    await runObfuscationPass({
-      ...baseOptions([good, leaky], engine),
-      artifactOptions: { allowUnobfuscated: true },
-      logger: silentLogger().logger,
-    });
-
-    expect(readFileSync(good, "utf8")).toContain("OBF:");
   });
 });
 
@@ -802,7 +760,6 @@ describe("runObfuscationPass engine diagnostics", () => {
             path: i.path,
             code: `OBF:${i.source}`,
             status: "success",
-            unobfuscated: false,
           })),
           totalFiles: inputs.length,
           successCount: inputs.length,
@@ -829,7 +786,6 @@ describe("runObfuscationPass engine diagnostics", () => {
             path: i.path,
             code: `OBF:${i.source}`,
             status: "success",
-            unobfuscated: false,
           })),
           totalFiles: inputs.length,
           successCount: inputs.length,
@@ -1271,7 +1227,7 @@ describe("runObfuscationPass in-memory seam (inputs + emitToCaller)", () => {
     expect(calls[0].inputs.map((i) => i.source)).toEqual(["from memory", "from disk"]);
   });
 
-  it("keeps BOTH fail-closed gates on the in-memory path", async () => {
+  it("keeps the fail-closed gates on the in-memory path", async () => {
     const path = virtual();
     const failing = makeEngine(() => ({ fail: "engine exploded" })).engine;
 
@@ -1284,15 +1240,15 @@ describe("runObfuscationPass in-memory seam (inputs + emitToCaller)", () => {
       }),
     ).rejects.toThrow(/engine exploded/);
 
-    const cleartext = makeEngine((s) => ({ code: s, unobfuscated: true })).engine;
+    const empty = makeEngine(() => ({ code: "" })).engine;
     await expect(
       runObfuscationPass({
-        ...baseOptions([path], cleartext),
+        ...baseOptions([path], empty),
         inputs: new Map([[path, { source: "export const a = 1;" }]]),
         emitToCaller: true,
         logger: silentLogger().logger,
       }),
-    ).rejects.toThrow(/would ship\s+as cleartext/);
+    ).rejects.toThrow(/failed to obfuscate/);
   });
 
   it("still writes the project-root artifacts: the self-ignoring .afterpack/ + the combined Protection Map", async () => {

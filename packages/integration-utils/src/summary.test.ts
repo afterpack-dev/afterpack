@@ -6,7 +6,6 @@ const BASE = {
   fileCount: 3,
   inputBytes: 500,
   outputBytes: 800,
-  unobfuscatedCount: 0,
   noOpCount: 0,
 };
 
@@ -35,13 +34,9 @@ describe("formatPassSummary", () => {
     expect(line).toBe("[afterpack-vite] Protected 3 files · 500 B → 800 B · 420ms");
   });
 
-  it("keeps elapsed as the LAST field even with unobfuscated/no-op suffixes", () => {
-    const line = formatPassSummary(
-      { ...BASE, unobfuscatedCount: 1, noOpCount: 2, elapsedMs: 1420 },
-      "cli",
-    );
+  it("keeps elapsed as the LAST field even with a no-op suffix", () => {
+    const line = formatPassSummary({ ...BASE, noOpCount: 2, elapsedMs: 1420 }, "cli");
     expect(line.endsWith("· 1.4s")).toBe(true);
-    expect(line).toContain("shipped UNOBFUSCATED");
     expect(line).toContain("no-op (unchanged)");
   });
 });
