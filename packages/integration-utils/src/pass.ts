@@ -78,6 +78,7 @@ export interface EngineFileResult {
   protectionMap?: ProtectionMap;
   status: "success" | "failure";
   error?: string;
+  unobfuscated?: boolean;
   diagnostics?: EngineDiagnostic[];
 }
 
@@ -217,6 +218,9 @@ function fileFailure(f: EngineFileResult, source: string): string | null {
     return f.status === "failure"
       ? "empty output"
       : `the engine reported status "${sanitizeServerText(f.status, 32)}"`;
+  }
+  if (f.unobfuscated === true) {
+    return "the engine could not obfuscate it and returned the original source — update @afterpack/core";
   }
   if (f.code === "" && source.trim() !== "") return sanitizeServerText(f.error) || "empty output";
   return null;

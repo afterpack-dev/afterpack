@@ -194,9 +194,9 @@ function failureDetail(exitCode: ExitCode): { code: string; fix: string } {
       return {
         code: REFLECTION_CODE,
         fix:
-          "Acknowledge the runtime-reflection pattern with --reflection.allow=<pattern>, carve the " +
-          "file out with --paths.exclude=<glob>, or (Pro) mark it with an @afterpack " +
-          "allow-reflection directive.",
+          "Acknowledge the runtime-reflection pattern with --reflection.allow=<value> (the " +
+          "diagnostic above names the value), carve the file out with --paths.exclude=<glob>, " +
+          "or (Pro) mark it with an @afterpack allow-reflection directive.",
       };
     default:
       return {
@@ -975,21 +975,19 @@ export async function run(deps: CliDeps): Promise<number> {
     return refuseHere(exitCode, code, failure, fix);
   }
 
-  const exitCode: ExitCode = EXIT.ok;
-
   if (mode.format === "json") {
     emitJson(
       logger,
       buildDocument({
         version,
         cwd,
-        exitCode,
+        exitCode: EXIT.ok,
         files: captured,
         result,
         transformed: new Set(result?.transformedFiles ?? []),
       }),
     );
-    return exitCode;
+    return EXIT.ok;
   }
 
   renderNextSteps({
@@ -1002,7 +1000,7 @@ export async function run(deps: CliDeps): Promise<number> {
     backupWritten,
     hasConfiguredKey,
   });
-  return exitCode;
+  return EXIT.ok;
 }
 
 const SUBCOMMAND_HELP: Readonly<Record<"verify" | "audit" | "restore", string>> = {

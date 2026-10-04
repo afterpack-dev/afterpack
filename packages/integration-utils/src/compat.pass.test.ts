@@ -299,6 +299,18 @@ describe("the result status rule", () => {
     expect(readFileSync(file, "utf8")).toBe("export const a = 1;");
   });
 
+  it("fails a file an older core returned as its original source", async () => {
+    __setBatchDecorator((result) => ({
+      ...result,
+      files: result.files.map((f) => ({ ...f, code: "export const a = 1;", unobfuscated: true })),
+    }));
+    await expect(runObfuscationPass(options({ logger: capture().logger }))).rejects.toThrow(
+      /app\.js: the engine could not obfuscate it and returned the original source/,
+    );
+    expect(readFileSync(file, "utf8")).toBe("export const a = 1;");
+    expect(existsSync(join(outDir, PROTECTION_RECEIPT_FILE))).toBe(false);
+  });
+
   it("fails a file that came back with empty output on non-empty source", async () => {
     __setBatchDecorator((result) => ({
       ...result,
