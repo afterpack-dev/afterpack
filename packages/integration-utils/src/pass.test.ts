@@ -1534,7 +1534,7 @@ describe("runObfuscationPass — the protection receipt it writes", () => {
   });
 });
 
-describe("sourceType (R-227)", () => {
+describe("sourceType", () => {
   async function configSentWith(input: {
     version?: string;
     client?: { coreVersion: string | null } | null;
