@@ -1,13 +1,12 @@
 import {
   existsSync,
+  lstatSync,
   readFileSync,
   realpathSync,
-  statSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, resolve, sep } from "node:path";
-import { collectStylesheets } from "./collect.js";
 
 const SOURCE_MAPPING_URL_RE = /\/\/[#@]\s*sourceMappingURL=(\S+)\s*$/gm;
 
@@ -120,17 +119,23 @@ function realpathOrNull(path: string): string | null {
   }
 }
 
-export function containedSourceMaps(paths: Iterable<string>, root: string): string[] {
+export function withinRealDir(dir: string, root: string): boolean {
   const rootReal = realpathOrNull(root);
-  if (rootReal == null) return [];
-  const prefix = rootReal.endsWith(sep) ? rootReal : `${rootReal}${sep}`;
+  const real = realpathOrNull(dir);
+  if (rootReal == null || real == null) return false;
+  if (real === rootReal) return true;
+  return real.startsWith(rootReal.endsWith(sep) ? rootReal : `${rootReal}${sep}`);
+}
+
+export function containedSourceMaps(paths: Iterable<string>, root: string): string[] {
   const found = new Set<string>();
   for (const path of paths) {
     if (!path.endsWith(".map")) continue;
-    const real = realpathOrNull(path);
-    if (real == null || !real.startsWith(prefix)) continue;
+    const lexical = resolve(path);
+    if (!withinRealDir(dirname(lexical), root)) continue;
     try {
-      if (statSync(real).isFile()) found.add(real);
+      const stat = lstatSync(lexical);
+      if (stat.isFile() || stat.isSymbolicLink()) found.add(lexical);
     } catch {}
   }
   return [...found];
@@ -152,10 +157,16 @@ export function removeSourceMaps(paths: Iterable<string>, label: string): number
   return removed;
 }
 
-export function stripCssSourceMappingURLs(dir: string): number {
+export function stripCssSourceMappingURLs(paths: Iterable<string>): number {
   let stripped = 0;
-  for (const path of collectStylesheets(dir)) {
-    const css = readFileSync(path, "utf8");
+  for (const path of paths) {
+    let css: string;
+    try {
+      css = readFileSync(path, "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+      throw error;
+    }
     const without = withoutCssSourceMappingURL(css);
     if (without === css) continue;
     writeFileSync(path, without);

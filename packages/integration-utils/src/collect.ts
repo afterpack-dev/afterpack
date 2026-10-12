@@ -90,7 +90,7 @@ function collectFiles(dir: string, accept: (name: string) => boolean): string[] 
     const kind = kindOf(entry, full);
     if (kind === null) continue;
     if (kind === "dir") {
-      if (name === NODE_MODULES) continue;
+      if (name === NODE_MODULES || isNestedProject(full)) continue;
       out.push(...collectFiles(full, accept));
     } else if (accept(name)) {
       out.push(full);

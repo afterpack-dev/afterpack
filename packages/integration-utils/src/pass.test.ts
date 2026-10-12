@@ -390,9 +390,12 @@ describe("runObfuscationPass never ships the bundler's source map", () => {
     expect(readFileSync(`${a}.map`, "utf8")).toBe(ENGINE_MAP);
   });
 
-  it("sweeps stale and differently named JS maps from the build directory, but not node_modules", async () => {
+  it("sweeps stale and differently named JS maps from the build directory, but not node_modules or a nested project", async () => {
     mkdirSync(join(outDir, "chunks"));
     mkdirSync(join(outDir, "node_modules", "dep"), { recursive: true });
+    mkdirSync(join(outDir, "functions"));
+    writeFileSync(join(outDir, "functions", "package.json"), "{}");
+    writeFileSync(join(outDir, "functions", "index.js.map"), BUNDLER_MAP);
     const a = join(outDir, "a.js");
     writeFileSync(a, "var a=1;\n");
     for (const name of ["old-chunk.js.map", "chunks/x.mjs.map", "chunks/y.cjs.map"]) {
@@ -401,13 +404,18 @@ describe("runObfuscationPass never ships the bundler's source map", () => {
     writeFileSync(join(outDir, "node_modules", "dep", "index.js.map"), BUNDLER_MAP);
     const { engine } = makeEngine(() => ({}));
 
-    await runObfuscationPass({ ...baseOptions([a], engine), logger: silentLogger().logger });
+    await runObfuscationPass({
+      ...baseOptions([a], engine),
+      sourceMapSweepDir: outDir,
+      logger: silentLogger().logger,
+    });
 
     expect(readdirSync(outDir).filter((f) => f.endsWith(".map"))).toEqual([]);
     expect(readdirSync(join(outDir, "chunks"))).toEqual([]);
     expect(readFileSync(join(outDir, "node_modules", "dep", "index.js.map"), "utf8")).toBe(
       BUNDLER_MAP,
     );
+    expect(readFileSync(join(outDir, "functions", "index.js.map"), "utf8")).toBe(BUNDLER_MAP);
   });
 
   it("deletes CSS maps and their trailers in production, as the bundle plugins do", async () => {
@@ -418,7 +426,11 @@ describe("runObfuscationPass never ships the bundler's source map", () => {
     writeFileSync(`${css}.map`, BUNDLER_MAP);
     const { engine } = makeEngine(() => ({}));
 
-    await runObfuscationPass({ ...baseOptions([a], engine), logger: silentLogger().logger });
+    await runObfuscationPass({
+      ...baseOptions([a], engine),
+      sourceMapSweepDir: outDir,
+      logger: silentLogger().logger,
+    });
 
     expect(existsSync(`${css}.map`)).toBe(false);
     expect(readFileSync(css, "utf8")).toBe("a{}\n");
@@ -434,6 +446,7 @@ describe("runObfuscationPass never ships the bundler's source map", () => {
 
     await runObfuscationPass({
       ...baseOptions([a], engine),
+      sourceMapSweepDir: outDir,
       artifactOptions: { sourceMap: { enabled: true } },
       logger: silentLogger().logger,
     });
@@ -451,7 +464,11 @@ describe("runObfuscationPass never ships the bundler's source map", () => {
     writeFileSync(a, "var a=1;\n//# sourceMappingURL=linked/z.js.map\n");
     const { engine } = makeEngine(() => ({}));
 
-    await runObfuscationPass({ ...baseOptions([a], engine), logger: silentLogger().logger });
+    await runObfuscationPass({
+      ...baseOptions([a], engine),
+      sourceMapSweepDir: outDir,
+      logger: silentLogger().logger,
+    });
 
     expect(readFileSync(join(outside, "z.js.map"), "utf8")).toBe(BUNDLER_MAP);
     expect(readFileSync(a, "utf8")).toBe("OBF:var a=1;\n");
@@ -470,7 +487,11 @@ describe("runObfuscationPass never ships the bundler's source map", () => {
 
       try {
         await expect(
-          runObfuscationPass({ ...baseOptions([a], engine), logger: silentLogger().logger }),
+          runObfuscationPass({
+            ...baseOptions([a], engine),
+            sourceMapSweepDir: outDir,
+            logger: silentLogger().logger,
+          }),
         ).rejects.toThrow(/could not remove the source map .*c\.js\.map, refusing to ship it/);
       } finally {
         chmodSync(locked, 0o755);
@@ -478,18 +499,58 @@ describe("runObfuscationPass never ships the bundler's source map", () => {
     },
   );
 
-  it("touches only each file's own maps when the caller turns the sweep off", async () => {
+  it("removes a symlinked map itself and never the file it points at", async () => {
+    const target = join(root, "ext.map");
+    writeFileSync(target, BUNDLER_MAP);
+    const a = join(outDir, "a.js");
+    writeFileSync(a, "var a=1;\n");
+    symlinkSync(target, `${a}.map`);
+    const { engine } = makeEngine(() => ({}));
+
+    await runObfuscationPass({
+      ...baseOptions([a], engine),
+      sourceMapSweepDir: outDir,
+      logger: silentLogger().logger,
+    });
+
+    expect(readdirSync(outDir).filter((f) => f.endsWith(".map"))).toEqual([]);
+    expect(readFileSync(target, "utf8")).toBe(BUNDLER_MAP);
+  });
+
+  it("leaves JS a symlink places outside the build directory unprotected, with its map, and says so", async () => {
+    const shared = join(root, "shared");
+    mkdirSync(shared);
+    writeFileSync(join(shared, "s.js"), "var s=1;\n//# sourceMappingURL=s.js.map\n");
+    writeFileSync(join(shared, "s.js.map"), BUNDLER_MAP);
+    symlinkSync(shared, join(outDir, "shared"), "dir");
+    const a = join(outDir, "a.js");
+    const s = join(outDir, "shared", "s.js");
+    writeFileSync(a, "var a=1;\n");
+    const { engine, calls } = makeEngine(() => ({}));
+    const cap = silentLogger();
+
+    await runObfuscationPass({
+      ...baseOptions([a, s], engine),
+      sourceMapSweepDir: outDir,
+      logger: cap.logger,
+    });
+
+    expect(calls[0].inputs.map((i) => i.path)).toEqual([a]);
+    expect(readFileSync(s, "utf8")).toBe("var s=1;\n//# sourceMappingURL=s.js.map\n");
+    expect(readFileSync(join(shared, "s.js.map"), "utf8")).toBe(BUNDLER_MAP);
+    expect(cap.warnings.some((w) => w.includes("left 1 file(s) untouched") && w.includes(s))).toBe(
+      true,
+    );
+  });
+
+  it("sweeps nothing unless the caller names a directory, touching only each file's own maps", async () => {
     const a = join(outDir, "a.js");
     writeFileSync(a, "var a=1;\n//# sourceMappingURL=a.js.map\n");
     writeFileSync(`${a}.map`, BUNDLER_MAP);
     writeFileSync(join(outDir, "other.js.map"), BUNDLER_MAP);
     const { engine } = makeEngine(() => ({}));
 
-    await runObfuscationPass({
-      ...baseOptions([a], engine),
-      sourceMapSweepDir: null,
-      logger: silentLogger().logger,
-    });
+    await runObfuscationPass({ ...baseOptions([a], engine), logger: silentLogger().logger });
 
     expect(existsSync(`${a}.map`)).toBe(false);
     expect(readFileSync(join(outDir, "other.js.map"), "utf8")).toBe(BUNDLER_MAP);

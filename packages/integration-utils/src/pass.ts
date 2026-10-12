@@ -1,5 +1,6 @@
-import { readFileSync, realpathSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import type { ProtectionMap } from "@afterpack/protection-map";
 import {
   DEFAULT_LOGGER,
@@ -8,7 +9,7 @@ import {
   writeArtifacts,
   writeCombinedProtectionMap,
 } from "./artifacts.js";
-import { collectSourceMaps } from "./collect.js";
+import { collectSourceMaps, collectStylesheets } from "./collect.js";
 import {
   assertSupportedCore,
   type ClientIdentity,
@@ -63,6 +64,7 @@ import {
   discoverInputSourceMap,
   removeSourceMaps,
   stripCssSourceMappingURLs,
+  withinRealDir,
   withSourceMappingURL,
 } from "./source-map.js";
 import { formatPassSummary, type PassSummaryStyle } from "./summary.js";
@@ -254,7 +256,9 @@ function removeBundlerSourceMaps(input: {
     [...bundlerMaps].filter((path) => !engineMaps.has(path)),
     label,
   );
-  if (sweepDir != null && !policy.sourceMap) stripCssSourceMappingURLs(sweepDir);
+  if (sweepDir != null && !policy.sourceMap) {
+    stripCssSourceMappingURLs(collectStylesheets(sweepDir));
+  }
 }
 
 async function readEngineVersion(engine: ObfuscationEngine): Promise<string | null> {
@@ -277,7 +281,6 @@ export async function runObfuscationPass(
   const passStartedAt = options.startedAt ?? Date.now();
   const callerAnchored = options.startedAt !== undefined;
   const {
-    files,
     engine,
     label,
     cwd,
@@ -289,6 +292,22 @@ export async function runObfuscationPass(
   const prefix = (message: string): string => `[${label}] ${message}`;
   const style: PassSummaryStyle = options.summaryStyle ?? "plugin";
   assertSupportedCore(options.client, prefix);
+
+  const outsideBuildDir = options.emitToCaller
+    ? []
+    : options.files.filter(
+        (f) =>
+          !options.inputs?.has(f) && !withinRealDir(dirname(f), combinedProtectionMap.buildDir),
+      );
+  const files = options.files.filter((f) => !outsideBuildDir.includes(f));
+  if (outsideBuildDir.length > 0) {
+    logger.warn(
+      prefix(
+        `left ${outsideBuildDir.length} file(s) untouched because a symlink places them outside ` +
+          `${combinedProtectionMap.buildDir}: ${outsideBuildDir.join(", ")}`,
+      ),
+    );
+  }
 
   const onDiskFiles = options.inputs ? files.filter((f) => !options.inputs?.has(f)) : files;
   const onDiskBytes = new Map<string, Buffer>(
@@ -342,10 +361,7 @@ export async function runObfuscationPass(
 
   const sourceByPath = new Map<string, string>();
   const bundlerMapsByPath = new Map<string, string[]>();
-  const sweepDir =
-    options.sourceMapSweepDir === undefined
-      ? combinedProtectionMap.buildDir
-      : options.sourceMapSweepDir;
+  const sweepDir = options.sourceMapSweepDir ?? null;
   const sourceMapRoot = sweepDir ?? combinedProtectionMap.buildDir;
   let coloredRegionCount = 0;
   let directivesNeededMap = false;
@@ -628,7 +644,7 @@ export async function runObfuscationPass(
     writtenFiles.push(written.codePath);
     if (written.mapPath) {
       sensitiveArtifactPaths.push(written.mapPath);
-      engineMaps.add(realpathSync(written.mapPath));
+      engineMaps.add(resolve(written.mapPath));
     }
     if (written.backupPath) sensitiveArtifactPaths.push(written.backupPath);
   }

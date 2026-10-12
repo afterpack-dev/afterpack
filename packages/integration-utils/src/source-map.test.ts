@@ -226,6 +226,19 @@ describe("containedSourceMaps", () => {
   });
 });
 
+describe("containedSourceMaps with a symlinked map", () => {
+  it("keeps the link's own path, so removing it never touches the target", () => {
+    const out = join(dir, "linked-map", "dist");
+    mkdirSync(out, { recursive: true });
+    writeFileSync(join(dir, "linked-map", "ext.map"), MAP);
+    symlinkSync(join(dir, "linked-map", "ext.map"), join(out, "a.js.map"));
+    expect(containedSourceMaps([join(out, "a.js.map")], out)).toEqual([join(out, "a.js.map")]);
+    removeSourceMaps([join(out, "a.js.map")], "t");
+    expect(existsSync(join(out, "a.js.map"))).toBe(false);
+    expect(readFileSync(join(dir, "linked-map", "ext.map"), "utf8")).toBe(MAP);
+  });
+});
+
 describe("removeSourceMaps", () => {
   it("deletes each map, skips one already gone, and counts what it removed", () => {
     const out = join(dir, "remove");
@@ -245,12 +258,18 @@ describe("removeSourceMaps", () => {
 });
 
 describe("stripCssSourceMappingURLs", () => {
-  it("strips the trailer from every stylesheet under the directory and counts them", () => {
+  it("strips the trailer from each stylesheet, skips a missing one, and counts them", () => {
     const out = join(dir, "css");
     mkdirSync(join(out, "nested"), { recursive: true });
     writeFileSync(join(out, "a.css"), "a{}\n/*# sourceMappingURL=a.css.map*/");
     writeFileSync(join(out, "nested", "b.css"), "b{}\n");
-    expect(stripCssSourceMappingURLs(out)).toBe(1);
+    expect(
+      stripCssSourceMappingURLs([
+        join(out, "a.css"),
+        join(out, "nested", "b.css"),
+        join(out, "gone.css"),
+      ]),
+    ).toBe(1);
     expect(readFileSync(join(out, "a.css"), "utf8")).toBe("a{}\n");
   });
 });

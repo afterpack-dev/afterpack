@@ -60,6 +60,7 @@ export async function afterpackAngular(options: AfterpackAngularOptions = {}): P
     cwd,
     startedAt: startedBeforeDirDiscovery,
     combinedProtectionMap: { buildDir: browserDir, afterpackDir: gitignoredNonServedAfterpackDir },
+    sourceMapSweepDir: browserDir,
     ...passSettings(resolved),
     directivesEnabled: DIRECTIVES_ALWAYS_DISABLED,
   });

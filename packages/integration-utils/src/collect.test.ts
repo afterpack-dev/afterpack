@@ -189,6 +189,17 @@ describe("collectSourceMaps", () => {
     ]);
   });
 
+  it("skips node_modules and a nested project, as the JS walk does", () => {
+    mkdirSync(join(root, "node_modules", "dep"), { recursive: true });
+    mkdirSync(join(root, "functions"), { recursive: true });
+    writeFileSync(join(root, "node_modules", "dep", "index.js.map"), "{}");
+    writeFileSync(join(root, "functions", "package.json"), "{}");
+    writeFileSync(join(root, "functions", "index.js.map"), "{}");
+    writeFileSync(join(root, "app.js.map"), "{}");
+
+    expect(rel(collectSourceMaps(root))).toEqual(["app.js.map"]);
+  });
+
   it("returns [] for a missing directory", () => {
     expect(collectSourceMaps(join(root, "does-not-exist"))).toEqual([]);
   });

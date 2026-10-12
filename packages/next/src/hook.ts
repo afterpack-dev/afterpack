@@ -4,6 +4,7 @@ import {
   type AfterpackPluginOptions,
   collectJsFiles,
   collectSourceMaps,
+  collectStylesheets,
   createTelemetryReporter,
   type ObfuscationEngine,
   passSettings,
@@ -76,7 +77,7 @@ export function stripServedSourceMaps(
   for (const js of chunks) {
     if (stripTrailer(js)) trailers++;
   }
-  trailers += stripCssSourceMappingURLs(servedDir);
+  trailers += stripCssSourceMappingURLs(collectStylesheets(servedDir));
 
   if (removed > 0 || trailers > 0) {
     const tail = trailers > 0 ? ` + ${trailers} sourceMappingURL trailer(s)` : "";
