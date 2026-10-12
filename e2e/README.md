@@ -117,7 +117,7 @@ To write one:
 1. Give the fixture a `baseline` in the registry. It builds the fixture with
    `AFTERPACK_build_autorun=false` into its own output directory, such as `dist-baseline` or
    `.next-baseline`, and serves it on its port plus 100. `receipts` names the baseline's
-   counterpart of each receipt directory.
+   counterpart of each output directory a receipt covers.
 2. Write the steps as a function of `{ page, build, checkpoint, inPlace }`. Assert with Playwright's
    web-first assertions. The steps run once per build, so an assertion that fails names the build
    it failed in; a baseline failure means the fixture or the scenario is wrong.

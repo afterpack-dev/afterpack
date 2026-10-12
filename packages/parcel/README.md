@@ -30,8 +30,9 @@ build fails.
 
 ## Check a deploy
 
-Add the plugin's reporter to the build command, and each build writes `.afterpack-protection.json`
-into the target's output directory, a receipt with a hash per obfuscated bundle:
+Add the plugin's reporter to the build command, and each build writes a receipt with a hash per
+obfuscated bundle to the project's `.afterpack/receipts/`, one per target output directory
+(`.afterpack/receipts/dist.json` for `dist`), so it never ships with the build:
 
 ```sh
 parcel build index.html --reporter @afterpack/parcel-optimizer/reporter

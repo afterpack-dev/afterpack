@@ -34,9 +34,10 @@ them there. If that matters to you, use a bundler with an in-memory plugin, such
 [`@afterpack/vite`](https://www.npmjs.com/package/@afterpack/vite) or
 [`@afterpack/rollup`](https://www.npmjs.com/package/@afterpack/rollup).
 
-Each build writes a protection receipt, `.afterpack-protection.json`, into the output directory.
-Run `npx afterpack verify dist` in your deploy step to check that what you ship is what was
-obfuscated.
+Each build writes a protection receipt to the project's `.afterpack/receipts/`, one per output
+directory (`.afterpack/receipts/dist.json` for `dist`), so it never ships with your build. Run
+`npx afterpack verify dist` from the project in your deploy step to check that what you ship is
+what was obfuscated.
 
 ## Options
 

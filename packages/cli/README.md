@@ -31,7 +31,8 @@ Nested `node_modules/` folders are skipped. Pass [`--paths.include`][paths.inclu
 
 Each run writes:
 
-- `.afterpack-protection.json` in the output directory, the receipt that `afterpack verify` checks.
+- `.afterpack/receipts/<output dir>.json` (`.afterpack/receipts/dist.json` for `dist`), the receipt
+  that `afterpack verify` checks. It stays out of the output directory, so it never ships.
 - `.afterpack/backup/`, a copy of the original files, so `afterpack restore` can undo the run.
   Turn it off with [`--build.backup`][build.backup]`=false`.
 - `.afterpack/protectionMap.html`, the [Protection Map](https://www.afterpack.dev/docs/protection-map),
@@ -53,7 +54,8 @@ runs. It never prompts.
 
 ## `afterpack verify [dir]`
 
-Checks a build against its protection receipt. Run it in your deploy step.
+Checks a build against its protection receipt in `.afterpack/receipts/`. Run it in your deploy
+step, from the project the build ran in.
 
 ```sh
 npx afterpack@latest verify .        # looks in ./ and ./.next/

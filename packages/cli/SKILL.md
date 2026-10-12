@@ -67,7 +67,10 @@ Rules:
 
 ## What a run writes
 
-- `.afterpack-protection.json` in the output directory: the receipt `afterpack verify` checks.
+- `.afterpack/receipts/<output dir>.json` (`.afterpack/receipts/dist.json` for `dist`): the receipt
+  `afterpack verify` checks. Every front door writes it under the project's `.afterpack/`, never
+  into the output directory, and a run removes a `.afterpack-protection.json` an older version left
+  in the output.
 - `.afterpack/backup/`: the original files, on by default for the CLI, so `afterpack restore` can
   undo the run. `--build.backup=false` turns it off.
 - `.afterpack/protectionMap.html`: the Protection Map report, when the build has source maps.
@@ -198,7 +201,9 @@ Details: https://www.afterpack.dev/docs/pro
 
 ## `afterpack verify [dir]`
 
-Add this to the deploy step. It re-hashes every file the protection receipt names.
+Add this to the deploy step, run from the project the build ran in. It finds the receipt for
+`[dir]` in the `.afterpack/receipts/` at or above it (or in the working directory's) and re-hashes
+every file that receipt names.
 
 ```bash
 npx afterpack@latest verify .        # looks in ./ and ./.next/
