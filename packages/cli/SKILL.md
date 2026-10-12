@@ -78,13 +78,15 @@ Rules:
 Every other run is a production run, `CI` and an unset `NODE_ENV` included. It deletes the build's
 own source maps, hidden ones included, and the `sourceMappingURL` comments that name them.
 
-Every front door puts `.afterpack/` next to the project's `package.json`, `afterpack.json` or
-`.git` nearest above the build directory, otherwise beside the build directory, never inside it
-(`cd public && npx afterpack .` keeps it beside `public/`). For a single file, the file's own
-directory counts when it holds one of those, so `npx afterpack app.js` in a project root keeps
-`.afterpack/` in that root. The place does not depend on the working directory, so a re-run over the same output is refused from anywhere. A run fails if it
-finds a `.afterpack/` inside the output, and removes a `.afterpack-protection.json` an older
-version left there.
+Every front door puts `.afterpack/` next to the nearest lockfile, `afterpack.json` or `.git` above
+the build directory, failing those the nearest `package.json`, otherwise beside the build
+directory, never inside it (`cd public && npx afterpack .` keeps it beside `public/`). A
+`package.json` the build emits, such as Nitro's `.output/server/package.json` or a dual package's
+`dist/cjs/package.json`, never moves it. For a single file, the file's own directory counts when it
+holds a lockfile, `afterpack.json` or `.git`, so `npx afterpack app.js` in such a root keeps
+`.afterpack/` there. The place does not depend on the working directory, so a re-run over the same
+output or the same file is refused from anywhere. A run fails if it finds a `.afterpack/` inside
+the output, and removes a `.afterpack-protection.json` an older version left there.
 
 The backup and the Protection Map contain the original source. `.afterpack/` carries its own
 `.gitignore` and self-ignores. Never deploy, publish or commit them.

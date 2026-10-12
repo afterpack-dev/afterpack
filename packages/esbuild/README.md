@@ -35,10 +35,10 @@ them there. If that matters to you, use a bundler with an in-memory plugin, such
 [`@afterpack/rollup`](https://www.npmjs.com/package/@afterpack/rollup).
 
 Each build writes a protection receipt to `.afterpack/receipts/`, one per output directory
-(`.afterpack/receipts/dist.json` for `dist`). `.afterpack/` sits next to your project's
-`package.json`, `afterpack.json` or `.git`, otherwise beside the build directory, so the receipt
-never ships with your build. Run `npx afterpack verify dist` in your deploy step to check that what
-you ship is what was obfuscated.
+(`.afterpack/receipts/dist.json` for `dist`). `.afterpack/` sits next to your project's lockfile,
+`afterpack.json` or `.git` (failing those, its `package.json`), otherwise beside the build
+directory, so the receipt never ships with your build. Run `npx afterpack verify dist` in your
+deploy step to check that what you ship is what was obfuscated.
 
 ## Options
 

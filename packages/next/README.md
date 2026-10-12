@@ -38,9 +38,10 @@ the comments that point at them, since a served source map gives your source awa
 ## Check a deploy
 
 Each build writes `.afterpack/receipts/.next.json`, a receipt with a hash per obfuscated file.
-`.afterpack/` sits next to your project's `package.json`, `afterpack.json` or `.git`, out of
-`.next/`, so it never ships with the build. Run `npx afterpack verify .` before you deploy. It fails when the receipt is missing,
-belongs to a different build, or a file changed after obfuscation.
+`.afterpack/` sits next to your project's lockfile, `afterpack.json` or `.git` (failing those, its
+`package.json`), out of `.next/`, so it never ships with the build. Run `npx afterpack verify .`
+before you deploy. It fails when the receipt is missing, belongs to a different build, or a file
+changed after obfuscation.
 
 ## Options
 

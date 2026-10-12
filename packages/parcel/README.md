@@ -32,9 +32,9 @@ build fails.
 
 Add the plugin's reporter to the build command, and each build writes a receipt with a hash per
 obfuscated bundle to `.afterpack/receipts/`, one per target output directory
-(`.afterpack/receipts/dist.json` for `dist`). `.afterpack/` sits next to your project's
-`package.json`, `afterpack.json` or `.git`, otherwise beside the output directory, so the receipt
-never ships with the build:
+(`.afterpack/receipts/dist.json` for `dist`). `.afterpack/` sits next to your project's lockfile,
+`afterpack.json` or `.git` (failing those, its `package.json`), otherwise beside the output
+directory, so the receipt never ships with the build:
 
 ```sh
 parcel build index.html --reporter @afterpack/parcel-optimizer/reporter

@@ -44,12 +44,14 @@ Each run writes:
 Every other run is a production run: it deletes your build's own source maps, hidden ones included,
 and the `sourceMappingURL` comments that name them, so no original source ships beside the output.
 
-`.afterpack/` sits next to your project's `package.json`, `afterpack.json` or `.git`, otherwise
-beside the build directory, never inside it: `cd public && npx afterpack .` keeps it beside
-`public/`. A single file in your project root, `npx afterpack app.js`, keeps it in that root. The
-same place holds every run's files whatever directory you run from, so a second run
-over the same output is refused from anywhere. A run fails if it finds a `.afterpack/` inside the
-output, and removes a `.afterpack-protection.json` an older version left there.
+`.afterpack/` sits next to your project's lockfile, `afterpack.json` or `.git` (failing those, its
+`package.json`), otherwise beside the build directory, never inside it: `cd public && npx afterpack
+.` keeps it beside `public/`, and a `package.json` your build emits, such as Nitro's
+`.output/server/package.json`, never moves it. A single file in a project root that holds a
+lockfile, `afterpack.json` or `.git` keeps it in that root. The same place holds every run's files
+whatever directory you run from, so a second run over the same output, or over the same file, is
+refused from anywhere. A run fails if it finds a `.afterpack/` inside the output, and removes a
+`.afterpack-protection.json` an older version left there.
 
 The backup and the Protection Map contain your original source. `.afterpack/` carries its own
 `.gitignore` and self-ignores. Never deploy or commit them.
