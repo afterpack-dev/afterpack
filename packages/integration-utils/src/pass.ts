@@ -1,6 +1,5 @@
-import { readFileSync, unlinkSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import type { ProtectionMap } from "@afterpack/protection-map";
 import {
   DEFAULT_LOGGER,
@@ -9,6 +8,7 @@ import {
   writeArtifacts,
   writeCombinedProtectionMap,
 } from "./artifacts.js";
+import { collectSourceMaps } from "./collect.js";
 import {
   assertSupportedCore,
   type ClientIdentity,
@@ -59,7 +59,10 @@ import type { CoreConfigSubset, SourceType } from "./registry.js";
 import { resolveBuildSeed, type SeedOption, type SeedOrigin } from "./seed.js";
 import {
   bundlerSourceMapPaths,
+  containedSourceMaps,
   discoverInputSourceMap,
+  removeSourceMaps,
+  stripCssSourceMappingURLs,
   withSourceMappingURL,
 } from "./source-map.js";
 import { formatPassSummary, type PassSummaryStyle } from "./summary.js";
@@ -158,6 +161,7 @@ export interface ObfuscationPassOptions {
   messages?: PassMessages;
   receipt?: PassReceiptIdentity;
   afterWrite?: () => void;
+  sourceMapSweepDir?: string | null;
   diagnostics?: DiagnosticsVerbosity;
   telemetry?: TelemetryReporter;
   clientVersion?: string;
@@ -231,25 +235,26 @@ function fileFailure(f: EngineFileResult, source: string): string | null {
   return null;
 }
 
-function removeBundlerSourceMaps(
-  mapPaths: string[] | undefined,
-  replacedBy: string | null,
-  prefix: (message: string) => string,
-): void {
-  const kept = replacedBy == null ? null : resolve(replacedBy);
-  for (const mapPath of mapPaths ?? []) {
-    if (mapPath === kept) continue;
-    try {
-      unlinkSync(mapPath);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
-      throw new Error(
-        prefix(
-          `could not remove the bundler's source map ${mapPath}, refusing to ship it: ${error}`,
-        ),
-      );
-    }
+function removeBundlerSourceMaps(input: {
+  perFile: Iterable<string[]>;
+  sweepDir: string | null;
+  engineMaps: Set<string>;
+  policy: ReportPolicy;
+  label: string;
+}): void {
+  const { sweepDir, engineMaps, policy, label } = input;
+  const bundlerMaps = new Set<string>([...input.perFile].flat());
+  if (sweepDir != null) {
+    const swept = collectSourceMaps(sweepDir).filter(
+      (path) => !policy.sourceMap || !path.endsWith(".css.map"),
+    );
+    for (const path of containedSourceMaps(swept, sweepDir)) bundlerMaps.add(path);
   }
+  removeSourceMaps(
+    [...bundlerMaps].filter((path) => !engineMaps.has(path)),
+    label,
+  );
+  if (sweepDir != null && !policy.sourceMap) stripCssSourceMappingURLs(sweepDir);
 }
 
 async function readEngineVersion(engine: ObfuscationEngine): Promise<string | null> {
@@ -337,6 +342,11 @@ export async function runObfuscationPass(
 
   const sourceByPath = new Map<string, string>();
   const bundlerMapsByPath = new Map<string, string[]>();
+  const sweepDir =
+    options.sourceMapSweepDir === undefined
+      ? combinedProtectionMap.buildDir
+      : options.sourceMapSweepDir;
+  const sourceMapRoot = sweepDir ?? combinedProtectionMap.buildDir;
   let coloredRegionCount = 0;
   let directivesNeededMap = false;
   let postMinifyMapsSeen = 0;
@@ -349,10 +359,7 @@ export async function runObfuscationPass(
       : (onDiskBytes.get(filePath) ?? readFileSync(filePath)).toString("utf8");
     sourceByPath.set(filePath, source);
     if (!provided && !options.emitToCaller) {
-      bundlerMapsByPath.set(
-        filePath,
-        bundlerSourceMapPaths(filePath, source, combinedProtectionMap.buildDir),
-      );
+      bundlerMapsByPath.set(filePath, bundlerSourceMapPaths(filePath, source, sourceMapRoot));
     }
     const inputSourceMap = provided
       ? (provided.sourceMap ?? null)
@@ -601,6 +608,7 @@ export async function runObfuscationPass(
 
   const writtenFiles: string[] = [];
   const emittedFiles: string[] = [];
+  const engineMaps = new Set<string>();
   for (const { result: f, source } of verified) {
     if (options.emitToCaller) {
       outputs.push({ path: f.path, code: f.code, sourceMap: f.sourceMap ?? null });
@@ -617,12 +625,23 @@ export async function runObfuscationPass(
       mode: "framework",
       logger,
     });
-    removeBundlerSourceMaps(bundlerMapsByPath.get(f.path), written.mapPath, prefix);
     writtenFiles.push(written.codePath);
-    if (written.mapPath) sensitiveArtifactPaths.push(written.mapPath);
+    if (written.mapPath) {
+      sensitiveArtifactPaths.push(written.mapPath);
+      engineMaps.add(realpathSync(written.mapPath));
+    }
     if (written.backupPath) sensitiveArtifactPaths.push(written.backupPath);
   }
-  if (!options.emitToCaller) options.afterWrite?.();
+  if (!options.emitToCaller) {
+    removeBundlerSourceMaps({
+      perFile: bundlerMapsByPath.values(),
+      sweepDir,
+      engineMaps,
+      policy,
+      label,
+    });
+    options.afterWrite?.();
+  }
 
   const protectionMapPath = writeCombinedProtectionMap({
     buildDir: combinedProtectionMap.buildDir,

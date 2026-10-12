@@ -464,6 +464,7 @@ async function runObfuscationAndBackup(input: {
   engine: ObfuscationEngine;
   cwd: string;
   buildDir: string;
+  sweepSourceMaps: boolean;
   sourceType?: SourceType;
   startedAt: number;
   version: string;
@@ -505,6 +506,7 @@ async function runObfuscationAndBackup(input: {
             buildDir: input.buildDir,
             afterpackDir: join(input.cwd, ".afterpack"),
           },
+          sourceMapSweepDir: input.sweepSourceMaps ? input.buildDir : null,
           artifactOptions: {
             ...input.parsed.artifactOptions,
             build: { ...input.parsed.artifactOptions.build, backup: false },
@@ -939,6 +941,7 @@ export async function run(deps: CliDeps): Promise<number> {
     engine,
     cwd,
     buildDir,
+    sweepSourceMaps: isDirectory,
     sourceType: detectCliSourceType({ files, buildDir }),
     startedAt,
     version,

@@ -1,19 +1,31 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   bundlerSourceMapPaths,
+  containedSourceMaps,
   decodeDataUri,
   discoverInputSourceMap,
   extractSourceMappingURL,
   isRemoteSourceMappingURL,
+  removeSourceMaps,
+  stripCssSourceMappingURLs,
   withoutCssSourceMappingURL,
 } from "./source-map.js";
 
 let dir: string;
 beforeAll(() => {
-  dir = mkdtempSync(join(tmpdir(), "afterpack-sourcemap-test-"));
+  dir = realpathSync(mkdtempSync(join(tmpdir(), "afterpack-sourcemap-test-")));
 });
 afterAll(() => {
   rmSync(dir, { recursive: true, force: true });
@@ -138,7 +150,6 @@ describe("bundlerSourceMapPaths", () => {
     mkdirSync(join(out, "maps"), { recursive: true });
     const js = join(out, "app.js");
     const code = "var a=1;\n//# sourceMappingURL=maps/app.map\n";
-    writeFileSync(js, code);
     writeFileSync(`${js}.map`, MAP);
     writeFileSync(join(out, "maps", "app.map"), MAP);
     expect(bundlerSourceMapPaths(js, code, out)).toEqual([
@@ -153,6 +164,24 @@ describe("bundlerSourceMapPaths", () => {
     const js = join(out, "app.js");
     writeFileSync(`${js}.map`, MAP);
     expect(bundlerSourceMapPaths(js, "var a=1;", out)).toEqual([`${js}.map`]);
+  });
+
+  it("drops a query or hash, resolves a root-relative URL against the build directory, and reads every trailer", () => {
+    const out = join(dir, "urls");
+    mkdirSync(join(out, "assets"), { recursive: true });
+    const js = join(out, "assets", "app.js");
+    for (const name of ["q.map", "r.map", "mid.map"]) writeFileSync(join(out, "assets", name), MAP);
+    const code = [
+      "var a=1;",
+      "//# sourceMappingURL=mid.map",
+      "var b=2;",
+      "//# sourceMappingURL=/assets/r.map",
+      "//# sourceMappingURL=q.map?v=1#top",
+      "",
+    ].join("\n");
+    expect(bundlerSourceMapPaths(js, code, out).sort()).toEqual(
+      ["mid.map", "q.map", "r.map"].map((name) => join(out, "assets", name)),
+    );
   });
 
   it("names no file for an inline data URI, a remote URL or a missing map", () => {
@@ -179,5 +208,49 @@ describe("bundlerSourceMapPaths", () => {
     expect(bundlerSourceMapPaths(js, "var a=1;\n//# sourceMappingURL=notes.txt\n", out)).toEqual(
       [],
     );
+  });
+});
+
+describe("containedSourceMaps", () => {
+  it("rejects a map reached through a symlinked directory that leads outside the root", () => {
+    const outside = join(dir, "contained-outside");
+    const out = join(dir, "contained", "dist");
+    mkdirSync(outside, { recursive: true });
+    mkdirSync(out, { recursive: true });
+    writeFileSync(join(outside, "app.js.map"), MAP);
+    writeFileSync(join(out, "own.js.map"), MAP);
+    symlinkSync(outside, join(out, "linked"), "dir");
+    expect(
+      containedSourceMaps([join(out, "linked", "app.js.map"), join(out, "own.js.map")], out),
+    ).toEqual([join(out, "own.js.map")]);
+  });
+});
+
+describe("removeSourceMaps", () => {
+  it("deletes each map, skips one already gone, and counts what it removed", () => {
+    const out = join(dir, "remove");
+    mkdirSync(out, { recursive: true });
+    writeFileSync(join(out, "a.js.map"), MAP);
+    expect(removeSourceMaps([join(out, "a.js.map"), join(out, "gone.js.map")], "t")).toBe(1);
+    expect(existsSync(join(out, "a.js.map"))).toBe(false);
+  });
+
+  it("fails, naming the map, when one cannot be removed", () => {
+    const out = join(dir, "remove-fails");
+    mkdirSync(join(out, "dir.js.map"), { recursive: true });
+    expect(() => removeSourceMaps([join(out, "dir.js.map")], "afterpack-test")).toThrow(
+      /\[afterpack-test\] could not remove the source map .*dir\.js\.map, refusing to ship it/,
+    );
+  });
+});
+
+describe("stripCssSourceMappingURLs", () => {
+  it("strips the trailer from every stylesheet under the directory and counts them", () => {
+    const out = join(dir, "css");
+    mkdirSync(join(out, "nested"), { recursive: true });
+    writeFileSync(join(out, "a.css"), "a{}\n/*# sourceMappingURL=a.css.map*/");
+    writeFileSync(join(out, "nested", "b.css"), "b{}\n");
+    expect(stripCssSourceMappingURLs(out)).toBe(1);
+    expect(readFileSync(join(out, "a.css"), "utf8")).toBe("a{}\n");
   });
 });

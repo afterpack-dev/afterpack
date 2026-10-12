@@ -1,5 +1,13 @@
-import { existsSync, readFileSync } from "node:fs";
+import {
+  existsSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, isAbsolute, resolve, sep } from "node:path";
+import { collectStylesheets } from "./collect.js";
 
 const SOURCE_MAPPING_URL_RE = /\/\/[#@]\s*sourceMappingURL=(\S+)\s*$/gm;
 
@@ -48,8 +56,9 @@ export function decodeDataUri(url: string): string | null {
 
 function localSourceMapPath(jsPath: string, url: string): string | null {
   if (url.startsWith("data:") || isRemoteSourceMappingURL(url)) return null;
+  const path = url.replace(/[?#].*$/, "");
   try {
-    return isAbsolute(url) ? url : resolve(dirname(jsPath), decodeURIComponent(url));
+    return isAbsolute(path) ? path : resolve(dirname(jsPath), decodeURIComponent(path));
   } catch {
     return null;
   }
@@ -89,14 +98,68 @@ export function discoverInputSourceMap(jsPath: string, code?: string): string | 
 }
 
 export function bundlerSourceMapPaths(jsPath: string, code: string, root: string): string[] {
-  const url = extractSourceMappingURL(code);
-  const candidates = [`${jsPath}.map`, url == null ? null : localSourceMapPath(jsPath, url)];
-  const inside = resolve(root) + sep;
+  const candidates = [`${jsPath}.map`];
+  for (const match of code.matchAll(SOURCE_MAPPING_URL_RE)) {
+    const url = match[1];
+    const local = localSourceMapPath(jsPath, url);
+    if (local != null) candidates.push(local);
+    if (url.startsWith("/") && !url.startsWith("//")) {
+      try {
+        candidates.push(resolve(root, `.${decodeURIComponent(url.replace(/[?#].*$/, ""))}`));
+      } catch {}
+    }
+  }
+  return containedSourceMaps(candidates, root);
+}
+
+function realpathOrNull(path: string): string | null {
+  try {
+    return realpathSync(path);
+  } catch {
+    return null;
+  }
+}
+
+export function containedSourceMaps(paths: Iterable<string>, root: string): string[] {
+  const rootReal = realpathOrNull(root);
+  if (rootReal == null) return [];
+  const prefix = rootReal.endsWith(sep) ? rootReal : `${rootReal}${sep}`;
   const found = new Set<string>();
-  for (const candidate of candidates) {
-    if (candidate == null || !candidate.endsWith(".map")) continue;
-    if (!resolve(candidate).startsWith(inside) || !existsSync(candidate)) continue;
-    found.add(resolve(candidate));
+  for (const path of paths) {
+    if (!path.endsWith(".map")) continue;
+    const real = realpathOrNull(path);
+    if (real == null || !real.startsWith(prefix)) continue;
+    try {
+      if (statSync(real).isFile()) found.add(real);
+    } catch {}
   }
   return [...found];
+}
+
+export function removeSourceMaps(paths: Iterable<string>, label: string): number {
+  let removed = 0;
+  for (const path of paths) {
+    try {
+      unlinkSync(path);
+      removed++;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+      throw new Error(
+        `[${label}] could not remove the source map ${path}, refusing to ship it: ${error}`,
+      );
+    }
+  }
+  return removed;
+}
+
+export function stripCssSourceMappingURLs(dir: string): number {
+  let stripped = 0;
+  for (const path of collectStylesheets(dir)) {
+    const css = readFileSync(path, "utf8");
+    const without = withoutCssSourceMappingURL(css);
+    if (without === css) continue;
+    writeFileSync(path, without);
+    stripped++;
+  }
+  return stripped;
 }

@@ -1,17 +1,17 @@
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   type AfterpackPluginOptions,
   collectJsFiles,
   collectSourceMaps,
-  collectStylesheets,
   createTelemetryReporter,
   type ObfuscationEngine,
   passSettings,
+  removeSourceMaps,
   resolveClientIdentity,
   resolvePluginConfig,
   runObfuscationPass,
-  withoutCssSourceMappingURL,
+  stripCssSourceMappingURLs,
   withSourceMappingURL,
 } from "@afterpack/integration-utils";
 
@@ -58,16 +58,12 @@ function detectBundler(distDir: string): string {
   return "unknown";
 }
 
-function stripTrailer(path: string, strip: (code: string) => string): boolean {
-  try {
-    const code = readFileSync(path, "utf8");
-    const stripped = strip(code);
-    if (stripped === code) return false;
-    writeFileSync(path, stripped);
-    return true;
-  } catch {
-    return false;
-  }
+function stripTrailer(path: string): boolean {
+  const code = readFileSync(path, "utf8");
+  const stripped = withSourceMappingURL(code, null);
+  if (stripped === code) return false;
+  writeFileSync(path, stripped);
+  return true;
 }
 
 export function stripServedSourceMaps(
@@ -75,23 +71,12 @@ export function stripServedSourceMaps(
   servedDir: string,
   log: (message: string) => void = (message) => console.log(message),
 ): void {
-  let removed = 0;
-  for (const mapPath of collectSourceMaps(servedDir)) {
-    try {
-      unlinkSync(mapPath);
-      removed++;
-    } catch (e) {
-      console.warn(`[${LABEL}] could not remove served source map ${mapPath}: ${e}`);
-    }
-  }
-
+  const removed = removeSourceMaps(collectSourceMaps(servedDir), LABEL);
   let trailers = 0;
   for (const js of chunks) {
-    if (stripTrailer(js, (code) => withSourceMappingURL(code, null))) trailers++;
+    if (stripTrailer(js)) trailers++;
   }
-  for (const css of collectStylesheets(servedDir)) {
-    if (stripTrailer(css, withoutCssSourceMappingURL)) trailers++;
-  }
+  trailers += stripCssSourceMappingURLs(servedDir);
 
   if (removed > 0 || trailers > 0) {
     const tail = trailers > 0 ? ` + ${trailers} sourceMappingURL trailer(s)` : "";
@@ -145,6 +130,7 @@ export async function runAfterpackHook(input: AfterpackHookInput): Promise<void>
     cwd: projectDir,
     startedAt,
     combinedProtectionMap: { buildDir: distDir, afterpackDir: join(projectDir, ".afterpack") },
+    sourceMapSweepDir: join(distDir, "static"),
     ...passSettings(resolved),
     postMinify: true,
     afterWrite: () => {

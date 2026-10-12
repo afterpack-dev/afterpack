@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -222,6 +230,24 @@ describe("stripServedSourceMaps", () => {
       "[afterpack-next] stripped 2 served source map(s) + 2 sourceMappingURL trailer(s) from the client tree",
     ]);
   });
+
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+    "fails the build when a served map cannot be removed",
+    () => {
+      const p = project();
+      const locked = join(p.chunksDir, "locked");
+      mkdirSync(locked, { recursive: true });
+      writeFileSync(join(locked, "a.js.map"), '{"version":3}');
+      chmodSync(locked, 0o555);
+      try {
+        expect(() => stripServedSourceMaps([], join(p.distDir, "static"))).toThrow(
+          /\[afterpack-next\] could not remove the source map .*a\.js\.map, refusing to ship it/,
+        );
+      } finally {
+        chmodSync(locked, 0o755);
+      }
+    },
+  );
 
   it("is a no-op (no throw) when there are no served maps", () => {
     const p = project();

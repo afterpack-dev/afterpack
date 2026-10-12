@@ -19,16 +19,16 @@ function resolveOutputs(
   io: BuildOptions,
   cwd: string,
   include: readonly string[] | undefined,
-): { files: string[]; buildDir: string } {
+): { files: string[]; buildDir: string; sweepDir: string | null } {
   if (io.outdir) {
     const dir = isAbsolute(io.outdir) ? io.outdir : resolve(cwd, io.outdir);
-    return { files: collectJsFiles(dir, { include }), buildDir: dir };
+    return { files: collectJsFiles(dir, { include }), buildDir: dir, sweepDir: dir };
   }
   if (io.outfile) {
     const file = isAbsolute(io.outfile) ? io.outfile : resolve(cwd, io.outfile);
-    return { files: existsSync(file) ? [file] : [], buildDir: dirname(file) };
+    return { files: existsSync(file) ? [file] : [], buildDir: dirname(file), sweepDir: null };
   }
-  return { files: [], buildDir: cwd };
+  return { files: [], buildDir: cwd, sweepDir: null };
 }
 
 const POST_MINIFY_DIRECTIVE_RECOVERY = true;
@@ -48,7 +48,7 @@ export function afterpackEsbuild(options: AfterpackEsbuildOptions = {}): Plugin 
 
         const startedBeforeOutputWalk = Date.now();
         const cwd = io.absWorkingDir ?? process.cwd();
-        const { files, buildDir } = resolveOutputs(io, cwd, settings.paths?.include);
+        const { files, buildDir, sweepDir } = resolveOutputs(io, cwd, settings.paths?.include);
         if (files.length === 0) return;
 
         const gitignoredNonServedAfterpackDir = join(cwd, ".afterpack");
@@ -61,6 +61,7 @@ export function afterpackEsbuild(options: AfterpackEsbuildOptions = {}): Plugin 
           cwd,
           startedAt: startedBeforeOutputWalk,
           combinedProtectionMap: { buildDir, afterpackDir: gitignoredNonServedAfterpackDir },
+          sourceMapSweepDir: sweepDir,
           ...passSettings(resolved),
           sourceType: sourceTypeForOutputFormat(io.format),
           hasBundlerSourcemap: Boolean(io.sourcemap),

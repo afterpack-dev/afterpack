@@ -144,6 +144,8 @@ export {
   decodeDataUri,
   discoverInputSourceMap,
   extractSourceMappingURL,
+  removeSourceMaps,
+  stripCssSourceMappingURLs,
   withoutCssSourceMappingURL,
   withSourceMappingURL,
 } from "./source-map.js";
