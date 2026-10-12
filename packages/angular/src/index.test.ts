@@ -177,7 +177,14 @@ const BUNDLER_MAP = JSON.stringify({
   sourcesContent: ["export const secret: string = 'ORIGINAL';"],
   mappings: "AAAA",
 });
-const ENGINE_MAP = '{"version":3,"sources":["chained.ts"],"mappings":"AAAA"}';
+const CSS_MAP = JSON.stringify({ version: 3, sources: ["src/app.css"], mappings: "AAAA" });
+const ENGINE_MAP = JSON.stringify({
+  version: 3,
+  sources: ["src/secret.ts"],
+  sourcesContent: ["export const secret: string = 'ORIGINAL';"],
+  mappings: "AAAA",
+  names: ["engine"],
+});
 
 function writeBundlerMappedOutput(dir: string): void {
   mkdirSync(join(dir, "maps"), { recursive: true });
@@ -190,6 +197,9 @@ function writeBundlerMappedOutput(dir: string): void {
   );
   writeFileSync(join(dir, "renamed.js"), "var r=1;\n//# sourceMappingURL=maps/renamed.map\n");
   writeFileSync(join(dir, "maps", "renamed.map"), BUNDLER_MAP);
+  writeFileSync(join(dir, "maps", "stale-chunk.js.map"), BUNDLER_MAP);
+  writeFileSync(join(dir, "styles.css"), "a{}\n/*# sourceMappingURL=styles.css.map*/");
+  writeFileSync(join(dir, "styles.css.map"), CSS_MAP);
 }
 
 function mapsUnder(dir: string): string[] {
@@ -199,42 +209,43 @@ function mapsUnder(dir: string): string[] {
     .sort();
 }
 
-function shipsBundlerSource(dir: string): string[] {
+function bundlerSourceLeftIn(dir: string): string[] {
+  const inline = Buffer.from(BUNDLER_MAP).toString("base64");
   return readdirSync(dir, { recursive: true, encoding: "utf8" }).filter((name) => {
-    const full = join(dir, name);
-    if (!name.endsWith(".js") && !name.endsWith(".map")) return false;
-    const text = readFileSync(full, "utf8");
-    return text.includes("ORIGINAL") || text.includes(Buffer.from(BUNDLER_MAP).toString("base64"));
+    if (!/\.(?:js|map)$/.test(name)) return false;
+    const text = readFileSync(join(dir, name), "utf8");
+    return text === BUNDLER_MAP || text.includes(inline);
   });
 }
 
+function trailersIn(dir: string, names: string[]): string[] {
+  return names.filter((name) => readFileSync(join(dir, name), "utf8").includes("sourceMappingURL"));
+}
+
+const OUTPUTS = ["external.js", "inline.js", "renamed.js", "styles.css"];
+const ENGINE_MAPS = ["external.js.map", "inline.js.map", "renamed.js.map"];
+
 describe("afterpackAngular never ships the Angular builder's own source map", () => {
-  it("deletes external maps and strips inline ones in a production build", async () => {
+  it("deletes external, hidden and CSS maps and strips inline ones by default", async () => {
     writeBundlerMappedOutput(browserDir);
 
-    await afterpackAngular({ cwd: root, build: { mode: "production" } });
+    await afterpackAngular({ cwd: root });
 
     expect(mapsUnder(browserDir)).toEqual([]);
-    expect(shipsBundlerSource(browserDir)).toEqual([]);
-    for (const name of ["external.js", "inline.js", "renamed.js"]) {
-      expect(readFileSync(join(browserDir, name), "utf8")).not.toContain("sourceMappingURL");
-    }
+    expect(bundlerSourceLeftIn(browserDir)).toEqual([]);
+    expect(trailersIn(browserDir, OUTPUTS)).toEqual([]);
   });
 
-  it("ships only the engine's map when sourceMap.enabled opts in", async () => {
+  it("ships the engine's maps, never the builder's, when sourceMap.enabled opts in", async () => {
     writeBundlerMappedOutput(browserDir);
     __setProcessResult((input) => ({ code: `OBF:${input}`, sourceMap: ENGINE_MAP }));
 
-    await afterpackAngular({
-      cwd: root,
-      build: { mode: "production" },
-      sourceMap: { enabled: true },
-    });
+    await afterpackAngular({ cwd: root, sourceMap: { enabled: true } });
 
-    expect(mapsUnder(browserDir)).toEqual(["external.js.map", "inline.js.map", "renamed.js.map"]);
-    for (const map of mapsUnder(browserDir)) {
+    expect(mapsUnder(browserDir)).toEqual([...ENGINE_MAPS, "styles.css.map"]);
+    for (const map of ENGINE_MAPS) {
       expect(readFileSync(join(browserDir, map), "utf8")).toBe(ENGINE_MAP);
     }
-    expect(shipsBundlerSource(browserDir)).toEqual([]);
+    expect(bundlerSourceLeftIn(browserDir)).toEqual([]);
   });
 });
