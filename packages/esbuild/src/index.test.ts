@@ -246,3 +246,70 @@ describe("afterpackEsbuild sourceType", () => {
     expect(engineCalls[0].config.sourceType).toBeUndefined();
   });
 });
+
+const BUNDLER_MAP = JSON.stringify({
+  version: 3,
+  sources: ["src/secret.ts"],
+  sourcesContent: ["export const secret: string = 'ORIGINAL';"],
+  mappings: "AAAA",
+});
+const ENGINE_MAP = '{"version":3,"sources":["chained.ts"],"mappings":"AAAA"}';
+
+function writeBundlerMappedOutput(dir: string): void {
+  mkdirSync(join(dir, "maps"), { recursive: true });
+  writeFileSync(join(dir, "external.js"), "var e=1;\n//# sourceMappingURL=external.js.map\n");
+  writeFileSync(join(dir, "external.js.map"), BUNDLER_MAP);
+  const inline = Buffer.from(BUNDLER_MAP).toString("base64");
+  writeFileSync(
+    join(dir, "inline.js"),
+    `var i=1;\n//# sourceMappingURL=data:application/json;base64,${inline}\n`,
+  );
+  writeFileSync(join(dir, "renamed.js"), "var r=1;\n//# sourceMappingURL=maps/renamed.map\n");
+  writeFileSync(join(dir, "maps", "renamed.map"), BUNDLER_MAP);
+}
+
+function mapsUnder(dir: string): string[] {
+  return readdirSync(dir, { recursive: true, encoding: "utf8" })
+    .filter((name) => name.endsWith(".map"))
+    .map((name) => name.replaceAll("\\", "/"))
+    .sort();
+}
+
+function shipsBundlerSource(dir: string): string[] {
+  return readdirSync(dir, { recursive: true, encoding: "utf8" }).filter((name) => {
+    const full = join(dir, name);
+    if (!name.endsWith(".js") && !name.endsWith(".map")) return false;
+    const text = readFileSync(full, "utf8");
+    return text.includes("ORIGINAL") || text.includes(Buffer.from(BUNDLER_MAP).toString("base64"));
+  });
+}
+
+describe("afterpackEsbuild never ships esbuild's own source map", () => {
+  it("deletes external maps and strips inline ones in a production build", async () => {
+    writeBundlerMappedOutput(outDir);
+
+    await applyPlugin({ build: { mode: "production" } }, { outdir: outDir, absWorkingDir: root })();
+
+    expect(mapsUnder(outDir)).toEqual([]);
+    expect(shipsBundlerSource(outDir)).toEqual([]);
+    for (const name of ["external.js", "inline.js", "renamed.js"]) {
+      expect(readFileSync(join(outDir, name), "utf8")).not.toContain("sourceMappingURL");
+    }
+  });
+
+  it("ships only the engine's map when sourceMap.enabled opts in", async () => {
+    writeBundlerMappedOutput(outDir);
+    __setProcessResult((input) => ({ code: `OBF:${input}`, sourceMap: ENGINE_MAP }));
+
+    await applyPlugin(
+      { build: { mode: "production" }, sourceMap: { enabled: true } },
+      { outdir: outDir, absWorkingDir: root },
+    )();
+
+    expect(mapsUnder(outDir)).toEqual(["external.js.map", "inline.js.map", "renamed.js.map"]);
+    for (const map of mapsUnder(outDir)) {
+      expect(readFileSync(join(outDir, map), "utf8")).toBe(ENGINE_MAP);
+    }
+    expect(shipsBundlerSource(outDir)).toEqual([]);
+  });
+});
