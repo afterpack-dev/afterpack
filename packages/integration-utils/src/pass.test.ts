@@ -234,6 +234,154 @@ describe("runObfuscationPass (production policy)", () => {
   });
 });
 
+const BUNDLER_MAP = JSON.stringify({
+  version: 3,
+  sources: ["src/secret.ts"],
+  sourcesContent: ["export const secret: string = 'ORIGINAL';"],
+  mappings: "AAAA",
+});
+const ENGINE_MAP = '{"version":3,"sources":["chained.ts"],"mappings":"AAAA"}';
+
+function inlineTrailer(json: string): string {
+  return `//# sourceMappingURL=data:application/json;base64,${Buffer.from(json).toString("base64")}`;
+}
+
+describe("runObfuscationPass never ships the bundler's source map", () => {
+  it("deletes the adjacent map and strips the trailer in production", async () => {
+    const a = join(outDir, "a.js");
+    writeFileSync(a, "var a=1;\n//# sourceMappingURL=a.js.map\n");
+    writeFileSync(`${a}.map`, BUNDLER_MAP);
+    const { engine } = makeEngine(() => ({ sourceMap: ENGINE_MAP }));
+
+    await runObfuscationPass({
+      ...baseOptions([a], engine),
+      env: { NODE_ENV: "production" },
+      logger: silentLogger().logger,
+    });
+
+    expect(existsSync(`${a}.map`)).toBe(false);
+    expect(readFileSync(a, "utf8")).toBe("OBF:var a=1;\n");
+  });
+
+  it("deletes a differently named map the trailer points at, and a hidden map no trailer names", async () => {
+    mkdirSync(join(outDir, "maps"));
+    const named = join(outDir, "named.js");
+    const hidden = join(outDir, "hidden.js");
+    writeFileSync(named, "var n=1;\n//# sourceMappingURL=maps/named.map\n");
+    writeFileSync(join(outDir, "maps", "named.map"), BUNDLER_MAP);
+    writeFileSync(hidden, "var h=1;\n");
+    writeFileSync(`${hidden}.map`, BUNDLER_MAP);
+    const { engine } = makeEngine(() => ({}));
+
+    await runObfuscationPass({
+      ...baseOptions([named, hidden], engine),
+      env: { NODE_ENV: "production" },
+      logger: silentLogger().logger,
+    });
+
+    expect(readdirSync(join(outDir, "maps"))).toEqual([]);
+    expect(existsSync(`${hidden}.map`)).toBe(false);
+    expect(readFileSync(named, "utf8")).not.toContain("sourceMappingURL");
+  });
+
+  it("strips an inline data URI map in production", async () => {
+    const a = join(outDir, "a.js");
+    writeFileSync(a, `var a=1;\n${inlineTrailer(BUNDLER_MAP)}\n`);
+    const { engine, calls } = makeEngine(() => ({ sourceMap: ENGINE_MAP }));
+
+    await runObfuscationPass({
+      ...baseOptions([a], engine),
+      env: { NODE_ENV: "production" },
+      logger: silentLogger().logger,
+    });
+
+    expect(calls[0].inputs[0].sourceMap).toBe(BUNDLER_MAP);
+    expect(readFileSync(a, "utf8")).toBe("OBF:var a=1;\n");
+    expect(readdirSync(outDir).filter((f) => f.endsWith(".map"))).toEqual([]);
+  });
+
+  it("replaces the bundler's map with the engine's when sourceMap.enabled opts in", async () => {
+    mkdirSync(join(outDir, "maps"));
+    const a = join(outDir, "a.js");
+    const b = join(outDir, "b.js");
+    const c = join(outDir, "c.js");
+    writeFileSync(a, "var a=1;\n//# sourceMappingURL=a.js.map\n");
+    writeFileSync(`${a}.map`, BUNDLER_MAP);
+    writeFileSync(b, `var b=1;\n${inlineTrailer(BUNDLER_MAP)}\n`);
+    writeFileSync(c, "var c=1;\n//# sourceMappingURL=maps/c.map\n");
+    writeFileSync(join(outDir, "maps", "c.map"), BUNDLER_MAP);
+    const { engine } = makeEngine(() => ({ sourceMap: ENGINE_MAP }));
+
+    await runObfuscationPass({
+      ...baseOptions([a, b, c], engine),
+      env: { NODE_ENV: "production" },
+      artifactOptions: { sourceMap: { enabled: true, emitUrl: true } },
+      logger: silentLogger().logger,
+    });
+
+    for (const [file, name] of [
+      [a, "a.js.map"],
+      [b, "b.js.map"],
+      [c, "c.js.map"],
+    ]) {
+      expect(readFileSync(`${file}.map`, "utf8")).toBe(ENGINE_MAP);
+      const code = readFileSync(file, "utf8");
+      expect(code.match(/sourceMappingURL=/g)).toHaveLength(1);
+      expect(code.endsWith(`//# sourceMappingURL=${name}\n`)).toBe(true);
+    }
+    expect(readdirSync(join(outDir, "maps"))).toEqual([]);
+  });
+
+  it("deletes the bundler's map when the engine returns none, even with sourceMap.enabled", async () => {
+    const a = join(outDir, "a.js");
+    writeFileSync(a, "var a=1;\n//# sourceMappingURL=a.js.map\n");
+    writeFileSync(`${a}.map`, BUNDLER_MAP);
+    const { engine } = makeEngine(() => ({}));
+
+    await runObfuscationPass({
+      ...baseOptions([a], engine),
+      artifactOptions: { sourceMap: { enabled: true, emitUrl: true } },
+      logger: silentLogger().logger,
+    });
+
+    expect(existsSync(`${a}.map`)).toBe(false);
+    expect(readFileSync(a, "utf8")).not.toContain("sourceMappingURL");
+  });
+
+  it("leaves a map outside the build directory alone", async () => {
+    const outside = join(root, "a.js.map");
+    writeFileSync(outside, BUNDLER_MAP);
+    const a = join(outDir, "a.js");
+    writeFileSync(a, "var a=1;\n//# sourceMappingURL=../a.js.map\n");
+    const { engine } = makeEngine(() => ({}));
+
+    await runObfuscationPass({
+      ...baseOptions([a], engine),
+      env: { NODE_ENV: "production" },
+      logger: silentLogger().logger,
+    });
+
+    expect(readFileSync(outside, "utf8")).toBe(BUNDLER_MAP);
+    expect(readFileSync(a, "utf8")).toBe("OBF:var a=1;\n");
+  });
+
+  it("leaves the disk alone when the caller takes the output in memory", async () => {
+    const a = join(outDir, "a.js");
+    writeFileSync(a, "var a=1;\n//# sourceMappingURL=a.js.map\n");
+    writeFileSync(`${a}.map`, BUNDLER_MAP);
+    const { engine } = makeEngine(() => ({}));
+
+    await runObfuscationPass({
+      ...baseOptions([a], engine),
+      env: { NODE_ENV: "production" },
+      emitToCaller: true,
+      logger: silentLogger().logger,
+    });
+
+    expect(readFileSync(`${a}.map`, "utf8")).toBe(BUNDLER_MAP);
+  });
+});
+
 describe("runObfuscationPass fail-closed", () => {
   it("throws (label-prefixed) when the engine reports a failure", async () => {
     const a = join(outDir, "bad.js");

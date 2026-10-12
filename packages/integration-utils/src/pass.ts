@@ -1,5 +1,6 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, unlinkSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import type { ProtectionMap } from "@afterpack/protection-map";
 import {
   DEFAULT_LOGGER,
@@ -56,7 +57,11 @@ import {
 } from "./receipt.js";
 import type { CoreConfigSubset, SourceType } from "./registry.js";
 import { resolveBuildSeed, type SeedOption, type SeedOrigin } from "./seed.js";
-import { discoverInputSourceMap } from "./source-map.js";
+import {
+  bundlerSourceMapPaths,
+  discoverInputSourceMap,
+  withSourceMappingURL,
+} from "./source-map.js";
 import { formatPassSummary, type PassSummaryStyle } from "./summary.js";
 import {
   resolveTelemetryEnabled,
@@ -226,6 +231,27 @@ function fileFailure(f: EngineFileResult, source: string): string | null {
   return null;
 }
 
+function removeBundlerSourceMaps(
+  mapPaths: string[] | undefined,
+  replacedBy: string | null,
+  prefix: (message: string) => string,
+): void {
+  const kept = replacedBy == null ? null : resolve(replacedBy);
+  for (const mapPath of mapPaths ?? []) {
+    if (mapPath === kept) continue;
+    try {
+      unlinkSync(mapPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+      throw new Error(
+        prefix(
+          `could not remove the bundler's source map ${mapPath}, refusing to ship it: ${error}`,
+        ),
+      );
+    }
+  }
+}
+
 async function readEngineVersion(engine: ObfuscationEngine): Promise<string | null> {
   try {
     return (await engine.version?.()) ?? null;
@@ -310,6 +336,7 @@ export async function runObfuscationPass(
   const postMinifyMode = directivesEnabled && options.postMinify === true && !bundledCapture;
 
   const sourceByPath = new Map<string, string>();
+  const bundlerMapsByPath = new Map<string, string[]>();
   let coloredRegionCount = 0;
   let directivesNeededMap = false;
   let postMinifyMapsSeen = 0;
@@ -321,6 +348,12 @@ export async function runObfuscationPass(
       ? provided.source
       : (onDiskBytes.get(filePath) ?? readFileSync(filePath)).toString("utf8");
     sourceByPath.set(filePath, source);
+    if (!provided && !options.emitToCaller) {
+      bundlerMapsByPath.set(
+        filePath,
+        bundlerSourceMapPaths(filePath, source, combinedProtectionMap.buildDir),
+      );
+    }
     const inputSourceMap = provided
       ? (provided.sourceMap ?? null)
       : discoverInputSourceMap(filePath, source);
@@ -576,7 +609,7 @@ export async function runObfuscationPass(
     }
     const written = writeArtifacts({
       outPath: f.path,
-      code: f.code,
+      code: withSourceMappingURL(f.code, null),
       sourceMapJson: f.sourceMap ?? null,
       protectionMapJson: null,
       originalSource: source,
@@ -584,6 +617,7 @@ export async function runObfuscationPass(
       mode: "framework",
       logger,
     });
+    removeBundlerSourceMaps(bundlerMapsByPath.get(f.path), written.mapPath, prefix);
     writtenFiles.push(written.codePath);
     if (written.mapPath) sensitiveArtifactPaths.push(written.mapPath);
     if (written.backupPath) sensitiveArtifactPaths.push(written.backupPath);

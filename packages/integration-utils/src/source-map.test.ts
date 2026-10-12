@@ -1,8 +1,9 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  bundlerSourceMapPaths,
   decodeDataUri,
   discoverInputSourceMap,
   extractSourceMappingURL,
@@ -128,5 +129,55 @@ describe("discoverInputSourceMap", () => {
     const js = join(dir, "in-memory.js");
     writeFileSync(`${js}.map`, MAP);
     expect(discoverInputSourceMap(js, "var ignored=1;")).toBe(MAP);
+  });
+});
+
+describe("bundlerSourceMapPaths", () => {
+  it("finds the adjacent map and the differently named map the trailer points at", () => {
+    const out = join(dir, "both");
+    mkdirSync(join(out, "maps"), { recursive: true });
+    const js = join(out, "app.js");
+    const code = "var a=1;\n//# sourceMappingURL=maps/app.map\n";
+    writeFileSync(js, code);
+    writeFileSync(`${js}.map`, MAP);
+    writeFileSync(join(out, "maps", "app.map"), MAP);
+    expect(bundlerSourceMapPaths(js, code, out)).toEqual([
+      `${js}.map`,
+      join(out, "maps", "app.map"),
+    ]);
+  });
+
+  it("finds an adjacent map that no trailer names, as a hidden map", () => {
+    const out = join(dir, "hidden");
+    mkdirSync(out, { recursive: true });
+    const js = join(out, "app.js");
+    writeFileSync(`${js}.map`, MAP);
+    expect(bundlerSourceMapPaths(js, "var a=1;", out)).toEqual([`${js}.map`]);
+  });
+
+  it("names no file for an inline data URI, a remote URL or a missing map", () => {
+    const out = join(dir, "none-on-disk");
+    mkdirSync(out, { recursive: true });
+    const js = join(out, "app.js");
+    const b64 = Buffer.from(MAP, "utf8").toString("base64");
+    const inline = `var a=1;\n//# sourceMappingURL=data:application/json;base64,${b64}\n`;
+    expect(bundlerSourceMapPaths(js, inline, out)).toEqual([]);
+    const remote = "var a=1;\n//# sourceMappingURL=https://cdn.example.com/app.js.map\n";
+    expect(bundlerSourceMapPaths(js, remote, out)).toEqual([]);
+    expect(bundlerSourceMapPaths(js, "var a=1;\n//# sourceMappingURL=gone.map\n", out)).toEqual([]);
+  });
+
+  it("never names a file outside the build directory or one that is not a .map", () => {
+    const out = join(dir, "bounded", "dist");
+    mkdirSync(out, { recursive: true });
+    writeFileSync(join(dir, "bounded", "app.js.map"), MAP);
+    writeFileSync(join(out, "notes.txt"), "keep");
+    const js = join(out, "app.js");
+    expect(
+      bundlerSourceMapPaths(js, "var a=1;\n//# sourceMappingURL=../app.js.map\n", out),
+    ).toEqual([]);
+    expect(bundlerSourceMapPaths(js, "var a=1;\n//# sourceMappingURL=notes.txt\n", out)).toEqual(
+      [],
+    );
   });
 });

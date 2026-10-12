@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { dirname, isAbsolute, resolve, sep } from "node:path";
 
 const SOURCE_MAPPING_URL_RE = /\/\/[#@]\s*sourceMappingURL=(\S+)\s*$/gm;
 
@@ -46,6 +46,15 @@ export function decodeDataUri(url: string): string | null {
   }
 }
 
+function localSourceMapPath(jsPath: string, url: string): string | null {
+  if (url.startsWith("data:") || isRemoteSourceMappingURL(url)) return null;
+  try {
+    return isAbsolute(url) ? url : resolve(dirname(jsPath), decodeURIComponent(url));
+  } catch {
+    return null;
+  }
+}
+
 export function discoverInputSourceMap(jsPath: string, code?: string): string | null {
   const adjacent = `${jsPath}.map`;
   if (existsSync(adjacent)) {
@@ -70,20 +79,24 @@ export function discoverInputSourceMap(jsPath: string, code?: string): string | 
     return decodeDataUri(url);
   }
 
-  if (isRemoteSourceMappingURL(url)) {
-    return null;
-  }
-
-  let mapPath: string;
-  try {
-    mapPath = isAbsolute(url) ? url : resolve(dirname(jsPath), decodeURIComponent(url));
-  } catch {
-    return null;
-  }
-  if (!existsSync(mapPath)) return null;
+  const mapPath = localSourceMapPath(jsPath, url);
+  if (mapPath == null || !existsSync(mapPath)) return null;
   try {
     return readFileSync(mapPath, "utf8");
   } catch {
     return null;
   }
+}
+
+export function bundlerSourceMapPaths(jsPath: string, code: string, root: string): string[] {
+  const url = extractSourceMappingURL(code);
+  const candidates = [`${jsPath}.map`, url == null ? null : localSourceMapPath(jsPath, url)];
+  const inside = resolve(root) + sep;
+  const found = new Set<string>();
+  for (const candidate of candidates) {
+    if (candidate == null || !candidate.endsWith(".map")) continue;
+    if (!resolve(candidate).startsWith(inside) || !existsSync(candidate)) continue;
+    found.add(resolve(candidate));
+  }
+  return [...found];
 }
