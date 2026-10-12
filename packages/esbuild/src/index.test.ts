@@ -325,6 +325,18 @@ describe("afterpackEsbuild never ships esbuild's own source map", () => {
     expect(bundlerSourceLeftIn(outDir)).toEqual([]);
   });
 
+  it("removes the CSS map esbuild writes beside an outfile, and its trailer", async () => {
+    writeBundlerMappedOutput(outDir);
+    writeFileSync(join(outDir, "external.css"), "a{}\n/*# sourceMappingURL=external.css.map */\n");
+    writeFileSync(join(outDir, "external.css.map"), CSS_MAP);
+
+    await applyPlugin({}, { outfile: join(outDir, "external.js"), absWorkingDir: root })();
+
+    expect(existsSync(join(outDir, "external.css.map"))).toBe(false);
+    expect(readFileSync(join(outDir, "external.css"), "utf8")).toBe("a{}\n");
+    expect(existsSync(join(outDir, "external.js.map"))).toBe(false);
+  });
+
   it("removes the outfile's own map without sweeping its directory", async () => {
     writeBundlerMappedOutput(outDir);
 

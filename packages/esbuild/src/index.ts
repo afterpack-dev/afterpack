@@ -6,10 +6,12 @@ import {
   collectJsFiles,
   createTelemetryReporter,
   passSettings,
+  removeSourceMaps,
   resolveClientIdentity,
   resolvePluginConfig,
   runObfuscationPass,
   sourceTypeForOutputFormat,
+  stripCssSourceMappingURLs,
 } from "@afterpack/integration-utils";
 import type { BuildOptions, BuildResult, Plugin, PluginBuild } from "esbuild";
 
@@ -52,7 +54,7 @@ export function afterpackEsbuild(options: AfterpackEsbuildOptions = {}): Plugin 
         if (files.length === 0) return;
 
         const gitignoredNonServedAfterpackDir = join(cwd, ".afterpack");
-        await runObfuscationPass({
+        const pass = await runObfuscationPass({
           files,
           engine: { processBatch, version },
           client: resolveClientIdentity(import.meta.url),
@@ -76,6 +78,11 @@ export function afterpackEsbuild(options: AfterpackEsbuildOptions = {}): Plugin 
               "the emitted chunks. No directive was applied to this build.",
           },
         });
+        if (sweepDir === null && !pass.policy.sourceMap) {
+          const css = `${files[0].replace(/\.[cm]?js$/, "")}.css`;
+          removeSourceMaps([`${css}.map`], "afterpack-esbuild");
+          stripCssSourceMappingURLs([css]);
+        }
       });
     },
   };
