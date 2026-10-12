@@ -71,6 +71,7 @@ interface AuditDeps {
 
 function normalizeUrl(input: string): string | null {
   const raw = input.trim();
+  if (/^(?:[\\/.~]|[A-Za-z]:[\\/]|file:)/i.test(raw)) return null;
   const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
   try {
     const parsed = new URL(candidate);

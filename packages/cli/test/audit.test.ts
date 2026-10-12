@@ -160,6 +160,18 @@ describe("afterpack audit", () => {
     expect(received).toEqual([]);
   });
 
+  it.each([
+    "/home/alice/app/dist",
+    "./dist",
+    "~/app",
+    "C:\\Users\\alice\\app",
+    "file:///home/alice/app",
+  ])("never sends the local path %s to the scanner", async (target) => {
+    expect(await invoke(["audit", target])).toBe(64);
+    expect(err.join("\n")).toContain("not a URL");
+    expect(received).toEqual([]);
+  });
+
   it("rejects a flag this command does not have rather than ignoring it", async () => {
     expect(await invoke(["audit", "example.com", "--preset=hard"])).toBe(64);
     expect(err.join("\n")).toContain("not an option of `afterpack audit`");
