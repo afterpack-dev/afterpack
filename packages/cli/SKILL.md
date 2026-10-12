@@ -215,10 +215,14 @@ by the same rule as above, and re-hashes every file that receipt names.
 ```bash
 npx afterpack@latest verify .        # looks in ./ and ./.next/
 npx afterpack@latest verify dist
+npx afterpack@latest verify build    # SvelteKit's adapter copy; also .output/public, out/
 ```
 
-It exits `1` when the receipt is missing, belongs to a different build, or a file changed after it
-was obfuscated. A missing receipt is a failure. `verify` reads no configuration and takes only
+When `[dir]` has no receipt of its own, verify looks for the project receipt whose files `[dir]`
+holds, at the same relative paths or under one prefix, so a framework's copy of its build output
+(SvelteKit's `build/`, Nuxt's `.output/public/`, Next's `out/`) is checked against the receipt of
+the directory it copied. It exits `1` when the receipt is missing, belongs to a different build,
+or a file changed after it was obfuscated. A missing receipt is a failure. `verify` reads no configuration and takes only
 `--diagnostics.format` and `--diagnostics.level`.
 
 ## `afterpack restore [dir]`

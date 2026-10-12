@@ -69,7 +69,11 @@ step.
 ```sh
 npx afterpack@latest verify .        # looks in ./ and ./.next/
 npx afterpack@latest verify dist
+npx afterpack@latest verify build    # SvelteKit's adapter copy; also .output/public, out/
 ```
+
+A directory a framework copied from its build output, such as SvelteKit's `build/`, Nuxt's
+`.output/public/` or Next's `out/`, is checked against the receipt of the directory it copied.
 
 It exits `1` when the receipt is missing, belongs to a different build, or a file changed after it
 was obfuscated. The CLI and the plugins for Vite, Next.js, webpack, Rollup, esbuild and Angular all
