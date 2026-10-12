@@ -1,6 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-import { protectionReceiptPath, verifyProtectionReceipt } from "@afterpack/integration-utils";
+import {
+  afterpackHome,
+  protectionReceiptPath,
+  verifyProtectionReceipt,
+} from "@afterpack/integration-utils";
 import { CONTACT_FOOTER } from "./args.js";
 import { EXIT, type ExitCode } from "./exit.js";
 import { dim, green } from "./format.js";
@@ -107,7 +111,11 @@ export function verify(deps: VerifyDeps): ExitCode {
   const target = realDir(requestedPath);
   const looked = candidates(target)
     .filter((c) => existsSync(c))
-    .map((c) => ({ dir: c, receiptPath: protectionReceiptPath(c) }));
+    .flatMap((c) => {
+      const asDir = protectionReceiptPath(c);
+      const asFileDir = protectionReceiptPath(afterpackHome(c, { fileTarget: true }));
+      return [...new Set([asDir, asFileDir])].map((receiptPath) => ({ dir: c, receiptPath }));
+    });
   const located = looked.find((c) => existsSync(c.receiptPath));
   if (!located) {
     return fail(

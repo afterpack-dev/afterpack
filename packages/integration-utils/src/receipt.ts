@@ -78,12 +78,36 @@ function receiptPathIn(home: AfterpackHome): string {
   return join(receiptsDirOf(home), `${receiptKey(buildDirOf(home))}.json`);
 }
 
-export function protectionReceiptPath(buildDir: string): string {
-  return receiptPathIn(afterpackHome(buildDir));
+export type HomeTarget = string | AfterpackHome;
+
+function homeOf(target: HomeTarget): AfterpackHome {
+  return typeof target === "string" ? afterpackHome(target) : target;
 }
 
-export function prepareProtectionReceipt(buildDir: string, label: string): string {
-  const home = afterpackHome(buildDir);
+export const DIAG_AFTERPACK_DIR_IN_OUTPUT = "DIAG_AFTERPACK_DIR_IN_OUTPUT";
+
+export const DIAG_RECEIPT_UNWRITABLE = "DIAG_RECEIPT_UNWRITABLE";
+
+export class AfterpackFilesError extends Error {
+  readonly code: string;
+  readonly summary: string;
+  readonly fix: string;
+
+  constructor(code: string, summary: string, fix: string) {
+    super(`${summary} ${fix}`);
+    this.name = "AfterpackFilesError";
+    this.code = code;
+    this.summary = summary;
+    this.fix = fix;
+  }
+}
+
+export function protectionReceiptPath(target: HomeTarget): string {
+  return receiptPathIn(homeOf(target));
+}
+
+export function prepareProtectionReceipt(target: HomeTarget, label: string): string {
+  const home = homeOf(target);
   const path = receiptPathIn(home);
   try {
     mkdirSync(dirname(path), { recursive: true });
@@ -92,8 +116,10 @@ export function prepareProtectionReceipt(buildDir: string, label: string): strin
     closeSync(openSync(path, "a"));
     if (!existed) unlinkSync(path);
   } catch (error) {
-    throw new Error(
+    throw new AfterpackFilesError(
+      DIAG_RECEIPT_UNWRITABLE,
       `[${label}] cannot write the protection receipt ${path}, so no file was rewritten: ${error}`,
+      `Make ${dirname(path)} a writable directory, then build again.`,
     );
   }
   return path;
@@ -119,34 +145,52 @@ function removeStaleReceipt(path: string, label: string): void {
 }
 
 function refuseShippedAfterpackDir(path: string, buildDir: string, label: string): never {
-  throw new Error(
+  throw new AfterpackFilesError(
+    DIAG_AFTERPACK_DIR_IN_OUTPUT,
     `[${label}] found ${path} inside the build output ${buildDir}. It holds AfterPack backups, ` +
-      "receipts or Protection Maps, which must never ship. Delete it, then build again.",
+      "receipts or Protection Maps, which must never ship.",
+    `Delete ${path}, then build again.`,
   );
 }
 
-function sweepDir(dir: string, buildDir: string, label: string, recursive: boolean): void {
+interface SweepContext {
+  buildDir: string;
+  label: string;
+  ownHome: string | null;
+}
+
+function sweepDir(dir: string, context: SweepContext, recursive: boolean): void {
   for (const entry of entriesOf(dir)) {
     const full = join(dir, entry.name);
     if (entry.name === STALE_OUTPUT_RECEIPT_FILE) {
-      removeStaleReceipt(full, label);
+      removeStaleReceipt(full, context.label);
     } else if (entry.isDirectory()) {
-      if (entry.name === AFTERPACK_DIR) refuseShippedAfterpackDir(full, buildDir, label);
+      if (entry.name === AFTERPACK_DIR) {
+        if (context.ownHome !== null && realPath(full) === context.ownHome) continue;
+        refuseShippedAfterpackDir(full, context.buildDir, context.label);
+      }
       if (!recursive || entry.name === "node_modules") continue;
       if (existsSync(join(full, "package.json"))) continue;
-      sweepDir(full, buildDir, label, true);
+      sweepDir(full, context, true);
     }
   }
 }
 
-export function sweepOutputTree(buildDir: string, walkedDir: string | null, label: string): void {
+export function sweepOutputTree(
+  buildDir: string,
+  walkedDir: string | null,
+  label: string,
+  ownHome: AfterpackHome | null = null,
+): void {
+  const context = { buildDir, label, ownHome: ownHome ? realPath(ownHome.dir) : null };
   const walksBuildDir = walkedDir !== null && realPath(walkedDir) === realPath(buildDir);
-  sweepDir(buildDir, buildDir, label, walksBuildDir);
-  if (walkedDir !== null && !walksBuildDir) sweepDir(walkedDir, buildDir, label, true);
+  sweepDir(buildDir, context, walksBuildDir);
+  if (walkedDir !== null && !walksBuildDir) sweepDir(walkedDir, context, true);
 }
 
 export interface WriteProtectionReceiptInput {
   dir: string;
+  home?: AfterpackHome;
   tool: string;
   engine: EngineSource | null;
   engineVersion: string | null;
@@ -186,7 +230,7 @@ export function writeProtectionReceipt(input: WriteProtectionReceiptInput): stri
       }))
       .sort((a, b) => a.path.localeCompare(b.path)),
   };
-  const home = afterpackHome(input.dir);
+  const home = input.home ?? afterpackHome(input.dir);
   receipt.buildDir = buildDirOf(home);
   const path = receiptPathIn(home);
   mkdirSync(dirname(path), { recursive: true });
@@ -315,8 +359,8 @@ function rawBuildDirOf(path: string): unknown {
   }
 }
 
-function coveringReceipts(startDir: string): string[] {
-  const home = afterpackHome(startDir);
+function coveringReceipts(start: HomeTarget): string[] {
+  const home = homeOf(start);
   const target = buildDirOf(home);
   const dir = receiptsDirOf(home);
   return entriesOf(dir)
@@ -333,7 +377,7 @@ interface AlreadyObfuscatedInputs {
 
 export function detectAlreadyObfuscatedInputs(
   files: readonly string[],
-  startDir: string,
+  startDir: HomeTarget,
   bytesByPath?: ReadonlyMap<string, Uint8Array>,
   prefix: (message: string) => string = (m) => m,
 ): AlreadyObfuscatedInputs | null {

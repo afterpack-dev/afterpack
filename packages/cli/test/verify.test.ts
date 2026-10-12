@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { writeProtectionReceipt } from "@afterpack/integration-utils";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { __reset, __setProcessResult, processBatch } from "../../../test/core-fake.js";
@@ -307,9 +307,65 @@ describe("afterpack <dir> writes the receipt afterpack verify reads", () => {
     mkdirSync(join(dist, ".afterpack", "backup"), { recursive: true });
 
     expect(await invoke(["dist", ...QUIET])).toBe(1);
-    expect(err.join("\n")).toContain(`found ${join(dist, ".afterpack")} inside the build output`);
-    expect(err.join("\n")).toContain("Delete it, then build again");
+    const text = err.join("\n");
+    expect(text).toContain(`found ${join(dist, ".afterpack")} inside the build output`);
+    expect(text).toContain(`\n\nDelete ${join(dist, ".afterpack")}, then build again.\n`);
+    expect(text).not.toContain("--paths.exclude");
+    expect(text).not.toContain("Fix the diagnostic");
     expect(readFileSync(join(dist, "app.js"), "utf8")).toBe("export const a = 1;");
+
+    out = [];
+    expect(await invoke(["dist", ...QUIET, "--diagnostics.format=json"])).toBe(1);
+    expect(JSON.parse(out[0])).toMatchObject({
+      exitCode: 1,
+      ok: false,
+      error: { code: "DIAG_AFTERPACK_DIR_IN_OUTPUT" },
+    });
+  });
+
+  it("fails before touching the output, with its own hint, when the receipt cannot be written", async () => {
+    const dist = buildOutput();
+    mkdirSync(join(root, ".afterpack"), { recursive: true });
+    writeFileSync(join(root, ".afterpack", "receipts"), "not a directory");
+
+    expect(await invoke(["dist", ...QUIET, "--build.backup=false"])).toBe(1);
+    const text = err.join("\n");
+    expect(text).toContain("cannot write the protection receipt");
+    expect(text).toContain(
+      `\n\nMake ${join(root, ".afterpack", "receipts")} a writable directory, then build again.\n`,
+    );
+    expect(text).not.toContain("--paths.exclude");
+    expect(readFileSync(join(dist, "app.js"), "utf8")).toBe("export const a = 1;");
+  });
+
+  it("keeps a single file's .afterpack in the project root it sits in, and verifies it", async () => {
+    writeFileSync(join(root, "package.json"), "{}");
+    writeFileSync(join(root, "app.js"), "export const a = 1;");
+
+    expect(await invoke(["app.js", ...QUIET])).toBe(0);
+
+    expect(existsSync(join(root, ".afterpack", "receipts", "..json"))).toBe(true);
+    expect(existsSync(join(root, ".afterpack", "backup", "manifest.json"))).toBe(true);
+    expect(existsSync(join(dirname(root), ".afterpack"))).toBe(false);
+    expect(await invoke(["verify"])).toBe(0);
+    err = [];
+    expect(await invoke(["app.js", ...QUIET])).toBe(1);
+    expect(err.join("\n")).toContain("Already obfuscated");
+    expect(await invoke(["restore"])).toBe(0);
+    expect(readFileSync(join(root, "app.js"), "utf8")).toBe("export const a = 1;");
+  });
+
+  it("keeps a single served file's .afterpack outside the folder it is served from", async () => {
+    writeFileSync(join(root, "package.json"), "{}");
+    const served = join(root, "public");
+    mkdirSync(served);
+    writeFileSync(join(served, "app.js"), "export const a = 1;");
+
+    expect(await invoke(["public/app.js", ...QUIET])).toBe(0);
+
+    expect(readdirSync(served)).toEqual(["app.js"]);
+    expect(existsSync(join(root, ".afterpack", "receipts", "public.json"))).toBe(true);
+    expect(await invoke(["verify", "public"])).toBe(0);
   });
 
   it("verifies a case-different spelling of the same dir on a case-insensitive disk", async () => {

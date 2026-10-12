@@ -59,6 +59,7 @@ export type { GitBuildContext } from "./git.js";
 export {
   AFTERPACK_DIR,
   type AfterpackHome,
+  type AfterpackHomeOptions,
   afterpackHome,
 } from "./home.js";
 export type { CapturedModule } from "./map-color.js";
@@ -110,7 +111,11 @@ export {
   type TransformKind,
 } from "./policy.js";
 export {
+  AfterpackFilesError,
+  DIAG_AFTERPACK_DIR_IN_OUTPUT,
   DIAG_RECEIPT_UNREADABLE,
+  DIAG_RECEIPT_UNWRITABLE,
+  type HomeTarget,
   PROTECTION_RECEIPTS_DIR,
   type ProtectionReceipt,
   type ProtectionReceiptFile,

@@ -6,7 +6,12 @@ import * as api from "./index.js";
 const SURFACE = [
   "AFTERPACK_DIR",
   "AfterpackArtifactOptions",
+  "AfterpackFilesError",
   "AfterpackHome",
+  "AfterpackHomeOptions",
+  "DIAG_AFTERPACK_DIR_IN_OUTPUT",
+  "DIAG_RECEIPT_UNWRITABLE",
+  "HomeTarget",
   "afterpackHome",
   "AfterpackConfig",
   "AfterpackPluginOptions",

@@ -45,6 +45,25 @@ describe("afterpackHome", () => {
     expect(afterpackHome(join(project, "out")).dir).toBe(join(project, ".afterpack"));
   });
 
+  it("uses a file target's own dir when that dir is a project root", () => {
+    const project = join(root, "project");
+    mkdirSync(project);
+    writeFileSync(join(project, "package.json"), "{}");
+    const home = afterpackHome(project, { fileTarget: true });
+    expect(home.dir).toBe(join(project, ".afterpack"));
+    expect(home.projectRoot).toBe(project);
+    expect(afterpackHome(project).dir).toBe(join(root, ".afterpack"));
+  });
+
+  it("walks up from a file target's parent when its dir is no project root", () => {
+    const project = join(root, "project");
+    mkdirSync(join(project, "public"), { recursive: true });
+    writeFileSync(join(project, "package.json"), "{}");
+    expect(afterpackHome(join(project, "public"), { fileTarget: true }).dir).toBe(
+      join(project, ".afterpack"),
+    );
+  });
+
   it("is the same for a build dir outside the bundler's own root", () => {
     const project = join(root, "project");
     mkdirSync(join(project, "client"), { recursive: true });

@@ -362,7 +362,7 @@ describe("sweepOutputTree", () => {
     mkdirSync(join(dir, "nested", ".afterpack", "backup"), { recursive: true });
     expect(() => sweepOutputTree(dir, dir, "afterpack-test")).toThrow(
       new RegExp(
-        `\\[afterpack-test\\] found ${join(dir, "nested", ".afterpack").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} inside the build output .*Delete it`,
+        `\\[afterpack-test\\] found ${join(dir, "nested", ".afterpack").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} inside the build output .*Delete .*\\.afterpack, then build again`,
       ),
     );
   });

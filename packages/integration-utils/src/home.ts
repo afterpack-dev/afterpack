@@ -27,12 +27,29 @@ export function isWithinDir(dir: string, path: string): boolean {
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
 
-export function afterpackHome(buildDir: string): AfterpackHome {
+export interface AfterpackHomeOptions {
+  fileTarget?: boolean;
+}
+
+function markerIn(dir: string): string | null {
+  return PROJECT_MARKERS.find((name) => existsSync(join(dir, name))) ?? null;
+}
+
+export function afterpackHome(buildDir: string, options: AfterpackHomeOptions = {}): AfterpackHome {
   const realBuildDir = realPath(buildDir);
+  const ownMarker = options.fileTarget ? markerIn(realBuildDir) : null;
+  if (ownMarker !== null) {
+    return {
+      dir: join(realBuildDir, AFTERPACK_DIR),
+      projectRoot: realBuildDir,
+      marker: ownMarker,
+      buildDir: realBuildDir,
+    };
+  }
   const start = dirname(realBuildDir);
   let found: { root: string; marker: string } | null = null;
   for (let current = start; ; ) {
-    const marker = PROJECT_MARKERS.find((name) => existsSync(join(current, name)));
+    const marker = markerIn(current);
     if (marker) {
       found = { root: current, marker };
       break;

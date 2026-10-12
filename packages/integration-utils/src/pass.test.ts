@@ -1973,7 +1973,7 @@ describe("runObfuscationPass — the protection receipt it writes", () => {
 
     await expect(
       runObfuscationPass({ ...baseOptions([a], engine), logger: silentLogger().logger }),
-    ).rejects.toThrow(/found .*\.afterpack inside the build output .*Delete it, then build again/);
+    ).rejects.toThrow(/found .*\.afterpack inside the build output .*Delete .*, then build again/);
     expect(readFileSync(a, "utf8")).toBe("export const a = 1;");
     expect(calls).toHaveLength(0);
   });
@@ -1989,6 +1989,27 @@ describe("runObfuscationPass — the protection receipt it writes", () => {
       runObfuscationPass({ ...baseOptions([a], engine), logger: silentLogger().logger }),
     ).rejects.toThrow(/cannot write the protection receipt .*so no file was rewritten/);
     expect(readFileSync(a, "utf8")).toBe("export const a = 1;");
+  });
+
+  it("keeps a single file's receipt in its own project when the file sits in the project root", async () => {
+    const a = join(root, "app.js");
+    writeFileSync(a, "export const a = 1;");
+    const { engine } = makeEngine(() => ({}));
+
+    const result = await runObfuscationPass({
+      ...baseOptions([a], engine),
+      combinedProtectionMap: { buildDir: root, fileTarget: true },
+      logger: silentLogger().logger,
+    });
+
+    expect(result.receiptPath).toBe(join(root, ".afterpack", "receipts", "..json"));
+    await expect(
+      runObfuscationPass({
+        ...baseOptions([a], engine),
+        combinedProtectionMap: { buildDir: root, fileTarget: true },
+        logger: silentLogger().logger,
+      }),
+    ).rejects.toThrow(new RegExp(DIAG_ALREADY_OBFUSCATED));
   });
 
   it("keeps everything beside a build dir with no project marker above it, and says where", async () => {

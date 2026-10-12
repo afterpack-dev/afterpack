@@ -46,7 +46,8 @@ and the `sourceMappingURL` comments that name them, so no original source ships 
 
 `.afterpack/` sits next to your project's `package.json`, `afterpack.json` or `.git`, otherwise
 beside the build directory, never inside it: `cd public && npx afterpack .` keeps it beside
-`public/`. The same place holds every run's files whatever directory you run from, so a second run
+`public/`. A single file in your project root, `npx afterpack app.js`, keeps it in that root. The
+same place holds every run's files whatever directory you run from, so a second run
 over the same output is refused from anywhere. A run fails if it finds a `.afterpack/` inside the
 output, and removes a `.afterpack-protection.json` an older version left there.
 

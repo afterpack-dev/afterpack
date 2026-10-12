@@ -116,6 +116,7 @@ export interface ObfuscationEngine {
 
 export interface CombinedProtectionMapTarget {
   buildDir: string;
+  fileTarget?: boolean;
   subdir?: string;
   fileName?: string;
 }
@@ -319,16 +320,13 @@ export async function runObfuscationPass(
     ),
   );
 
-  const home = afterpackHome(combinedProtectionMap.buildDir);
+  const home = afterpackHome(combinedProtectionMap.buildDir, {
+    fileTarget: combinedProtectionMap.fileTarget,
+  });
   const unanchored = describeUnanchoredHome(home);
   if (unanchored) logger.log(prefix(unanchored));
   if (!options.emitToCaller) {
-    const already = detectAlreadyObfuscatedInputs(
-      onDiskFiles,
-      combinedProtectionMap.buildDir,
-      onDiskBytes,
-      prefix,
-    );
+    const already = detectAlreadyObfuscatedInputs(onDiskFiles, home, onDiskBytes, prefix);
     if (already) {
       throw new AlreadyObfuscatedError(
         prefix(
@@ -349,6 +347,7 @@ export async function runObfuscationPass(
     combinedProtectionMap.buildDir,
     options.sourceMapSweepDir ?? (options.emitToCaller ? combinedProtectionMap.buildDir : null),
     label,
+    home,
   );
 
   const resolvedSeed = resolveBuildSeed(
@@ -634,7 +633,7 @@ export async function runObfuscationPass(
     verified.push({ result: f, source });
   }
 
-  prepareProtectionReceipt(combinedProtectionMap.buildDir, label);
+  prepareProtectionReceipt(home, label);
   const writtenFiles: string[] = [];
   const emittedFiles: string[] = [];
   const engineMaps = new Set<string>();
@@ -706,12 +705,14 @@ export async function runObfuscationPass(
     deferredReceipt = {
       ...receiptFields,
       dir: combinedProtectionMap.buildDir,
+      home,
       files: emittedFiles,
     };
   } else {
     receiptPath = writeProtectionReceipt({
       ...receiptFields,
       dir: combinedProtectionMap.buildDir,
+      home,
       files: writtenFiles,
     });
     if (style !== "cli") {

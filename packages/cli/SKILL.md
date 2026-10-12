@@ -80,8 +80,9 @@ own source maps, hidden ones included, and the `sourceMappingURL` comments that 
 
 Every front door puts `.afterpack/` next to the project's `package.json`, `afterpack.json` or
 `.git` nearest above the build directory, otherwise beside the build directory, never inside it
-(`cd public && npx afterpack .` keeps it beside `public/`). The place does not depend on the
-working directory, so a re-run over the same output is refused from anywhere. A run fails if it
+(`cd public && npx afterpack .` keeps it beside `public/`). For a single file, the file's own
+directory counts when it holds one of those, so `npx afterpack app.js` in a project root keeps
+`.afterpack/` in that root. The place does not depend on the working directory, so a re-run over the same output is refused from anywhere. A run fails if it
 finds a `.afterpack/` inside the output, and removes a `.afterpack-protection.json` an older
 version left there.
 

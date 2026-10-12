@@ -1,6 +1,7 @@
 import { existsSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import {
+  AfterpackFilesError,
   AlreadyObfuscatedError,
   afterpackHome,
   CLOUD_REFUSAL_SUMMARY,
@@ -465,6 +466,7 @@ async function runObfuscationAndBackup(input: {
   engine: ObfuscationEngine;
   cwd: string;
   buildDir: string;
+  fileTarget: boolean;
   sweepSourceMaps: boolean;
   sourceType?: SourceType;
   startedAt: number;
@@ -503,7 +505,7 @@ async function runObfuscationAndBackup(input: {
           label: "afterpack",
           cwd: input.cwd,
           startedAt: input.startedAt,
-          combinedProtectionMap: { buildDir: input.buildDir },
+          combinedProtectionMap: { buildDir: input.buildDir, fileTarget: input.fileTarget },
           sourceMapSweepDir: input.sweepSourceMaps ? input.buildDir : null,
           artifactOptions: {
             ...input.parsed.artifactOptions,
@@ -620,6 +622,14 @@ function refusalFor(
       exitCode: EXIT.updateRequired,
       code: error.code,
       message: error.message,
+      fix: error.fix,
+    };
+  }
+  if (error instanceof AfterpackFilesError) {
+    return {
+      exitCode: EXIT.failure,
+      code: error.code,
+      message: error.summary,
       fix: error.fix,
     };
   }
@@ -878,7 +888,7 @@ export async function run(deps: CliDeps): Promise<number> {
   const buildDir = isDirectory ? target : dirname(target);
   let projectRoot: string;
   try {
-    projectRoot = afterpackHome(buildDir).projectRoot;
+    projectRoot = afterpackHome(buildDir, { fileTarget: !isDirectory }).projectRoot;
   } catch (error) {
     return refuseHere(
       EXIT.failure,
@@ -952,6 +962,7 @@ export async function run(deps: CliDeps): Promise<number> {
     engine,
     cwd,
     buildDir,
+    fileTarget: !isDirectory,
     sweepSourceMaps: isDirectory,
     sourceType: detectCliSourceType({ files, buildDir }),
     startedAt,
