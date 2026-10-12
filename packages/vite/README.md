@@ -28,10 +28,11 @@ untouched.
 Files Vite copies as-is from `publicDir` are not part of the bundle and are not obfuscated. Import
 anything you want protected.
 
-Each build writes a protection receipt to the project's `.afterpack/receipts/`, one per output
-directory (`.afterpack/receipts/dist.json` for `dist`), so it never ships with your build. Run
-`npx afterpack verify dist` from the project in your deploy step to check that what you ship is
-what was obfuscated.
+Each build writes a protection receipt to `.afterpack/receipts/`, one per output directory
+(`.afterpack/receipts/dist.json` for `dist`). `.afterpack/` sits next to your project's
+`package.json`, `afterpack.json` or `.git`, otherwise beside the build directory, so the receipt
+never ships with your build. Run `npx afterpack verify dist` in your deploy step to check that what
+you ship is what was obfuscated.
 
 ## Options
 

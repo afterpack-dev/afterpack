@@ -32,7 +32,7 @@ Nested `node_modules/` folders are skipped. Pass [`--paths.include`][paths.inclu
 Each run writes:
 
 - `.afterpack/receipts/<output dir>.json` (`.afterpack/receipts/dist.json` for `dist`), the receipt
-  that `afterpack verify` checks. It stays out of the output directory, so it never ships.
+  that `afterpack verify` checks.
 - `.afterpack/backup/`, a copy of the original files, so `afterpack restore` can undo the run.
   Turn it off with [`--build.backup`][build.backup]`=false`.
 - `.afterpack/protectionMap.html`, the [Protection Map](https://www.afterpack.dev/docs/protection-map),
@@ -43,6 +43,12 @@ Each run writes:
 
 Every other run is a production run: it deletes your build's own source maps, hidden ones included,
 and the `sourceMappingURL` comments that name them, so no original source ships beside the output.
+
+`.afterpack/` sits next to your project's `package.json`, `afterpack.json` or `.git`, otherwise
+beside the build directory, never inside it: `cd public && npx afterpack .` keeps it beside
+`public/`. The same place holds every run's files whatever directory you run from, so a second run
+over the same output is refused from anywhere. A run fails if it finds a `.afterpack/` inside the
+output, and removes a `.afterpack-protection.json` an older version left there.
 
 The backup and the Protection Map contain your original source. `.afterpack/` carries its own
 `.gitignore` and self-ignores. Never deploy or commit them.
@@ -55,7 +61,7 @@ runs. It never prompts.
 ## `afterpack verify [dir]`
 
 Checks a build against its protection receipt in `.afterpack/receipts/`. Run it in your deploy
-step, from the project the build ran in.
+step.
 
 ```sh
 npx afterpack@latest verify .        # looks in ./ and ./.next/

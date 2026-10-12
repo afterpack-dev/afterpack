@@ -68,9 +68,7 @@ Rules:
 ## What a run writes
 
 - `.afterpack/receipts/<output dir>.json` (`.afterpack/receipts/dist.json` for `dist`): the receipt
-  `afterpack verify` checks. Every front door writes it under the project's `.afterpack/`, never
-  into the output directory, and a run removes a `.afterpack-protection.json` an older version left
-  in the output.
+  `afterpack verify` checks.
 - `.afterpack/backup/`: the original files, on by default for the CLI, so `afterpack restore` can
   undo the run. `--build.backup=false` turns it off.
 - `.afterpack/protectionMap.html`: the Protection Map report, when the build has source maps.
@@ -79,6 +77,13 @@ Rules:
 
 Every other run is a production run, `CI` and an unset `NODE_ENV` included. It deletes the build's
 own source maps, hidden ones included, and the `sourceMappingURL` comments that name them.
+
+Every front door puts `.afterpack/` next to the project's `package.json`, `afterpack.json` or
+`.git` nearest above the build directory, otherwise beside the build directory, never inside it
+(`cd public && npx afterpack .` keeps it beside `public/`). The place does not depend on the
+working directory, so a re-run over the same output is refused from anywhere. A run fails if it
+finds a `.afterpack/` inside the output, and removes a `.afterpack-protection.json` an older
+version left there.
 
 The backup and the Protection Map contain the original source. `.afterpack/` carries its own
 `.gitignore` and self-ignores. Never deploy, publish or commit them.
@@ -201,9 +206,8 @@ Details: https://www.afterpack.dev/docs/pro
 
 ## `afterpack verify [dir]`
 
-Add this to the deploy step, run from the project the build ran in. It finds the receipt for
-`[dir]` in the `.afterpack/receipts/` at or above it (or in the working directory's) and re-hashes
-every file that receipt names.
+Add this to the deploy step. It reads the receipt for `[dir]` from `.afterpack/receipts/`, found
+by the same rule as above, and re-hashes every file that receipt names.
 
 ```bash
 npx afterpack@latest verify .        # looks in ./ and ./.next/
