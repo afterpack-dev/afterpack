@@ -1,6 +1,7 @@
 import { test } from "@playwright/test";
 import { expectObfuscationPass, readBuildLog } from "@e2e/helpers/build-log.js";
 import { readExpectations, smokeOf } from "@e2e/helpers/expectations.js";
+import { expectVerifyPasses } from "@e2e/helpers/receipt.js";
 import { baseURLOf, fixture } from "@e2e/helpers/registry.js";
 import { expectObfuscationSignatures } from "@e2e/helpers/signatures.js";
 import { runSmoke } from "@e2e/helpers/smoke.js";
@@ -20,6 +21,10 @@ test.describe("SvelteKit prerenders with the static adapter", { tag: "@quick" },
       expectObfuscationSignatures(app);
     },
   );
+
+  test("`afterpack verify build` passes the adapter's copy of the client output", { tag: "@node" }, () => {
+    expectVerifyPasses(app, "build");
+  });
 
   test("the obfuscated output still renders and still reacts to a click", async ({ page }) => {
     await runSmoke(page, baseURLOf(app), smokeOf(expectations));

@@ -349,30 +349,89 @@ export function verifyProtectionReceipt(
   return { receiptPath, receipt: parsed, problems };
 }
 
-function covers(receiptDir: unknown, target: string): boolean {
-  if (typeof receiptDir !== "string") return true;
-  if (receiptDir === "." || target === "." || receiptDir === target) return true;
-  return target.startsWith(`${receiptDir}/`) || receiptDir.startsWith(`${target}/`);
-}
-
-function rawBuildDirOf(path: string): unknown {
-  try {
-    const raw = JSON.parse(readFileSync(path, "utf8")) as { buildDir?: unknown } | null;
-    return raw !== null && typeof raw === "object" ? raw.buildDir : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function coveringReceipts(start: HomeTarget): string[] {
-  const home = homeOf(start);
-  const target = buildDirOf(home);
+function receiptsIn(home: AfterpackHome): string[] {
   const dir = receiptsDirOf(home);
   return entriesOf(dir)
     .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
     .map((entry) => join(dir, entry.name))
-    .filter((path) => covers(rawBuildDirOf(path), target))
     .sort();
+}
+
+export interface LocatedReceipt {
+  receiptPath: string;
+  dir: string;
+  copiedFrom: string | null;
+}
+
+function filesByName(dir: string): Map<string, string[]> {
+  const byName = new Map<string, string[]>();
+  const walk = (current: string, rel: string): void => {
+    for (const entry of entriesOf(current)) {
+      if (entry.name === "node_modules" || entry.name === AFTERPACK_DIR) continue;
+      const childRel = rel === "" ? entry.name : `${rel}/${entry.name}`;
+      if (entry.isDirectory()) walk(join(current, entry.name), childRel);
+      else if (entry.isFile())
+        byName.set(entry.name, [...(byName.get(entry.name) ?? []), childRel]);
+    }
+  };
+  walk(dir, "");
+  return byName;
+}
+
+interface CopyMatch extends LocatedReceipt {
+  hashesMatch: boolean;
+  prefix: string;
+}
+
+function copyMatches(dir: string, home: AfterpackHome, skip: Set<string>): CopyMatch[] {
+  const receipts = receiptsIn(home).filter((path) => !skip.has(path));
+  if (receipts.length === 0) return [];
+  const byName = filesByName(dir);
+  const matches: CopyMatch[] = [];
+  for (const receiptPath of receipts) {
+    const parsed = parseReceipt(receiptPath);
+    if (parsed.error !== undefined || parsed.receipt.files.length === 0) continue;
+    const { files, buildDir } = parsed.receipt;
+    const first = files[0].path;
+    for (const rel of byName.get(first.split("/").pop() ?? first) ?? []) {
+      if (rel !== first && !rel.endsWith(`/${first}`)) continue;
+      const prefix = rel.slice(0, rel.length - first.length);
+      const copyDir = join(dir, ...prefix.split("/").filter(Boolean));
+      if (!files.every((entry) => existsSync(join(copyDir, entry.path)))) continue;
+      matches.push({
+        receiptPath,
+        dir: copyDir,
+        copiedFrom: typeof buildDir === "string" ? join(home.projectRoot, buildDir) : null,
+        hashesMatch: files.every((entry) => sha256Of(join(copyDir, entry.path)) === entry.sha256),
+        prefix,
+      });
+    }
+  }
+  return matches.sort(
+    (a, b) =>
+      Number(b.hashesMatch) - Number(a.hashesMatch) ||
+      a.prefix.length - b.prefix.length ||
+      a.receiptPath.localeCompare(b.receiptPath),
+  );
+}
+
+export interface LocateReceiptOptions {
+  copies?: boolean;
+}
+
+export function locateProtectionReceipt(
+  dir: string,
+  options: LocateReceiptOptions = {},
+): LocatedReceipt | null {
+  const homes = [afterpackHome(dir), afterpackHome(dir, { fileTarget: true })];
+  const exact = [...new Set(homes.map(receiptPathIn))];
+  const found = exact.find((path) => existsSync(path));
+  if (found) return { receiptPath: found, dir, copiedFrom: null };
+  if (options.copies === false) return null;
+  const best = copyMatches(dir, homes[0], new Set(exact))[0];
+  return best
+    ? { receiptPath: best.receiptPath, dir: best.dir, copiedFrom: best.copiedFrom }
+    : null;
 }
 
 interface AlreadyObfuscatedInputs {
@@ -392,7 +451,7 @@ export function detectAlreadyObfuscatedInputs(
     return existsSync(file) ? sha256Of(file) : null;
   };
   let hashes: Map<string, string | null> | null = null;
-  for (const receiptPath of coveringReceipts(startDir)) {
+  for (const receiptPath of receiptsIn(homeOf(startDir))) {
     const result = parseReceipt(receiptPath);
     if (result.error !== undefined) {
       const schema = result.newerSchema;

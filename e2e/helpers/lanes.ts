@@ -24,7 +24,7 @@ export function regionsSent(log: string): number {
 export function proBuildProblems(app: Fixture, log: string, engineVersion: string): string[] {
   const problems: string[] = [];
   for (const dir of app.receipts) {
-    const path = receiptOf(dir);
+    const path = receiptOf(dir)?.receiptPath;
     if (!path) {
       problems.push(`no protection receipt for ${relative(app.dir, dir)}`);
       continue;
@@ -84,7 +84,7 @@ export function candidateLaneTests(): void {
       const log = readBuildLog(app);
       expect(proBuildProblems(app, log.replace(REGIONS_SENT, ""), "0.0.0-none")).toEqual([
         ...app.receipts.flatMap((dir) => {
-          const path = receiptOf(dir) ?? dir;
+          const path = receiptOf(dir)?.receiptPath ?? dir;
           const where = relative(app.dir, path);
           const { engineVersion } = JSON.parse(readFileSync(path, "utf8")) as {
             engineVersion: unknown;

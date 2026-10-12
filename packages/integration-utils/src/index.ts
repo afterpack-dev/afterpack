@@ -116,6 +116,9 @@ export {
 export {
   DIAG_RECEIPT_UNREADABLE,
   type HomeTarget,
+  type LocatedReceipt,
+  type LocateReceiptOptions,
+  locateProtectionReceipt,
   PROTECTION_RECEIPTS_DIR,
   type ProtectionReceipt,
   type ProtectionReceiptFile,

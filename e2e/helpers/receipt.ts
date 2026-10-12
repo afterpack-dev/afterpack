@@ -1,17 +1,29 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { expect } from "@playwright/test";
 import {
+  type LocatedReceipt,
+  locateProtectionReceipt,
   PROTECTION_RECEIPTS_DIR,
-  protectionReceiptPath,
   STALE_OUTPUT_RECEIPT_FILE,
   verifyProtectionReceipt,
 } from "../../packages/integration-utils/src/receipt.js";
-import type { Fixture } from "./registry.js";
+import { type Fixture, REPO_ROOT } from "./registry.js";
 
-export function receiptOf(dir: string): string | null {
-  const path = protectionReceiptPath(dir);
-  return existsSync(path) ? path : null;
+export function receiptOf(dir: string): LocatedReceipt | null {
+  return locateProtectionReceipt(dir);
+}
+
+export function expectVerifyPasses(fixture: Fixture, deployDir: string): void {
+  const verify = spawnSync(
+    process.execPath,
+    [join(REPO_ROOT, "packages", "cli", "dist", "cli.js"), "verify", deployDir],
+    { cwd: fixture.dir, encoding: "utf8" },
+  );
+  const output = `${verify.stdout}${verify.stderr}`;
+  expect(verify.status, `${fixture.name}: afterpack verify ${deployDir}\n${output}`).toBe(0);
+  expect(output).toContain("Verified");
 }
 
 function shippedAfterpackFiles(dir: string): string[] {
@@ -59,10 +71,14 @@ export function expectProtectionReceipt(
   distDir: string,
   mirrorDir?: string,
 ): void {
-  const receiptPath = receiptOf(distDir);
-  expect(receiptPath, `${fixture.name}: no protection receipt for ${distDir}`).not.toBeNull();
-  if (!receiptPath) return;
-  const { receipt, problems } = verifyProtectionReceipt(receiptPath, distDir, readBuildId(distDir));
+  const located = receiptOf(distDir);
+  expect(located, `${fixture.name}: no protection receipt for ${distDir}`).not.toBeNull();
+  if (!located) return;
+  const { receipt, problems } = verifyProtectionReceipt(
+    located.receiptPath,
+    located.dir,
+    readBuildId(located.dir),
+  );
   expect(problems, `${fixture.name}: protection receipt problems`).toEqual([]);
   expect(receipt, `${fixture.name}: no protection receipt for ${distDir}`).not.toBeNull();
   for (const dir of mirrorDir ? [distDir, mirrorDir] : [distDir]) {
@@ -79,7 +95,7 @@ export function expectProtectionReceipt(
       `${fixture.name}: ${entry.path} was obfuscated but never reached ${mirrorDir}`,
     ).toBe(true);
     expect(
-      readFileSync(mirrored).equals(readFileSync(join(distDir, entry.path))),
+      readFileSync(mirrored).equals(readFileSync(join(located.dir, entry.path))),
       `${fixture.name}: ${mirrored} differs from the obfuscated ${entry.path}`,
     ).toBe(true);
   }

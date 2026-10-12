@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import {
   afterpackHome,
+  locateProtectionReceipt,
   protectionReceiptPath,
   verifyProtectionReceipt,
 } from "@afterpack/integration-utils";
@@ -110,15 +111,17 @@ export function verify(deps: VerifyDeps): ExitCode {
   }
 
   const target = realDir(requestedPath);
-  const looked = candidates(target)
-    .filter((c) => existsSync(c))
-    .flatMap((c) => {
-      const asDir = protectionReceiptPath(c);
-      const asFileDir = protectionReceiptPath(afterpackHome(c, { fileTarget: true }));
-      return [...new Set([asDir, asFileDir])].map((receiptPath) => ({ dir: c, receiptPath }));
-    });
-  const located = looked.find((c) => existsSync(c.receiptPath));
+  const dirs = candidates(target).filter((c) => existsSync(c));
+  const located =
+    dirs.map((c) => locateProtectionReceipt(c, { copies: false })).find((l) => l !== null) ??
+    dirs.map((c) => locateProtectionReceipt(c)).find((l) => l !== null);
   if (!located) {
+    const looked = dirs.flatMap((c) => [
+      ...new Set([
+        protectionReceiptPath(c),
+        protectionReceiptPath(afterpackHome(c, { fileTarget: true })),
+      ]),
+    ]);
     return fail(
       deps,
       EXIT.failure,
@@ -127,11 +130,14 @@ export function verify(deps: VerifyDeps): ExitCode {
       "A receipt is written to .afterpack/receipts/ by the run that obfuscated the tree — run " +
         "`afterpack <dir>`, or build again through the framework plugin, then point verify at " +
         "that output directory.",
-      looked.map((c) => `looked in ${documentPath(cwd, c.receiptPath)}`),
+      [
+        ...looked.map((path) => `looked in ${documentPath(cwd, path)}`),
+        "and for a receipt whose files this directory holds a copy of",
+      ],
     );
   }
 
-  const { dir, receiptPath } = located;
+  const { dir, receiptPath, copiedFrom } = located;
   const { receipt, problems } = verifyProtectionReceipt(receiptPath, dir, readBuildId(dir));
   if (problems.length > 0) {
     return fail(
@@ -165,6 +171,7 @@ export function verify(deps: VerifyDeps): ExitCode {
       summary: {
         directory: documentPath(cwd, dir),
         receipt: documentPath(cwd, receiptPath),
+        copiedFrom: copiedFrom === null ? null : documentPath(cwd, copiedFrom),
         tool: receipt?.tool ?? null,
         engine: receipt?.engine ?? null,
         bundler: receipt?.bundler ?? null,
@@ -183,6 +190,7 @@ export function verify(deps: VerifyDeps): ExitCode {
   deps.report.log(
     `${green("✓")} Verified ${files.length} ${files.length === 1 ? "file" : "files"} · ` +
       displayDir(deps.cwd, dir) +
+      (copiedFrom === null ? "" : dim(` · copy of ${displayDir(deps.cwd, copiedFrom)}`)) +
       engine,
   );
   return EXIT.ok;

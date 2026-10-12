@@ -180,6 +180,79 @@ describe("afterpack verify", () => {
   });
 });
 
+describe("afterpack verify on a deploy dir a framework copied from its build output", () => {
+  const QUIET = ["--protectionMap.enabled=false", "--telemetry.enabled=false"];
+
+  function frameworkBuild(source: string, deploy: string, files: Record<string, string>): void {
+    writeFileSync(join(root, "package-lock.json"), "{}");
+    const written: string[] = [];
+    for (const [rel, content] of Object.entries(files)) {
+      for (const base of [source, deploy]) {
+        mkdirSync(dirname(join(root, base, rel)), { recursive: true });
+        writeFileSync(join(root, base, rel), content);
+      }
+      written.push(join(root, source, rel));
+    }
+    writeProtectionReceipt({
+      dir: join(root, source),
+      tool: "afterpack-vite",
+      engine: "local",
+      engineVersion: "9.9.9-test",
+      seed: 1,
+      seedOrigin: "fresh",
+      bundler: "vite",
+      buildId: null,
+      files: written,
+      transformed: written,
+    });
+  }
+
+  it("verifies SvelteKit's build/ against the receipt of .svelte-kit/output/client", async () => {
+    frameworkBuild(".svelte-kit/output/client", "build", {
+      "_app/immutable/entry/start.js": "OBF:start",
+      "_app/immutable/chunks/a.js": "OBF:a",
+    });
+    writeFileSync(join(root, "build", "index.html"), "<html></html>");
+
+    expect(await invoke(["verify", "build"])).toBe(0);
+    expect(out.join("\n")).toContain("Verified 2 files · build/");
+    expect(out.join("\n")).toContain("copy of .svelte-kit/output/client/");
+
+    out = [];
+    expect(await invoke(["verify", "build", "--diagnostics.format=json"])).toBe(0);
+    expect(JSON.parse(out[0]).summary).toMatchObject({
+      directory: "build",
+      receipt: ".afterpack/receipts/.svelte-kit%2Foutput%2Fclient.json",
+      copiedFrom: ".svelte-kit/output/client",
+    });
+  });
+
+  it("verifies Nuxt's .output/public and Next's out/ against the dirs they copied", async () => {
+    frameworkBuild(".nuxt/dist/client", ".output/public", { "_nuxt/entry.js": "OBF:nuxt" });
+    expect(await invoke(["verify", ".output/public"])).toBe(0);
+
+    frameworkBuild(".next", "out/_next", { "static/chunks/main.js": "OBF:next" });
+    expect(await invoke(["verify", "out"])).toBe(0);
+    expect(out.join("\n")).toContain("Verified 1 file · out/_next/");
+  });
+
+  it("FAILS a copy whose file changed after the build", async () => {
+    frameworkBuild(".svelte-kit/output/client", "build", { "_app/a.js": "OBF:a" });
+    writeFileSync(join(root, "build", "_app", "a.js"), "tampered");
+
+    expect(await invoke(["verify", "build"])).toBe(1);
+    expect(err.join("\n")).toContain("_app/a.js: content changed since it was obfuscated");
+  });
+
+  it("refuses to obfuscate the copy again", async () => {
+    frameworkBuild(".svelte-kit/output/client", "build", { "_app/a.js": "OBF:a" });
+
+    expect(await invoke(["build", ...QUIET])).toBe(1);
+    expect(err.join("\n")).toContain("Already obfuscated");
+    expect(readFileSync(join(root, "build", "_app", "a.js"), "utf8")).toBe("OBF:a");
+  });
+});
+
 describe("afterpack <dir> writes the receipt afterpack verify reads", () => {
   const QUIET = ["--protectionMap.enabled=false", "--telemetry.enabled=false"];
 

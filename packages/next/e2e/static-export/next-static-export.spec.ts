@@ -2,7 +2,11 @@ import { join } from "node:path";
 import { test } from "@playwright/test";
 import { expectObfuscationPass, readBuildLog } from "@e2e/helpers/build-log.js";
 import { readExpectations, smokeOf } from "@e2e/helpers/expectations.js";
-import { expectNoPostbuildScript, expectProtectionReceipt } from "@e2e/helpers/receipt.js";
+import {
+  expectNoPostbuildScript,
+  expectProtectionReceipt,
+  expectVerifyPasses,
+} from "@e2e/helpers/receipt.js";
 import { baseURLOf, fixture } from "@e2e/helpers/registry.js";
 import { expectObfuscationSignatures } from "@e2e/helpers/signatures.js";
 import { runSmoke } from "@e2e/helpers/smoke.js";
@@ -31,6 +35,10 @@ test.describe("Next.js 16 exports a fully static site", { tag: "@quick" }, () =>
       expectProtectionReceipt(app, join(app.dir, ".next"), join(app.dir, "out", "_next"));
     },
   );
+
+  test("`afterpack verify out` passes the exported copy", { tag: "@node" }, () => {
+    expectVerifyPasses(app, "out");
+  });
 
   test("the exported site renders, hydrates and reacts to a click", async ({ page }) => {
     await runSmoke(page, baseURLOf(app), smokeOf(expectations));

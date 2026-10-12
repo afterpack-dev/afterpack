@@ -123,20 +123,21 @@ function jsUnder(dir: string): string[] {
 
 export interface ProtectedFile {
   root: string;
+  dir: string;
   path: string;
 }
 
 export function protectedFilesOf(app: Fixture): ProtectedFile[] {
   return app.receipts.flatMap((root) => {
-    const receiptPath = receiptOf(root);
-    expect(receiptPath, `${app.name}: no protection receipt for ${root}`).not.toBeNull();
-    if (!receiptPath) return [];
-    const receipt = JSON.parse(readFileSync(receiptPath, "utf8")) as {
+    const located = receiptOf(root);
+    expect(located, `${app.name}: no protection receipt for ${root}`).not.toBeNull();
+    if (!located) return [];
+    const receipt = JSON.parse(readFileSync(located.receiptPath, "utf8")) as {
       files: { path: string; transformed?: boolean }[];
     };
     return receipt.files
       .filter((entry) => entry.transformed !== false && JS_FILE.test(entry.path))
-      .map((entry) => ({ root, path: entry.path }));
+      .map((entry) => ({ root, dir: located.dir, path: entry.path }));
   });
 }
 
@@ -191,7 +192,7 @@ export function expectObfuscationSignatures(app: Fixture): Signature {
     files.length,
     `${app.name}: the protection receipts name no JavaScript file`,
   ).toBeGreaterThan(0);
-  const signature = measureSignature(files.map((file) => join(file.root, file.path)));
+  const signature = measureSignature(files.map((file) => join(file.dir, file.path)));
   expect(
     signatureFailures(signature, app.dir),
     `${app.name}: ${files.length} protected file(s), ${(signature.bytes / 1024).toFixed(0)} KB, lack the obfuscation signatures`,

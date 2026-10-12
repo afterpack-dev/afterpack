@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { afterpackHome } from "./home.js";
 import {
   detectAlreadyObfuscatedInputs,
+  locateProtectionReceipt,
   prepareProtectionReceipt,
   protectionReceiptPath,
   sha256Of,
@@ -164,11 +165,13 @@ describe("detectAlreadyObfuscatedInputs", () => {
     ]);
   });
 
-  it("ignores another build dir's receipt in the same project", () => {
-    const { dir, file } = distWith("a.js", "OBF:export const a = 1;", join("dist", "client"));
-    mkdirSync(join(root, "dist", "server"), { recursive: true });
-    receiptAt(join(root, "dist", "server"), [file]);
-    expect(detectAlreadyObfuscatedInputs([file], dir)).toBeNull();
+  it("refuses a copy of another build dir's protected output, as an adapter makes", () => {
+    const source = distWith("app.js", "OBF:export const a = 1;", join(".svelte-kit", "client"));
+    receiptAt(source.dir, [source.file]);
+    const copy = distWith("app.js", "OBF:export const a = 1;", "build");
+    const result = detectAlreadyObfuscatedInputs([copy.file], copy.dir);
+    expect(result?.files).toEqual([copy.file]);
+    expect(result?.receiptPath).toBe(join(receiptsDir(), ".svelte-kit%2Fclient.json"));
   });
 
   it("returns null when the receipt exists but no current file's hash matches", () => {
@@ -281,7 +284,8 @@ describe("where a protection receipt lives", () => {
       "packages%2Fb%2Fdist.json",
     ]);
     expect(detectAlreadyObfuscatedInputs([a.file], a.dir)?.files).toEqual([a.file]);
-    expect(detectAlreadyObfuscatedInputs([b.file], a.dir)).toBeNull();
+    writeFileSync(join(a.dir, "fresh.js"), "export const fresh = 1;");
+    expect(detectAlreadyObfuscatedInputs([join(a.dir, "fresh.js")], a.dir)).toBeNull();
   });
 
   it("keeps a short CJK key readable", () => {
@@ -317,6 +321,81 @@ describe("where a protection receipt lives", () => {
     const path = receiptAt(deep, [file]);
     expect(dirname(path)).toBe(receiptsDir());
     expect(verifyProtectionReceipt(protectionReceiptPath(deep), deep).problems).toEqual([]);
+  });
+});
+
+describe("locateProtectionReceipt", () => {
+  function copyTree(from: string, to: string, files: Record<string, string>): void {
+    for (const [rel, content] of Object.entries(files)) {
+      for (const base of [from, to]) {
+        mkdirSync(dirname(join(base, rel)), { recursive: true });
+        writeFileSync(join(base, rel), content);
+      }
+    }
+  }
+
+  it("takes the build dir's own receipt first", () => {
+    const { dir, file } = distWith("a.js", "OBF");
+    const path = receiptAt(dir, [file]);
+    expect(locateProtectionReceipt(dir)).toEqual({ receiptPath: path, dir, copiedFrom: null });
+  });
+
+  it("maps an adapter's copy, such as SvelteKit's build/, to the receipt of the dir it copied", () => {
+    const client = join(root, ".svelte-kit", "output", "client");
+    const build = join(root, "build");
+    copyTree(client, build, { "_app/immutable/a.js": "OBF:a", "_app/immutable/b.js": "OBF:b" });
+    writeFileSync(join(build, "index.html"), "<html></html>");
+    const path = receiptAt(client, [
+      join(client, "_app/immutable/a.js"),
+      join(client, "_app/immutable/b.js"),
+    ]);
+
+    const located = locateProtectionReceipt(build);
+    expect(located).toEqual({ receiptPath: path, dir: build, copiedFrom: client });
+    expect(verifyProtectionReceipt(path, build).problems).toEqual([]);
+  });
+
+  it("maps a copy placed under a prefix, such as Next's out/_next/", () => {
+    const next = join(root, ".next");
+    const out = join(root, "out");
+    copyTree(next, join(out, "_next"), { "static/chunks/main.js": "OBF:main" });
+    const path = receiptAt(next, [join(next, "static/chunks/main.js")]);
+
+    const located = locateProtectionReceipt(out);
+    expect(located?.receiptPath).toBe(path);
+    expect(located?.dir).toBe(join(out, "_next"));
+    expect(verifyProtectionReceipt(path, join(out, "_next")).problems).toEqual([]);
+  });
+
+  it("still finds a tampered copy, so verify names the changed file instead of a missing receipt", () => {
+    const client = join(root, "client");
+    const build = join(root, "build");
+    copyTree(client, build, { "a.js": "OBF:a" });
+    const path = receiptAt(client, [join(client, "a.js")]);
+    writeFileSync(join(build, "a.js"), "tampered");
+
+    const located = locateProtectionReceipt(build);
+    expect(located?.receiptPath).toBe(path);
+    expect(verifyProtectionReceipt(path, build).problems).toEqual([
+      "a.js: content changed since it was obfuscated",
+    ]);
+  });
+
+  it("prefers the receipt whose hashes all match when two receipts name the same files", () => {
+    const stale = distWith("a.js", "OBF:old", "old");
+    receiptAt(stale.dir, [stale.file]);
+    const fresh = distWith("a.js", "OBF:new", "client");
+    const freshReceipt = receiptAt(fresh.dir, [fresh.file]);
+    const copy = distWith("a.js", "OBF:new", "build");
+
+    expect(locateProtectionReceipt(copy.dir)?.receiptPath).toBe(freshReceipt);
+  });
+
+  it("is null for a dir no receipt of the project covers", () => {
+    const client = distWith("a.js", "OBF:a", "client");
+    receiptAt(client.dir, [client.file]);
+    const other = distWith("other.js", "x", "other");
+    expect(locateProtectionReceipt(other.dir)).toBeNull();
   });
 });
 
