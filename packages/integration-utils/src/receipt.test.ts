@@ -4,40 +4,38 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   detectAlreadyObfuscatedInputs,
-  findProtectionReceipt,
+  prepareProtectionReceipt,
   protectionReceiptPath,
-  removeStaleOutputReceipt,
   sha256Of,
+  sweepOutputTree,
   UnreadableReceiptError,
   verifyProtectionReceipt,
   writeProtectionReceipt,
 } from "./receipt.js";
 
 let root: string;
-let afterpackDir: string;
 
-function receiptFor(dir: string): string {
-  return protectionReceiptPath(afterpackDir, dir);
+function receiptsDir(): string {
+  return join(root, ".afterpack", "receipts");
 }
 
 function writeRawReceipt(dir: string, content: string): void {
-  const path = receiptFor(dir);
-  mkdirSync(join(afterpackDir, "receipts"), { recursive: true });
-  writeFileSync(path, content);
+  mkdirSync(receiptsDir(), { recursive: true });
+  writeFileSync(protectionReceiptPath(dir), content);
 }
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "afterpack-receipt-test-"));
-  afterpackDir = join(root, ".afterpack");
+  root = realpathSync(mkdtempSync(join(tmpdir(), "afterpack-receipt-test-")));
+  writeFileSync(join(root, "package.json"), "{}");
 });
 afterEach(() => {
   rmSync(root, { recursive: true, force: true });
@@ -46,7 +44,6 @@ afterEach(() => {
 function receiptAt(dir: string, files: string[], transformed: string[] = files): string {
   return writeProtectionReceipt({
     dir,
-    afterpackDir,
     tool: "afterpack-test",
     engine: "local",
     engineVersion: null,
@@ -59,310 +56,314 @@ function receiptAt(dir: string, files: string[], transformed: string[] = files):
   });
 }
 
+function distWith(name: string, content: string, sub = "dist"): { dir: string; file: string } {
+  const dir = join(root, sub);
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, name);
+  writeFileSync(file, content);
+  return { dir, file };
+}
+
 describe("detectAlreadyObfuscatedInputs", () => {
-  it("returns null when no receipt exists anywhere at/above startDir", () => {
-    const dir = join(root, "dist");
-    mkdirSync(dir, { recursive: true });
-    const a = join(dir, "a.js");
-    writeFileSync(a, "export const a = 1;");
-    expect(detectAlreadyObfuscatedInputs([a], dir, afterpackDir)).toBeNull();
+  it("returns null when the project holds no receipt", () => {
+    const { dir, file } = distWith("a.js", "export const a = 1;");
+    expect(detectAlreadyObfuscatedInputs([file], dir)).toBeNull();
   });
 
   it("is no signal for a malformed (non-JSON) receipt", () => {
-    const dir = join(root, "dist");
-    mkdirSync(dir, { recursive: true });
-    const a = join(dir, "a.js");
-    writeFileSync(a, "export const a = 1;");
+    const { dir, file } = distWith("a.js", "export const a = 1;");
     writeRawReceipt(dir, "not json");
-    expect(detectAlreadyObfuscatedInputs([a], dir, afterpackDir)).toBeNull();
+    expect(detectAlreadyObfuscatedInputs([file], dir)).toBeNull();
   });
 
   it("reads the fields it knows from a newer receipt schema, so the guard still fires", () => {
-    const dir = join(root, "dist");
-    mkdirSync(dir, { recursive: true });
-    const a = join(dir, "a.js");
-    writeFileSync(a, "export const a = 1;");
+    const { dir, file } = distWith("a.js", "export const a = 1;");
     writeRawReceipt(
       dir,
       JSON.stringify({
         schema: 99,
         futureField: { anything: true },
-        files: [{ path: "a.js", sha256: sha256Of(a), transformed: true, extra: 1 }],
+        files: [{ path: "a.js", sha256: sha256Of(file), transformed: true, extra: 1 }],
       }),
     );
-    expect(detectAlreadyObfuscatedInputs([a], dir, afterpackDir)?.files).toEqual([a]);
+    expect(detectAlreadyObfuscatedInputs([file], dir)?.files).toEqual([file]);
   });
 
   it("refuses loudly on a newer schema whose files it cannot read, never treating them as unprotected", () => {
-    const dir = join(root, "dist");
-    mkdirSync(dir, { recursive: true });
-    const a = join(dir, "a.js");
-    writeFileSync(a, "export const a = 1;");
-    writeRawReceipt(dir, JSON.stringify({ schema: 2, outputs: { "a.js": sha256Of(a) } }));
-    expect(() => detectAlreadyObfuscatedInputs([a], dir, afterpackDir)).toThrow(
-      UnreadableReceiptError,
-    );
-    expect(() => detectAlreadyObfuscatedInputs([a], dir, afterpackDir)).toThrow(/receipt schema 2/);
+    const { dir, file } = distWith("a.js", "export const a = 1;");
+    writeRawReceipt(dir, JSON.stringify({ schema: 2, outputs: { "a.js": sha256Of(file) } }));
+    expect(() => detectAlreadyObfuscatedInputs([file], dir)).toThrow(UnreadableReceiptError);
+    expect(() => detectAlreadyObfuscatedInputs([file], dir)).toThrow(/receipt schema 2/);
   });
 
   it("verifies a newer-schema receipt by the fields it knows", () => {
-    const dir = join(root, "dist");
-    mkdirSync(dir, { recursive: true });
-    const a = join(dir, "a.js");
-    writeFileSync(a, "OBF");
+    const { dir, file } = distWith("a.js", "OBF");
     writeRawReceipt(
       dir,
       JSON.stringify({
         schema: 3,
         buildId: null,
-        files: [{ path: "a.js", sha256: sha256Of(a), transformed: true }],
+        files: [{ path: "a.js", sha256: sha256Of(file), transformed: true }],
       }),
     );
-    const verification = verifyProtectionReceipt(receiptFor(dir), dir);
+    const verification = verifyProtectionReceipt(protectionReceiptPath(dir), dir);
     expect(verification.problems).toEqual([]);
     expect(verification.receipt?.schema).toBe(3);
   });
 
   it("is no signal for a receipt on a schema older than the first, or not a number", () => {
-    const dir = join(root, "dist");
-    mkdirSync(dir, { recursive: true });
-    const a = join(dir, "a.js");
-    writeFileSync(a, "export const a = 1;");
+    const { dir, file } = distWith("a.js", "export const a = 1;");
     for (const schema of [0, "1", 1.5, null]) {
       writeRawReceipt(
         dir,
         JSON.stringify({
           schema,
-          files: [{ path: "a.js", sha256: sha256Of(a), transformed: true }],
+          files: [{ path: "a.js", sha256: sha256Of(file), transformed: true }],
         }),
       );
-      expect(detectAlreadyObfuscatedInputs([a], dir, afterpackDir)).toBeNull();
+      expect(detectAlreadyObfuscatedInputs([file], dir)).toBeNull();
     }
   });
 
-  it("finds a match when the receipt sits exactly at startDir", () => {
-    const dir = join(root, "dist");
-    mkdirSync(dir, { recursive: true });
-    const a = join(dir, "a.js");
-    writeFileSync(a, "OBF:export const a = 1;");
-    receiptAt(dir, [a]);
+  it("finds a match in the receipt of the dir itself", () => {
+    const { dir, file } = distWith("a.js", "OBF:export const a = 1;");
+    receiptAt(dir, [file]);
 
-    const result = detectAlreadyObfuscatedInputs([a], dir, afterpackDir);
-    expect(result?.files).toEqual([a]);
-    expect(result?.receiptPath).toBe(join(afterpackDir, "receipts", "dist.json"));
+    const result = detectAlreadyObfuscatedInputs([file], dir);
+    expect(result?.files).toEqual([file]);
+    expect(result?.receiptPath).toBe(join(receiptsDir(), "dist.json"));
   });
 
-  it("finds a match when the receipt lives in an ANCESTOR of startDir", () => {
-    const dir = join(root, "dist", "chunks");
-    mkdirSync(dir, { recursive: true });
-    const a = join(dir, "a.js");
-    writeFileSync(a, "OBF:export const a = 1;");
-    receiptAt(root, [a]);
+  it("finds a match in the receipt of an ANCESTOR dir", () => {
+    const { file } = distWith("a.js", "OBF:export const a = 1;", join("dist", "chunks"));
+    receiptAt(join(root, "dist"), [file]);
 
-    const result = detectAlreadyObfuscatedInputs([a], dir, afterpackDir);
-    expect(result?.files).toEqual([a]);
-    expect(result?.receiptPath).toBe(join(afterpackDir, "receipts", "..json"));
+    const result = detectAlreadyObfuscatedInputs([file], join(root, "dist", "chunks"));
+    expect(result?.files).toEqual([file]);
+    expect(result?.receiptPath).toBe(join(receiptsDir(), "dist.json"));
   });
 
-  it("returns null when the receipt exists but no current file's hash matches", () => {
-    const dir = join(root, "dist");
-    mkdirSync(dir, { recursive: true });
-    const a = join(dir, "a.js");
-    writeFileSync(a, "export const a = 1;");
-    receiptAt(dir, [a]);
-    writeFileSync(a, "export const a = 2;");
-    expect(detectAlreadyObfuscatedInputs([a], dir, afterpackDir)).toBeNull();
+  it("finds a match in the receipt of a DESCENDANT dir: dist/browser, then dist", () => {
+    const { dir, file } = distWith("main.js", "OBF:main", join("dist", "browser"));
+    receiptAt(dir, [file]);
+
+    const result = detectAlreadyObfuscatedInputs([file], join(root, "dist"));
+    expect(result?.files).toEqual([file]);
+    expect(result?.receiptPath).toBe(join(receiptsDir(), "dist%2Fbrowser.json"));
   });
 
-  it("matches by content hash alone — a renamed/moved file with unchanged bytes still counts", () => {
-    const dir = join(root, "dist");
-    mkdirSync(dir, { recursive: true });
-    const original = join(dir, "old-name.js");
-    writeFileSync(original, "OBF:export const a = 1;");
-    receiptAt(dir, [original]);
+  it("reads every receipt that covers the dir, not just one", () => {
+    const outer = distWith("x.js", "OBF:x");
+    receiptAt(outer.dir, [outer.file]);
+    const inner = distWith("y.js", "OBF:y", join("dist", "inner"));
+    receiptAt(inner.dir, [inner.file]);
 
-    const moved = join(dir, "new-name.js");
-    writeFileSync(moved, "OBF:export const a = 1;");
-    const result = detectAlreadyObfuscatedInputs([moved], dir, afterpackDir);
-    expect(result?.files).toEqual([moved]);
-  });
-
-  it("only reports the subset of files that actually match", () => {
-    const dir = join(root, "dist");
-    mkdirSync(dir, { recursive: true });
-    const stale = join(dir, "stale.js");
-    const fresh = join(dir, "fresh.js");
-    writeFileSync(stale, "OBF:stale");
-    writeFileSync(fresh, "export const fresh = 1;");
-    receiptAt(dir, [stale]);
-
-    const result = detectAlreadyObfuscatedInputs([stale, fresh], dir, afterpackDir);
-    expect(result?.files).toEqual([stale]);
-  });
-
-  it("skips a listed file that no longer exists on disk, without throwing", () => {
-    const dir = join(root, "dist");
-    mkdirSync(dir, { recursive: true });
-    const a = join(dir, "a.js");
-    writeFileSync(a, "OBF:export const a = 1;");
-    receiptAt(dir, [a]);
-
-    const missing = join(dir, "gone.js");
-    expect(() => detectAlreadyObfuscatedInputs([missing], dir, afterpackDir)).not.toThrow();
-    expect(detectAlreadyObfuscatedInputs([missing], dir, afterpackDir)).toBeNull();
-  });
-
-  it("hashes the bytes the caller already read instead of re-reading the file", () => {
-    const dir = join(root, "dist");
-    mkdirSync(dir, { recursive: true });
-    const a = join(dir, "a.js");
-    writeFileSync(a, "OBF:export const a = 1;");
-    receiptAt(dir, [a]);
-    const obfuscated = readFileSync(a);
-
-    writeFileSync(a, "something else entirely");
-    expect(detectAlreadyObfuscatedInputs([a], dir, afterpackDir)).toBeNull();
-    expect(
-      detectAlreadyObfuscatedInputs([a], dir, afterpackDir, new Map([[a, obfuscated]]))?.files,
-    ).toEqual([a]);
-  });
-
-  it("ignores a receipt whose files array is empty", () => {
-    const dir = join(root, "dist");
-    mkdirSync(dir, { recursive: true });
-    const a = join(dir, "a.js");
-    writeFileSync(a, "OBF:export const a = 1;");
-    receiptAt(dir, []);
-    expect(detectAlreadyObfuscatedInputs([a], dir, afterpackDir)).toBeNull();
-  });
-
-  it("is no signal for a file the receipt records as unchanged — a rebuild reproduces those bytes", () => {
-    const dir = join(root, "dist");
-    mkdirSync(dir, { recursive: true });
-    const untouched = join(dir, "empty.js");
-    writeFileSync(untouched, "export {};");
-    receiptAt(dir, [untouched], []);
-    expect(detectAlreadyObfuscatedInputs([untouched], dir, afterpackDir)).toBeNull();
+    expect(detectAlreadyObfuscatedInputs([inner.file], join(root, "dist"))?.files).toEqual([
+      inner.file,
+    ]);
   });
 
   it("ignores another build dir's receipt in the same project", () => {
-    const dir = join(root, "dist", "client");
-    const other = join(root, "dist", "server");
-    mkdirSync(dir, { recursive: true });
-    mkdirSync(other, { recursive: true });
-    const a = join(dir, "a.js");
-    writeFileSync(a, "OBF:export const a = 1;");
-    receiptAt(other, [a]);
-    expect(detectAlreadyObfuscatedInputs([a], dir, afterpackDir)).toBeNull();
+    const { dir, file } = distWith("a.js", "OBF:export const a = 1;", join("dist", "client"));
+    mkdirSync(join(root, "dist", "server"), { recursive: true });
+    receiptAt(join(root, "dist", "server"), [file]);
+    expect(detectAlreadyObfuscatedInputs([file], dir)).toBeNull();
+  });
+
+  it("returns null when the receipt exists but no current file's hash matches", () => {
+    const { dir, file } = distWith("a.js", "export const a = 1;");
+    receiptAt(dir, [file]);
+    writeFileSync(file, "export const a = 2;");
+    expect(detectAlreadyObfuscatedInputs([file], dir)).toBeNull();
+  });
+
+  it("matches by content hash alone — a renamed/moved file with unchanged bytes still counts", () => {
+    const { dir, file } = distWith("old-name.js", "OBF:export const a = 1;");
+    receiptAt(dir, [file]);
+
+    const moved = join(dir, "new-name.js");
+    writeFileSync(moved, "OBF:export const a = 1;");
+    expect(detectAlreadyObfuscatedInputs([moved], dir)?.files).toEqual([moved]);
+  });
+
+  it("only reports the subset of files that actually match", () => {
+    const { dir, file: stale } = distWith("stale.js", "OBF:stale");
+    const fresh = join(dir, "fresh.js");
+    writeFileSync(fresh, "export const fresh = 1;");
+    receiptAt(dir, [stale]);
+
+    expect(detectAlreadyObfuscatedInputs([stale, fresh], dir)?.files).toEqual([stale]);
+  });
+
+  it("skips a listed file that no longer exists on disk, without throwing", () => {
+    const { dir, file } = distWith("a.js", "OBF:export const a = 1;");
+    receiptAt(dir, [file]);
+
+    const missing = join(dir, "gone.js");
+    expect(() => detectAlreadyObfuscatedInputs([missing], dir)).not.toThrow();
+    expect(detectAlreadyObfuscatedInputs([missing], dir)).toBeNull();
+  });
+
+  it("hashes the bytes the caller already read instead of re-reading the file", () => {
+    const { dir, file } = distWith("a.js", "OBF:export const a = 1;");
+    receiptAt(dir, [file]);
+    const obfuscated = readFileSync(file);
+
+    writeFileSync(file, "something else entirely");
+    expect(detectAlreadyObfuscatedInputs([file], dir)).toBeNull();
+    expect(
+      detectAlreadyObfuscatedInputs([file], dir, new Map([[file, obfuscated]]))?.files,
+    ).toEqual([file]);
+  });
+
+  it("ignores a receipt whose files array is empty", () => {
+    const { dir, file } = distWith("a.js", "OBF:export const a = 1;");
+    receiptAt(dir, []);
+    expect(detectAlreadyObfuscatedInputs([file], dir)).toBeNull();
+  });
+
+  it("is no signal for a file the receipt records as unchanged — a rebuild reproduces those bytes", () => {
+    const { dir, file } = distWith("empty.js", "export {};");
+    receiptAt(dir, [file], []);
+    expect(detectAlreadyObfuscatedInputs([file], dir)).toBeNull();
   });
 });
 
 describe("where a protection receipt lives", () => {
-  it("is the project's .afterpack/receipts/, never the build dir", () => {
-    const dir = join(root, "dist");
-    mkdirSync(dir, { recursive: true });
-    const a = join(dir, "a.js");
-    writeFileSync(a, "OBF");
-    const path = receiptAt(dir, [a]);
-    expect(path).toBe(join(root, ".afterpack", "receipts", "dist.json"));
+  it("is .afterpack/receipts/ beside the project marker, never the build dir", () => {
+    const { dir, file } = distWith("a.js", "OBF");
+    const path = receiptAt(dir, [file]);
+    expect(path).toBe(join(receiptsDir(), "dist.json"));
     expect(readdirSync(dir)).toEqual(["a.js"]);
     expect(readFileSync(join(root, ".afterpack", ".gitignore"), "utf8")).toBe("*\n");
+    expect(JSON.parse(readFileSync(path, "utf8")).buildDir).toBe("dist");
   });
 
   it("names each build dir by its path from the project root, so builds never collide", () => {
-    expect(receiptFor(join(root, "dist"))).toBe(join(afterpackDir, "receipts", "dist.json"));
-    expect(receiptFor(join(root, "dist", "browser"))).toBe(
-      join(afterpackDir, "receipts", "dist%2Fbrowser.json"),
+    for (const sub of ["dist", join("dist", "browser"), ".next"]) {
+      mkdirSync(join(root, sub), { recursive: true });
+    }
+    expect(protectionReceiptPath(join(root, "dist"))).toBe(join(receiptsDir(), "dist.json"));
+    expect(protectionReceiptPath(join(root, "dist", "browser"))).toBe(
+      join(receiptsDir(), "dist%2Fbrowser.json"),
     );
-    expect(receiptFor(join(root, ".next"))).toBe(join(afterpackDir, "receipts", ".next.json"));
-    expect(receiptFor(root)).toBe(join(afterpackDir, "receipts", "..json"));
-    expect(receiptFor(join(root, "..", "elsewhere", "out"))).toBe(
-      join(afterpackDir, "receipts", "..%2Felsewhere%2Fout.json"),
-    );
-    expect(receiptFor(join(root, "a*b"))).toBe(join(afterpackDir, "receipts", "a%2Ab.json"));
+    expect(protectionReceiptPath(join(root, ".next"))).toBe(join(receiptsDir(), ".next.json"));
+    expect(protectionReceiptPath(join(root, "a*b"))).toBe(join(receiptsDir(), "a%2Ab.json"));
   });
 
-  it("keys a nested .afterpack leg dir by the project root, at one receipts dir", () => {
-    expect(protectionReceiptPath(join(afterpackDir, "client"), join(root, "dist", "client"))).toBe(
-      join(afterpackDir, "receipts", "dist%2Fclient.json"),
+  it("gives one key to case-different spellings of the same dir on a case-insensitive disk", () => {
+    mkdirSync(join(root, "dist"));
+    if (!existsSync(join(root, "DIST"))) return;
+    expect(protectionReceiptPath(join(root, "DIST"))).toBe(
+      protectionReceiptPath(join(root, "dist")),
     );
+    expect(protectionReceiptPath(join(root, "Dist"))).toBe(join(receiptsDir(), "dist.json"));
   });
 
-  it("resolves the same key through a symlinked project path", () => {
-    const real = join(root, "real");
-    mkdirSync(join(real, "dist"), { recursive: true });
-    const link = join(root, "link");
-    symlinkSync(real, link);
-    expect(protectionReceiptPath(join(link, ".afterpack"), join(real, "dist"))).toBe(
-      join(link, ".afterpack", "receipts", "dist.json"),
+  it("keeps a short CJK key readable", () => {
+    const dir = join(root, "构建");
+    mkdirSync(dir);
+    expect(basename(protectionReceiptPath(dir))).toBe(`${encodeURIComponent("构建")}.json`);
+  });
+
+  it("hashes a key past 180 bytes behind a readable prefix, and keeps long keys distinct", () => {
+    const deep = join(root, ...Array.from({ length: 12 }, (_, i) => `segment-number-${i}`));
+    const cjk = join(root, "输出目录".repeat(8));
+    mkdirSync(join(deep, "a"), { recursive: true });
+    mkdirSync(join(deep, "b"), { recursive: true });
+    mkdirSync(cjk);
+
+    const a = basename(protectionReceiptPath(join(deep, "a")), ".json");
+    const b = basename(protectionReceiptPath(join(deep, "b")), ".json");
+    const c = basename(protectionReceiptPath(cjk), ".json");
+    for (const key of [a, b, c]) {
+      expect(Buffer.byteLength(key)).toBeLessThanOrEqual(180);
+      expect(key).toMatch(/~[0-9a-f]{16}$/);
+    }
+    expect(a.startsWith("segment-number-0%2Fsegment-number-1")).toBe(true);
+    expect(c).toMatch(/^(%[0-9A-F]{2})+~[0-9a-f]{16}$/);
+    expect(a).not.toBe(b);
+  });
+
+  it("writes and verifies a receipt under a long key", () => {
+    const deep = join(root, ...Array.from({ length: 12 }, (_, i) => `segment-number-${i}`));
+    mkdirSync(deep, { recursive: true });
+    const file = join(deep, "a.js");
+    writeFileSync(file, "OBF");
+    const path = receiptAt(deep, [file]);
+    expect(dirname(path)).toBe(receiptsDir());
+    expect(verifyProtectionReceipt(protectionReceiptPath(deep), deep).problems).toEqual([]);
+  });
+});
+
+describe("prepareProtectionReceipt", () => {
+  it("creates the receipts dir and leaves no receipt behind", () => {
+    const { dir } = distWith("a.js", "x");
+    const path = prepareProtectionReceipt(dir, "afterpack-test");
+    expect(existsSync(receiptsDir())).toBe(true);
+    expect(existsSync(path)).toBe(false);
+  });
+
+  it("keeps an existing receipt as it was", () => {
+    const { dir, file } = distWith("a.js", "OBF");
+    const path = receiptAt(dir, [file]);
+    const before = readFileSync(path, "utf8");
+    prepareProtectionReceipt(dir, "afterpack-test");
+    expect(readFileSync(path, "utf8")).toBe(before);
+  });
+
+  it("fails, naming the path, when the receipt cannot be written", () => {
+    const { dir } = distWith("a.js", "x");
+    mkdirSync(join(root, ".afterpack"), { recursive: true });
+    writeFileSync(receiptsDir(), "a file where the receipts dir belongs");
+    expect(() => prepareProtectionReceipt(dir, "afterpack-test")).toThrow(
+      /\[afterpack-test\] cannot write the protection receipt .*dist\.json, so no file was rewritten/,
     );
   });
 });
 
-describe("findProtectionReceipt", () => {
-  it("finds the receipt of a build dir from the .afterpack/ above it", () => {
-    const dir = join(root, "dist", "browser");
-    mkdirSync(dir, { recursive: true });
-    const a = join(dir, "a.js");
-    writeFileSync(a, "OBF");
-    const written = receiptAt(dir, [a]);
-    expect(findProtectionReceipt(dir)).toBe(written);
+describe("sweepOutputTree", () => {
+  it("removes stale receipts throughout the tree it walks", () => {
+    const { dir } = distWith(".afterpack-protection.json", "{}");
+    mkdirSync(join(dir, "assets"), { recursive: true });
+    writeFileSync(join(dir, "assets", ".afterpack-protection.json"), "{}");
+
+    sweepOutputTree(dir, dir, "afterpack-test");
+
+    expect(readdirSync(dir)).toEqual(["assets"]);
+    expect(readdirSync(join(dir, "assets"))).toEqual([]);
   });
 
-  it("finds a receipt for a build dir outside the project through the roots it is given", () => {
-    const project = join(root, "project");
-    const out = join(root, "out");
-    mkdirSync(project, { recursive: true });
-    mkdirSync(out, { recursive: true });
-    const a = join(out, "a.js");
-    writeFileSync(a, "OBF");
-    const written = writeProtectionReceipt({
-      dir: out,
-      afterpackDir: join(project, ".afterpack"),
-      tool: "afterpack-test",
-      engine: "local",
-      engineVersion: null,
-      seed: 1,
-      seedOrigin: "fresh",
-      bundler: "test",
-      buildId: null,
-      files: [a],
-      transformed: [a],
-    });
-    expect(findProtectionReceipt(out)).toBeNull();
-    expect(findProtectionReceipt(out, [project])).toBe(written);
+  it("looks only at the top level when it walks no tree", () => {
+    const { dir } = distWith(".afterpack-protection.json", "{}");
+    mkdirSync(join(dir, "assets"), { recursive: true });
+    writeFileSync(join(dir, "assets", ".afterpack-protection.json"), "{}");
+
+    sweepOutputTree(dir, null, "afterpack-test");
+
+    expect(readdirSync(dir)).toEqual(["assets"]);
+    expect(readdirSync(join(dir, "assets"))).toEqual([".afterpack-protection.json"]);
   });
 
-  it("is null when no .afterpack/ at or above the dir holds a receipt for it", () => {
-    const dir = join(root, "dist");
-    const other = join(root, "other");
-    mkdirSync(dir, { recursive: true });
-    mkdirSync(other, { recursive: true });
-    const a = join(other, "a.js");
-    writeFileSync(a, "OBF");
-    receiptAt(other, [a]);
-    expect(findProtectionReceipt(dir)).toBeNull();
-  });
-});
-
-describe("removeStaleOutputReceipt", () => {
-  it("removes a receipt an earlier run wrote into the build dir", () => {
-    const dir = join(root, "dist");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, ".afterpack-protection.json"), "{}");
-    removeStaleOutputReceipt(dir, "afterpack-test");
-    expect(existsSync(join(dir, ".afterpack-protection.json"))).toBe(false);
+  it("is a no-op when there is no build dir yet", () => {
+    expect(() => sweepOutputTree(join(root, "missing"), null, "afterpack-test")).not.toThrow();
   });
 
-  it("is a no-op when there is none, or no build dir yet", () => {
-    expect(() => removeStaleOutputReceipt(join(root, "missing"), "afterpack-test")).not.toThrow();
-  });
-
-  it("fails loudly when the stale receipt cannot be removed", () => {
+  it("fails loudly when a stale receipt cannot be removed", () => {
     const dir = join(root, "dist");
     mkdirSync(join(dir, ".afterpack-protection.json"), { recursive: true });
-    expect(() => removeStaleOutputReceipt(dir, "afterpack-test")).toThrow(
+    expect(() => sweepOutputTree(dir, dir, "afterpack-test")).toThrow(
       /\[afterpack-test\] could not remove the stale protection receipt/,
+    );
+  });
+
+  it("fails the run on a .afterpack/ dir inside the build output, naming it", () => {
+    const dir = join(root, "public");
+    mkdirSync(join(dir, "nested", ".afterpack", "backup"), { recursive: true });
+    expect(() => sweepOutputTree(dir, dir, "afterpack-test")).toThrow(
+      new RegExp(
+        `\\[afterpack-test\\] found ${join(dir, "nested", ".afterpack").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} inside the build output .*Delete it`,
+      ),
     );
   });
 });

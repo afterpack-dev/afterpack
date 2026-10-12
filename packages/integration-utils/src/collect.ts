@@ -1,6 +1,7 @@
 import { type Dirent, existsSync, readdirSync, type Stats, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import { matchesPath, reachesInto } from "./glob.js";
+import { AFTERPACK_DIR } from "./home.js";
 
 const BACKUP_RE = /\.backup\.[0-9a-f]{8}\.[cm]?js$/;
 
@@ -64,6 +65,7 @@ function walkJs(
     const kind = kindOf(entry, full);
     if (kind === null) continue;
     if (kind === "dir") {
+      if (name === AFTERPACK_DIR) continue;
       const skipped = name === NODE_MODULES;
       if (!skipped && !readmitted && isNestedProject(full)) {
         onNestedProject?.(full);
@@ -90,7 +92,7 @@ function collectFiles(dir: string, accept: (name: string) => boolean): string[] 
     const kind = kindOf(entry, full);
     if (kind === null) continue;
     if (kind === "dir") {
-      if (name === NODE_MODULES || isNestedProject(full)) continue;
+      if (name === NODE_MODULES || name === AFTERPACK_DIR || isNestedProject(full)) continue;
       out.push(...collectFiles(full, accept));
     } else if (accept(name)) {
       out.push(full);

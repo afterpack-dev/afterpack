@@ -4,7 +4,10 @@ import { describe, expect, it } from "vitest";
 import * as api from "./index.js";
 
 const SURFACE = [
+  "AFTERPACK_DIR",
   "AfterpackArtifactOptions",
+  "AfterpackHome",
+  "afterpackHome",
   "AfterpackConfig",
   "AfterpackPluginOptions",
   "AlreadyObfuscatedError",
@@ -116,7 +119,6 @@ const SURFACE = [
   "decodeDataUri",
   "discoverInputSourceMap",
   "extractSourceMappingURL",
-  "findProtectionReceipt",
   "getPath",
   "loadConfigFile",
   "mergeConfig",
@@ -125,7 +127,7 @@ const SURFACE = [
   "parseEnvOptions",
   "protectionReceiptPath",
   "removeSourceMaps",
-  "removeStaleOutputReceipt",
+  "sweepOutputTree",
   "resolvePluginConfig",
   "resolveClientIdentity",
   "resolveReportPolicy",

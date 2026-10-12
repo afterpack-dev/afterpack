@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
 import { processBatch, version } from "@afterpack/core";
 import {
   type AfterpackPluginOptions,
@@ -53,7 +53,6 @@ export function afterpackEsbuild(options: AfterpackEsbuildOptions = {}): Plugin 
         const { files, buildDir, sweepDir } = resolveOutputs(io, cwd, settings.paths?.include);
         if (files.length === 0) return;
 
-        const gitignoredNonServedAfterpackDir = join(cwd, ".afterpack");
         const pass = await runObfuscationPass({
           files,
           engine: { processBatch, version },
@@ -62,7 +61,7 @@ export function afterpackEsbuild(options: AfterpackEsbuildOptions = {}): Plugin 
           label: "afterpack-esbuild",
           cwd,
           startedAt: startedBeforeOutputWalk,
-          combinedProtectionMap: { buildDir, afterpackDir: gitignoredNonServedAfterpackDir },
+          combinedProtectionMap: { buildDir },
           sourceMapSweepDir: sweepDir,
           ...passSettings(resolved),
           sourceType: sourceTypeForOutputFormat(io.format),

@@ -1,10 +1,17 @@
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-import { findProtectionReceipt, verifyProtectionReceipt } from "@afterpack/integration-utils";
+import { protectionReceiptPath, verifyProtectionReceipt } from "@afterpack/integration-utils";
 import { CONTACT_FOOTER } from "./args.js";
 import { EXIT, type ExitCode } from "./exit.js";
 import { dim, green } from "./format.js";
-import { commandFailure, displayDir, documentPath, emitJson, type OutputMode } from "./output.js";
+import {
+  commandFailure,
+  displayDir,
+  documentPath,
+  emitJson,
+  type OutputMode,
+  realDir,
+} from "./output.js";
 import type { CliLogger } from "./run.js";
 
 const VERIFY_USAGE = "usage: afterpack verify [dir] [--diagnostics.format=text|json]";
@@ -12,9 +19,10 @@ const VERIFY_USAGE = "usage: afterpack verify [dir] [--diagnostics.format=text|j
 export const VERIFY_HELP = `${VERIFY_USAGE}
 
 Re-checks a build output tree against the protection receipt the build wrote
-for it under the project's .afterpack/receipts/: every recorded file must still
+for it in .afterpack/receipts/, next to the nearest package.json, afterpack.json
+or .git above the tree (otherwise beside it): every recorded file must still
 hash to the value it was obfuscated to. Run it in the deploy step, after the
-build and before the upload, from the project the build ran in.
+build and before the upload.
 
 A MISSING receipt FAILS. This command is only ever run by someone who expects a
 protected tree, so "there was nothing to check" is not a pass.
@@ -85,8 +93,8 @@ export function verify(deps: VerifyDeps): ExitCode {
     );
   }
   const requested = positionals[0] ?? ".";
-  const target = isAbsolute(requested) ? requested : resolve(cwd, requested);
-  if (!existsSync(target)) {
+  const requestedPath = isAbsolute(requested) ? requested : resolve(cwd, requested);
+  if (!existsSync(requestedPath)) {
     return fail(
       deps,
       EXIT.failure,
@@ -96,11 +104,12 @@ export function verify(deps: VerifyDeps): ExitCode {
     );
   }
 
-  const located = candidates(target)
+  const target = realDir(requestedPath);
+  const looked = candidates(target)
     .filter((c) => existsSync(c))
-    .map((c) => ({ dir: c, receiptPath: findProtectionReceipt(c, [cwd]) }))
-    .find((c) => c.receiptPath !== null);
-  if (!located?.receiptPath) {
+    .map((c) => ({ dir: c, receiptPath: protectionReceiptPath(c) }));
+  const located = looked.find((c) => existsSync(c.receiptPath));
+  if (!located) {
     return fail(
       deps,
       EXIT.failure,
@@ -108,12 +117,8 @@ export function verify(deps: VerifyDeps): ExitCode {
       `no protection receipt found for ${requested}`,
       "A receipt is written to .afterpack/receipts/ by the run that obfuscated the tree — run " +
         "`afterpack <dir>`, or build again through the framework plugin, then point verify at " +
-        "that output directory from the same project.",
-      candidates(target).map(
-        (c) =>
-          `looked for the receipt of ${documentPath(cwd, c)} in every .afterpack/receipts/ ` +
-          "at or above it, and in the working directory's",
-      ),
+        "that output directory.",
+      looked.map((c) => `looked in ${documentPath(cwd, c.receiptPath)}`),
     );
   }
 

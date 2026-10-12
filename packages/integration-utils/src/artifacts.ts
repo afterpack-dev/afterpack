@@ -5,6 +5,7 @@ import {
   type ProtectionMapFile,
   renderProtectionMapHtml,
 } from "@afterpack/protection-map";
+import { AFTERPACK_DIR } from "./home.js";
 import {
   type ArtifactMode,
   combinedProtectionMapPath,
@@ -12,8 +13,6 @@ import {
   shortHash,
 } from "./paths.js";
 import type { ReportPolicy } from "./policy.js";
-
-export const AFTERPACK_DIR = ".afterpack";
 
 const AFTERPACK_GITIGNORE_CONTENT = "*\n";
 
@@ -607,7 +606,7 @@ function logProtectionMapInProd(pmPath: string, logger: Logger): void {
   logger.log(`[afterpack] Protection Map -> ${display} (local only, not deployed)`);
 }
 
-export function afterpackRoot(dir: string): string {
+function afterpackRoot(dir: string): string {
   const resolved = resolve(dir);
   const segments = resolved.split(sep);
   const index = segments.lastIndexOf(AFTERPACK_DIR);

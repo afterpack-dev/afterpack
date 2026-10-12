@@ -18,6 +18,7 @@ let outDir: string;
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "afterpack-rollup-test-"));
+  writeFileSync(join(root, "package.json"), "{}");
   outDir = join(root, "dist");
   mkdirSync(outDir, { recursive: true });
   __reset();

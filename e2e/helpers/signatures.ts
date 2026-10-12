@@ -2,8 +2,8 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { expect } from "@playwright/test";
 import ts from "typescript";
-import { findProtectionReceipt } from "../../packages/integration-utils/src/receipt.js";
 import { stripHashes } from "./normalize.js";
+import { receiptOf } from "./receipt.js";
 import type { Fixture } from "./registry.js";
 
 export const SIGNATURE_THRESHOLDS = {
@@ -128,7 +128,7 @@ export interface ProtectedFile {
 
 export function protectedFilesOf(app: Fixture): ProtectedFile[] {
   return app.receipts.flatMap((root) => {
-    const receiptPath = findProtectionReceipt(root);
+    const receiptPath = receiptOf(root);
     expect(receiptPath, `${app.name}: no protection receipt for ${root}`).not.toBeNull();
     if (!receiptPath) return [];
     const receipt = JSON.parse(readFileSync(receiptPath, "utf8")) as {

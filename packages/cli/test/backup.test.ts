@@ -4,6 +4,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -24,7 +25,7 @@ import {
 let root: string;
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "afterpack-backup-"));
+  root = realpathSync(mkdtempSync(join(tmpdir(), "afterpack-backup-")));
 });
 afterEach(() => {
   rmSync(root, { recursive: true, force: true });

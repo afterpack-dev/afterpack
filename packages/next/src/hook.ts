@@ -130,7 +130,7 @@ export async function runAfterpackHook(input: AfterpackHookInput): Promise<void>
     label: LABEL,
     cwd: projectDir,
     startedAt,
-    combinedProtectionMap: { buildDir: distDir, afterpackDir: join(projectDir, ".afterpack") },
+    combinedProtectionMap: { buildDir: distDir },
     sourceMapSweepDir: join(distDir, "static"),
     ...passSettings(resolved),
     postMinify: true,

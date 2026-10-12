@@ -1,10 +1,14 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
-import { ensureAfterpackGitignore, findUpward, sha256Of } from "@afterpack/integration-utils";
+import {
+  AFTERPACK_DIR,
+  afterpackHome,
+  ensureAfterpackGitignore,
+  sha256Of,
+} from "@afterpack/integration-utils";
 
 const BACKUP_MANIFEST_FILE = "manifest.json";
-const BACKUP_MANIFEST_RELATIVE = join(".afterpack", "backup", BACKUP_MANIFEST_FILE);
 
 export interface BackupManifestFile {
   path: string;
@@ -21,23 +25,25 @@ export interface BackupManifest {
   files: BackupManifestFile[];
 }
 
-export function projectRootFor(cwd: string, configFile: string | null): string {
-  return configFile ? dirname(configFile) : cwd;
-}
-
 export function backupDir(projectRoot: string): string {
-  return join(projectRoot, ".afterpack", "backup");
+  return join(projectRoot, AFTERPACK_DIR, "backup");
 }
 
 export function backupManifestPath(projectRoot: string): string {
   return join(backupDir(projectRoot), BACKUP_MANIFEST_FILE);
 }
 
-export function findBackupProjectRoot(startDir: string): string | null {
-  const manifestPath = findUpward(startDir, BACKUP_MANIFEST_RELATIVE, {
-    stopAtDir: (dir) => existsSync(join(dir, ".git")),
-  });
-  return manifestPath ? dirname(dirname(dirname(manifestPath))) : null;
+function homeProjectRoot(dir: string): string | null {
+  try {
+    return afterpackHome(dir).projectRoot;
+  } catch {
+    return null;
+  }
+}
+
+export function findBackupProjectRoot(dir: string): string | null {
+  const candidates = [dir, homeProjectRoot(dir)].filter((c): c is string => c !== null);
+  return candidates.find((c) => existsSync(backupManifestPath(c))) ?? null;
 }
 
 function toPosixPath(value: string): string {

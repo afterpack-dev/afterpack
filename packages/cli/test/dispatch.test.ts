@@ -275,11 +275,16 @@ describe("an explicit path pointed at a PROJECT (its own package.json) dispatche
 
   it("a FILE argument is unaffected even from inside a project root", async () => {
     pkg({ vite: "6.0.0" });
-    const file = join(root, "app.js");
+    mkdirSync(join(root, "scripts"));
+    const file = join(root, "scripts", "app.js");
     writeFileSync(file, "var a = 1;");
 
     expect(
-      await invoke(["app.js", "--protectionMap.enabled=false", "--telemetry.enabled=false"]),
+      await invoke([
+        "scripts/app.js",
+        "--protectionMap.enabled=false",
+        "--telemetry.enabled=false",
+      ]),
     ).toBe(0);
     expect(engineCalls).toHaveLength(1);
   });

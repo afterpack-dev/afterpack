@@ -4,6 +4,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -36,7 +37,8 @@ let warnings: string[];
 let infos: string[];
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "afterpack-parcel-reporter-test-"));
+  root = realpathSync(mkdtempSync(join(tmpdir(), "afterpack-parcel-reporter-test-")));
+  writeFileSync(join(root, "package.json"), "{}");
   dist = join(root, "dist");
   mkdirSync(dist, { recursive: true });
   warnings = [];
@@ -95,7 +97,7 @@ function report(bundles: unknown[], type = "buildSuccess"): void {
 }
 
 function receiptFor(dir: string): string {
-  return protectionReceiptPath(join(root, ".afterpack"), dir);
+  return protectionReceiptPath(dir);
 }
 
 function receiptIn(dir: string): ProtectionReceipt {

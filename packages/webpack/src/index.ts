@@ -219,7 +219,6 @@ export class AfterpackWebpackPlugin {
       capturedByFile: capturedByFile.size > 0 ? capturedByFile : undefined,
       combinedProtectionMap: {
         buildDir: outputPath,
-        afterpackDir: join(context, ".afterpack"),
       },
       ...passSettings({ options: this.settings, engineConfig: this.engineConfig }),
       sourceType: sourceTypeForOutputFormat(outputModule ? "module" : undefined),

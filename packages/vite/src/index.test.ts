@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { protectionReceiptPath } from "@afterpack/integration-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __reset,
@@ -25,6 +26,7 @@ let outDir: string;
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "afterpack-vite-test-"));
+  writeFileSync(join(root, "package.json"), "{}");
   outDir = join(root, "dist");
   mkdirSync(outDir, { recursive: true });
   writeFileSync(join(root, ".gitignore"), "");
@@ -370,6 +372,25 @@ describe("afterpackVite writeBundle (protection receipt)", () => {
     await p.generateBundle.handler.call({}, { dir: outDir }, bundle);
 
     expect(existsSync(join(outDir, ".afterpack-protection.json"))).toBe(false);
+  });
+
+  it("keeps the receipt with the project when vite's root is a subdir and outDir sits outside it", async () => {
+    const client = join(root, "client");
+    mkdirSync(client);
+    const plugin = afterpackVite({});
+    // biome-ignore lint/suspicious/noExplicitAny: exercising Vite hooks directly in a test.
+    const p = plugin as any;
+    p.configResolved({ root: client, build: { outDir: "../dist" } });
+    const bundle = bundleOf(chunk("a.js", "export const a = 1;"));
+    await p.generateBundle.handler.call({}, { dir: outDir }, bundle);
+    const emitted = bundle["a.js"].code;
+    if (emitted === undefined) throw new Error("the pass left the chunk with no code");
+    writeFileSync(join(outDir, "a.js"), emitted);
+    await p.writeBundle();
+
+    expect(existsSync(join(root, ".afterpack", "receipts", "dist.json"))).toBe(true);
+    expect(existsSync(join(client, ".afterpack"))).toBe(false);
+    expect(existsSync(protectionReceiptPath(outDir))).toBe(true);
   });
 
   it("keys a leg's receipt by its own outDir, in the project's one receipts dir", async () => {

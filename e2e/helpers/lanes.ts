@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { relative } from "node:path";
 import { expect, test } from "@playwright/test";
-import { findProtectionReceipt } from "../../packages/integration-utils/src/receipt.js";
 import { readBuildLog } from "./build-log.js";
 import { currentFixture } from "./current.js";
+import { receiptOf } from "./receipt.js";
 import type { Fixture } from "./registry.js";
 
 const PASS_LEVEL = /obfuscating \d+ file\(s\) at (.+?) \.\.\./g;
@@ -24,7 +24,7 @@ export function regionsSent(log: string): number {
 export function proBuildProblems(app: Fixture, log: string, engineVersion: string): string[] {
   const problems: string[] = [];
   for (const dir of app.receipts) {
-    const path = findProtectionReceipt(dir);
+    const path = receiptOf(dir);
     if (!path) {
       problems.push(`no protection receipt for ${relative(app.dir, dir)}`);
       continue;
@@ -84,7 +84,7 @@ export function candidateLaneTests(): void {
       const log = readBuildLog(app);
       expect(proBuildProblems(app, log.replace(REGIONS_SENT, ""), "0.0.0-none")).toEqual([
         ...app.receipts.flatMap((dir) => {
-          const path = findProtectionReceipt(dir) ?? dir;
+          const path = receiptOf(dir) ?? dir;
           const where = relative(app.dir, path);
           const { engineVersion } = JSON.parse(readFileSync(path, "utf8")) as {
             engineVersion: unknown;

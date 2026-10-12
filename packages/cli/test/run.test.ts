@@ -4,6 +4,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -29,7 +30,7 @@ function invoke(argv: string[]): Promise<number> {
 }
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "afterpack-cli-test-"));
+  root = realpathSync(mkdtempSync(join(tmpdir(), "afterpack-cli-test-")));
   buildDir = join(root, "dist");
   mkdirSync(buildDir, { recursive: true });
   out = [];
@@ -276,15 +277,16 @@ describe("run — the Pro upsell line is suppressed whenever a key resolves from
 
 describe("run — a single FILE target", () => {
   it("obfuscates one plain-JS file in place and touches nothing beside it", async () => {
-    const file = join(root, "app.js");
+    mkdirSync(join(root, "bin"));
+    const file = join(root, "bin", "app.js");
     writeFileSync(file, "var a = 1;");
-    writeFileSync(join(root, "untouched.js"), "var b = 2;");
+    writeFileSync(join(root, "bin", "untouched.js"), "var b = 2;");
 
-    const code = await invoke(["app.js", "--protectionMap.enabled=false"]);
+    const code = await invoke(["bin/app.js", "--protectionMap.enabled=false"]);
 
     expect(code).toBe(0);
     expect(readFileSync(file, "utf8")).toContain("OBF:var a = 1;");
-    expect(readFileSync(join(root, "untouched.js"), "utf8")).toBe("var b = 2;");
+    expect(readFileSync(join(root, "bin", "untouched.js"), "utf8")).toBe("var b = 2;");
     expect(engineCalls.map((c) => c.input)).toEqual(["var a = 1;"]);
   });
 

@@ -18,6 +18,7 @@ let outDir: string;
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "afterpack-webpack-test-"));
+  writeFileSync(join(root, "package.json"), "{}");
   outDir = join(root, "dist");
   mkdirSync(outDir, { recursive: true });
   writeFileSync(join(root, ".gitignore"), "");
@@ -247,6 +248,17 @@ describe("AfterpackWebpackPlugin protection receipt", () => {
     const receipt = JSON.parse(readFileSync(receiptPath, "utf8"));
     expect(receipt.files.map((f: { path: string }) => f.path)).toEqual(["main.js"]);
     expect(readdirSync(outDir)).toEqual(["main.js"]);
+  });
+
+  it("keeps the receipt with the project when context is a source subdir", async () => {
+    const src = join(root, "src");
+    mkdirSync(src);
+    writeFileSync(join(outDir, "main.js"), "OBF:export const a = 1;");
+    const invoke = applyPlugin(new AfterpackWebpackPlugin({}), { context: src });
+    await invoke(fixture({ "main.js": "export const a = 1;" }, ["main.js"]));
+
+    expect(existsSync(join(root, ".afterpack", "receipts", "dist.json"))).toBe(true);
+    expect(existsSync(join(src, ".afterpack"))).toBe(false);
   });
 
   it("removes a stale receipt an earlier build left in the output path", async () => {

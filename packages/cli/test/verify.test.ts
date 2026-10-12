@@ -1,4 +1,13 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { writeProtectionReceipt } from "@afterpack/integration-utils";
@@ -18,8 +27,12 @@ const logger = {
   warn: () => {},
 };
 
+function invokeIn(cwd: string, argv: string[]): Promise<number> {
+  return run({ argv, cwd, engine: { processBatch }, logger, version: "9.9.9", env: {} });
+}
+
 function invoke(argv: string[]): Promise<number> {
-  return run({ argv, cwd: root, engine: { processBatch }, logger, version: "9.9.9", env: {} });
+  return invokeIn(root, argv);
 }
 
 function protectedBuild(opts: { transformed?: boolean } = {}): { distDir: string; chunk: string } {
@@ -31,7 +44,6 @@ function protectedBuild(opts: { transformed?: boolean } = {}): { distDir: string
   writeFileSync(join(distDir, "BUILD_ID"), BUILD_ID);
   writeProtectionReceipt({
     dir: distDir,
-    afterpackDir: join(root, ".afterpack"),
     tool: "@afterpack/next",
     engine: "cloud",
     engineVersion: "9.9.9-test",
@@ -46,7 +58,7 @@ function protectedBuild(opts: { transformed?: boolean } = {}): { distDir: string
 }
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "afterpack-verify-test-"));
+  root = realpathSync(mkdtempSync(join(tmpdir(), "afterpack-verify-test-")));
   out = [];
   err = [];
   __reset();
@@ -220,16 +232,94 @@ describe("afterpack <dir> writes the receipt afterpack verify reads", () => {
   it("finds the receipt from a nested working directory", async () => {
     buildOutput();
     expect(await invoke(["dist", ...QUIET])).toBe(0);
+    expect(await invokeIn(join(root, "dist"), ["verify", "."])).toBe(0);
+  });
 
-    const code = await run({
-      argv: ["verify", "."],
-      cwd: join(root, "dist"),
-      engine: { processBatch },
-      logger,
-      version: "9.9.9",
-      env: {},
-    });
-    expect(code).toBe(0);
+  it("refuses a re-run over the same tree from any working directory", async () => {
+    const p2 = join(root, "p2");
+    mkdirSync(join(p2, "dist"), { recursive: true });
+    writeFileSync(join(p2, "dist", "app.js"), "export const a = 1;");
+
+    expect(await invokeIn(p2, ["dist", ...QUIET, "--build.backup=false"])).toBe(0);
+    const once = readFileSync(join(p2, "dist", "app.js"), "utf8");
+
+    err = [];
+    expect(await invokeIn(root, ["p2/dist", ...QUIET, "--build.backup=false"])).toBe(1);
+    expect(err.join("\n")).toContain("Already obfuscated");
+    err = [];
+    expect(await invokeIn(join(p2, "dist"), [".", ...QUIET, "--build.backup=false"])).toBe(1);
+    expect(err.join("\n")).toContain("Already obfuscated");
+
+    expect(readFileSync(join(p2, "dist", "app.js"), "utf8")).toBe(once);
+    expect(readdirSync(join(p2, ".afterpack", "receipts"))).toEqual(["dist.json"]);
+  });
+
+  it("refuses a re-run from another working directory through the backup manifest too", async () => {
+    const p2 = join(root, "p2");
+    mkdirSync(join(p2, "dist"), { recursive: true });
+    writeFileSync(join(p2, "dist", "app.js"), "export const a = 1;");
+    expect(await invokeIn(p2, ["dist", ...QUIET])).toBe(0);
+    rmSync(join(p2, ".afterpack", "receipts"), { recursive: true });
+
+    expect(await invokeIn(root, ["p2/dist", ...QUIET])).toBe(1);
+    expect(err.join("\n")).toContain("Already obfuscated");
+    expect(existsSync(join(p2, ".afterpack", "backup", "manifest.json"))).toBe(true);
+  });
+
+  it("keeps the receipt and the backup together next to the project marker, whatever the cwd", async () => {
+    writeFileSync(join(root, "afterpack.json"), "{}");
+    const project = join(root, "apps", "web");
+    mkdirSync(join(project, "dist"), { recursive: true });
+    writeFileSync(join(project, "package.json"), "{}");
+    writeFileSync(join(project, "dist", "app.js"), "export const a = 1;");
+
+    expect(await invoke(["apps/web/dist", ...QUIET])).toBe(0);
+
+    expect(readdirSync(join(project, ".afterpack")).sort()).toEqual([
+      ".gitignore",
+      "backup",
+      "receipts",
+    ]);
+    expect(existsSync(join(root, ".afterpack"))).toBe(false);
+    expect(await invokeIn(join(project, "dist"), ["verify"])).toBe(0);
+    expect(await invokeIn(project, ["restore"])).toBe(0);
+    expect(readFileSync(join(project, "dist", "app.js"), "utf8")).toBe("export const a = 1;");
+  });
+
+  it("puts .afterpack beside a bare served folder, never inside it", async () => {
+    const served = join(root, "public");
+    mkdirSync(served);
+    writeFileSync(join(served, "app.js"), "export const a = 1;");
+
+    expect(await invokeIn(served, [".", ...QUIET])).toBe(0);
+
+    expect(readdirSync(served)).toEqual(["app.js"]);
+    expect(existsSync(join(root, ".afterpack", "receipts", "public.json"))).toBe(true);
+    expect(existsSync(join(root, ".afterpack", "backup", "manifest.json"))).toBe(true);
+    expect(out.join("\n")).toContain("no package.json, afterpack.json or .git above");
+    expect(await invokeIn(served, ["verify"])).toBe(0);
+    expect(await invokeIn(served, ["restore"])).toBe(0);
+    expect(readFileSync(join(served, "app.js"), "utf8")).toBe("export const a = 1;");
+  });
+
+  it("fails, touching nothing, when a .afterpack/ dir sits inside the build output", async () => {
+    const dist = buildOutput();
+    mkdirSync(join(dist, ".afterpack", "backup"), { recursive: true });
+
+    expect(await invoke(["dist", ...QUIET])).toBe(1);
+    expect(err.join("\n")).toContain(`found ${join(dist, ".afterpack")} inside the build output`);
+    expect(err.join("\n")).toContain("Delete it, then build again");
+    expect(readFileSync(join(dist, "app.js"), "utf8")).toBe("export const a = 1;");
+  });
+
+  it("verifies a case-different spelling of the same dir on a case-insensitive disk", async () => {
+    buildOutput();
+    if (!existsSync(join(root, "DIST"))) return;
+    expect(await invoke(["dist", ...QUIET])).toBe(0);
+    expect(await invoke(["verify", "DIST"])).toBe(0);
+    err = [];
+    expect(await invoke(["Dist", ...QUIET])).toBe(1);
+    expect(err.join("\n")).toContain("Already obfuscated");
   });
 
   it("FAILS the gate when a file is replaced after the run", async () => {

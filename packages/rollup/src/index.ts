@@ -1,4 +1,4 @@
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import { processBatch, version } from "@afterpack/core";
 import {
   type AfterpackPluginOptions,
@@ -113,7 +113,6 @@ export function afterpackRollup(options: AfterpackRollupOptions = {}): Plugin {
         captureDiagnostics.length = 0;
 
         const cwd = process.cwd();
-        const gitignoredNonServedAfterpackDir = join(cwd, ".afterpack");
         const result = await runObfuscationPass({
           files,
           inputs,
@@ -125,10 +124,7 @@ export function afterpackRollup(options: AfterpackRollupOptions = {}): Plugin {
           cwd,
           startedAt: startedBeforeBundleWalk,
           capturedByFile: capturedByFile.size > 0 ? capturedByFile : undefined,
-          combinedProtectionMap: {
-            buildDir: outDir,
-            afterpackDir: gitignoredNonServedAfterpackDir,
-          },
+          combinedProtectionMap: { buildDir: outDir },
           ...passSettings(resolved),
           sourceType: sourceTypeForBundle(outputOptions.format, entries.values()),
           hasBundlerSourcemap: Boolean(outputOptions.sourcemap),

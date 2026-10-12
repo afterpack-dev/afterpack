@@ -1,4 +1,4 @@
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { processBatch, version } from "@afterpack/core";
 import {
   type AfterpackPluginOptions,
@@ -50,7 +50,6 @@ export async function afterpackAngular(options: AfterpackAngularOptions = {}): P
   if (files.length === 0) {
     throw new Error(`@afterpack/angular: no .js/.mjs/.cjs files found under ${browserDir}`);
   }
-  const gitignoredNonServedAfterpackDir = join(cwd, ".afterpack");
   await runObfuscationPass({
     files,
     engine: { processBatch, version },
@@ -59,7 +58,7 @@ export async function afterpackAngular(options: AfterpackAngularOptions = {}): P
     label: "afterpack-angular",
     cwd,
     startedAt: startedBeforeDirDiscovery,
-    combinedProtectionMap: { buildDir: browserDir, afterpackDir: gitignoredNonServedAfterpackDir },
+    combinedProtectionMap: { buildDir: browserDir },
     sourceMapSweepDir: browserDir,
     ...passSettings(resolved),
     directivesEnabled: DIRECTIVES_ALWAYS_DISABLED,

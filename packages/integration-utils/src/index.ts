@@ -56,6 +56,11 @@ export {
   scanDirectives,
 } from "./directives.js";
 export type { GitBuildContext } from "./git.js";
+export {
+  AFTERPACK_DIR,
+  type AfterpackHome,
+  afterpackHome,
+} from "./home.js";
 export type { CapturedModule } from "./map-color.js";
 export {
   type CloudNotice,
@@ -106,14 +111,13 @@ export {
 } from "./policy.js";
 export {
   DIAG_RECEIPT_UNREADABLE,
-  findProtectionReceipt,
   PROTECTION_RECEIPTS_DIR,
   type ProtectionReceipt,
   type ProtectionReceiptFile,
   type ProtectionVerification,
   protectionReceiptPath,
-  removeStaleOutputReceipt,
   sha256Of,
+  sweepOutputTree,
   UnreadableReceiptError,
   verifyProtectionReceipt,
   type WriteProtectionReceiptInput,

@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -45,10 +53,11 @@ beforeEach(() => {
   resetBuildSessions();
   __reset();
   __setProcessResult((input) => ({ code: `OBF:${input}` }));
-  root = mkdtempSync(join(tmpdir(), "afterpack-compat-pass-"));
+  root = realpathSync(mkdtempSync(join(tmpdir(), "afterpack-compat-pass-")));
   outDir = join(root, "dist");
   mkdirSync(outDir, { recursive: true });
   writeFileSync(join(root, ".gitignore"), "");
+  writeFileSync(join(root, "package.json"), "{}");
   file = join(outDir, "app.js");
   writeFileSync(file, "export const a = 1;");
 });
@@ -77,13 +86,13 @@ function options(extra: Partial<ObfuscationPassOptions> = {}): ObfuscationPassOp
     cwd: root,
     env: {},
     artifactOptions: { git: false },
-    combinedProtectionMap: { buildDir: outDir, afterpackDir: join(root, ".afterpack") },
+    combinedProtectionMap: { buildDir: outDir },
     ...extra,
   };
 }
 
 function receiptFile(): string {
-  return protectionReceiptPath(join(root, ".afterpack"), outDir);
+  return protectionReceiptPath(outDir);
 }
 
 function receipt(): ProtectionReceipt {

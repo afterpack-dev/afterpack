@@ -1,14 +1,18 @@
 import { createHash } from "node:crypto";
 import {
+  closeSync,
+  type Dirent,
   existsSync,
   mkdirSync,
+  openSync,
+  readdirSync,
   readFileSync,
-  realpathSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
-import { AFTERPACK_DIR, afterpackRoot, ensureAfterpackGitignore } from "./artifacts.js";
+import { dirname, join, relative, sep } from "node:path";
+import { ensureAfterpackGitignore } from "./artifacts.js";
+import { AFTERPACK_DIR, type AfterpackHome, afterpackHome, realPath } from "./home.js";
 
 export const PROTECTION_RECEIPTS_DIR = "receipts";
 
@@ -33,6 +37,7 @@ export interface ProtectionReceipt {
   seedOrigin: string;
   bundler: string;
   buildId: string | null;
+  buildDir: string;
   files: ProtectionReceiptFile[];
 }
 
@@ -48,52 +53,61 @@ function receiptPathOf(dir: string, file: string): string {
   return relative(dir, file).split(sep).join("/");
 }
 
-function realOrResolved(path: string): string {
-  const resolved = resolve(path);
+const MAX_KEY_BYTES = 180;
+
+const HASHED_KEY_PREFIX_BYTES = 120;
+
+function buildDirOf(home: AfterpackHome): string {
+  const rel = relative(home.projectRoot, home.buildDir).split(sep).join("/");
+  return rel === "" ? "." : rel;
+}
+
+function receiptKey(buildDir: string): string {
+  const encoded = encodeURIComponent(buildDir).replace(/\*/g, "%2A");
+  if (Buffer.byteLength(encoded) <= MAX_KEY_BYTES) return encoded;
+  const prefix = encoded.slice(0, HASHED_KEY_PREFIX_BYTES).replace(/%[0-9A-F]?$/, "");
+  const digest = createHash("sha256").update(buildDir, "utf8").digest("hex").slice(0, 16);
+  return `${prefix}~${digest}`;
+}
+
+function receiptsDirOf(home: AfterpackHome): string {
+  return join(home.dir, PROTECTION_RECEIPTS_DIR);
+}
+
+function receiptPathIn(home: AfterpackHome): string {
+  return join(receiptsDirOf(home), `${receiptKey(buildDirOf(home))}.json`);
+}
+
+export function protectionReceiptPath(buildDir: string): string {
+  return receiptPathIn(afterpackHome(buildDir));
+}
+
+export function prepareProtectionReceipt(buildDir: string, label: string): string {
+  const home = afterpackHome(buildDir);
+  const path = receiptPathIn(home);
   try {
-    return realpathSync(resolved);
+    mkdirSync(dirname(path), { recursive: true });
+    ensureAfterpackGitignore(home.dir);
+    const existed = existsSync(path);
+    closeSync(openSync(path, "a"));
+    if (!existed) unlinkSync(path);
+  } catch (error) {
+    throw new Error(
+      `[${label}] cannot write the protection receipt ${path}, so no file was rewritten: ${error}`,
+    );
+  }
+  return path;
+}
+
+function entriesOf(dir: string): Dirent[] {
+  try {
+    return readdirSync(dir, { withFileTypes: true });
   } catch {
-    const parent = dirname(resolved);
-    return parent === resolved ? resolved : join(realOrResolved(parent), basename(resolved));
+    return [];
   }
 }
 
-function receiptKey(projectRoot: string, buildDir: string): string {
-  const rel = relative(realOrResolved(projectRoot), realOrResolved(buildDir)).split(sep).join("/");
-  return encodeURIComponent(rel === "" ? "." : rel).replace(/\*/g, "%2A");
-}
-
-export function protectionReceiptPath(afterpackDir: string, buildDir: string): string {
-  const root = afterpackRoot(afterpackDir);
-  return join(root, PROTECTION_RECEIPTS_DIR, `${receiptKey(dirname(root), buildDir)}.json`);
-}
-
-function selfAndAncestors(dir: string): string[] {
-  const dirs: string[] = [];
-  let current = resolve(dir);
-  for (;;) {
-    dirs.push(current);
-    const parent = dirname(current);
-    if (parent === current) return dirs;
-    current = parent;
-  }
-}
-
-export function findProtectionReceipt(
-  buildDir: string,
-  projectRoots: readonly string[] = [],
-): string | null {
-  for (const root of [...selfAndAncestors(buildDir), ...projectRoots]) {
-    const afterpackDir = join(root, AFTERPACK_DIR);
-    if (!existsSync(afterpackDir)) continue;
-    const path = protectionReceiptPath(afterpackDir, buildDir);
-    if (existsSync(path)) return path;
-  }
-  return null;
-}
-
-export function removeStaleOutputReceipt(buildDir: string, label: string): void {
-  const path = join(buildDir, STALE_OUTPUT_RECEIPT_FILE);
+function removeStaleReceipt(path: string, label: string): void {
   try {
     unlinkSync(path);
   } catch (error) {
@@ -104,9 +118,35 @@ export function removeStaleOutputReceipt(buildDir: string, label: string): void 
   }
 }
 
+function refuseShippedAfterpackDir(path: string, buildDir: string, label: string): never {
+  throw new Error(
+    `[${label}] found ${path} inside the build output ${buildDir}. It holds AfterPack backups, ` +
+      "receipts or Protection Maps, which must never ship. Delete it, then build again.",
+  );
+}
+
+function sweepDir(dir: string, buildDir: string, label: string, recursive: boolean): void {
+  for (const entry of entriesOf(dir)) {
+    const full = join(dir, entry.name);
+    if (entry.name === STALE_OUTPUT_RECEIPT_FILE) {
+      removeStaleReceipt(full, label);
+    } else if (entry.isDirectory()) {
+      if (entry.name === AFTERPACK_DIR) refuseShippedAfterpackDir(full, buildDir, label);
+      if (!recursive || entry.name === "node_modules") continue;
+      if (existsSync(join(full, "package.json"))) continue;
+      sweepDir(full, buildDir, label, true);
+    }
+  }
+}
+
+export function sweepOutputTree(buildDir: string, walkedDir: string | null, label: string): void {
+  const walksBuildDir = walkedDir !== null && realPath(walkedDir) === realPath(buildDir);
+  sweepDir(buildDir, buildDir, label, walksBuildDir);
+  if (walkedDir !== null && !walksBuildDir) sweepDir(walkedDir, buildDir, label, true);
+}
+
 export interface WriteProtectionReceiptInput {
   dir: string;
-  afterpackDir: string;
   tool: string;
   engine: EngineSource | null;
   engineVersion: string | null;
@@ -137,6 +177,7 @@ export function writeProtectionReceipt(input: WriteProtectionReceiptInput): stri
     seedOrigin: input.seedOrigin,
     bundler: input.bundler,
     buildId: input.buildId,
+    buildDir: ".",
     files: input.files
       .map((file) => ({
         path: receiptPathOf(input.dir, file),
@@ -145,9 +186,11 @@ export function writeProtectionReceipt(input: WriteProtectionReceiptInput): stri
       }))
       .sort((a, b) => a.path.localeCompare(b.path)),
   };
-  const path = protectionReceiptPath(input.afterpackDir, input.dir);
+  const home = afterpackHome(input.dir);
+  receipt.buildDir = buildDirOf(home);
+  const path = receiptPathIn(home);
   mkdirSync(dirname(path), { recursive: true });
-  ensureAfterpackGitignore(input.afterpackDir);
+  ensureAfterpackGitignore(home.dir);
   writeFileSync(path, `${JSON.stringify(receipt, null, 2)}\n`);
   return path;
 }
@@ -257,12 +300,30 @@ export function verifyProtectionReceipt(
   return { receiptPath, receipt: parsed, problems };
 }
 
-function findOwnReceipt(startDir: string, afterpackDir: string): string | null {
-  for (const dir of selfAndAncestors(startDir)) {
-    const path = protectionReceiptPath(afterpackDir, dir);
-    if (existsSync(path)) return path;
+function covers(receiptDir: unknown, target: string): boolean {
+  if (typeof receiptDir !== "string") return true;
+  if (receiptDir === "." || target === "." || receiptDir === target) return true;
+  return target.startsWith(`${receiptDir}/`) || receiptDir.startsWith(`${target}/`);
+}
+
+function rawBuildDirOf(path: string): unknown {
+  try {
+    const raw = JSON.parse(readFileSync(path, "utf8")) as { buildDir?: unknown } | null;
+    return raw !== null && typeof raw === "object" ? raw.buildDir : undefined;
+  } catch {
+    return undefined;
   }
-  return null;
+}
+
+function coveringReceipts(startDir: string): string[] {
+  const home = afterpackHome(startDir);
+  const target = buildDirOf(home);
+  const dir = receiptsDirOf(home);
+  return entriesOf(dir)
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+    .map((entry) => join(dir, entry.name))
+    .filter((path) => covers(rawBuildDirOf(path), target))
+    .sort();
 }
 
 interface AlreadyObfuscatedInputs {
@@ -273,34 +334,40 @@ interface AlreadyObfuscatedInputs {
 export function detectAlreadyObfuscatedInputs(
   files: readonly string[],
   startDir: string,
-  afterpackDir: string,
   bytesByPath?: ReadonlyMap<string, Uint8Array>,
   prefix: (message: string) => string = (m) => m,
 ): AlreadyObfuscatedInputs | null {
-  const receiptPath = findOwnReceipt(startDir, afterpackDir);
-  if (!receiptPath) return null;
-  const result = parseReceipt(receiptPath);
-  if (result.error !== undefined) {
-    const schema = result.newerSchema;
-    if (schema === null) return null;
-    throw new UnreadableReceiptError(
-      prefix(
-        `${receiptPath} was written by a newer AfterPack (receipt schema ${schema}), so this ` +
-          "version cannot tell whether these files are already obfuscated — update afterpack, " +
-          "or rebuild from source and delete the receipt before running it again.",
-      ),
-      receiptPath,
-      schema,
-    );
-  }
-  const outputHashes = new Set(
-    result.receipt.files.filter((f) => f.transformed !== false).map((f) => f.sha256),
-  );
-  if (outputHashes.size === 0) return null;
-  const matches = files.filter((file) => {
+  const hashOf = (file: string): string | null => {
     const bytes = bytesByPath?.get(file);
-    if (bytes !== undefined) return outputHashes.has(sha256OfBytes(bytes));
-    return existsSync(file) && outputHashes.has(sha256Of(file));
-  });
-  return matches.length > 0 ? { receiptPath, files: matches } : null;
+    if (bytes !== undefined) return sha256OfBytes(bytes);
+    return existsSync(file) ? sha256Of(file) : null;
+  };
+  let hashes: Map<string, string | null> | null = null;
+  for (const receiptPath of coveringReceipts(startDir)) {
+    const result = parseReceipt(receiptPath);
+    if (result.error !== undefined) {
+      const schema = result.newerSchema;
+      if (schema === null) continue;
+      throw new UnreadableReceiptError(
+        prefix(
+          `${receiptPath} was written by a newer AfterPack (receipt schema ${schema}), so this ` +
+            "version cannot tell whether these files are already obfuscated — update afterpack, " +
+            "or rebuild from source and delete the receipt before running it again.",
+        ),
+        receiptPath,
+        schema,
+      );
+    }
+    const outputHashes = new Set(
+      result.receipt.files.filter((f) => f.transformed !== false).map((f) => f.sha256),
+    );
+    if (outputHashes.size === 0) continue;
+    hashes ??= new Map(files.map((file) => [file, hashOf(file)] as const));
+    const matches = files.filter((file) => {
+      const hash = hashes?.get(file);
+      return hash != null && outputHashes.has(hash);
+    });
+    if (matches.length > 0) return { receiptPath, files: matches };
+  }
+  return null;
 }

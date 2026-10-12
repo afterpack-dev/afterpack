@@ -1,4 +1,4 @@
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { processBatch, version } from "@afterpack/core";
 import {
   type AfterpackPluginOptions,
@@ -144,12 +144,7 @@ export function afterpackVite(options: AfterpackViteOptions = {}): Plugin {
           buildLeg: leg,
           startedAt,
           capturedByFile: capturedByFile.size > 0 ? capturedByFile : undefined,
-          combinedProtectionMap: {
-            buildDir: outDir,
-            afterpackDir: leg
-              ? join(projectRoot, ".afterpack", leg)
-              : join(projectRoot, ".afterpack"),
-          },
+          combinedProtectionMap: { buildDir: outDir, subdir: leg },
           ...passSettings(resolved),
           sourceType: sourceTypeForBundle(outputOptions.format, entries.values()),
           hasBundlerSourcemap: buildSourcemap,

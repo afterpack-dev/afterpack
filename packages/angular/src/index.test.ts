@@ -19,6 +19,7 @@ let browserDir: string;
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "afterpack-angular-test-"));
+  writeFileSync(join(root, "package.json"), "{}");
   browserDir = join(root, "dist", "angular-fixture", "browser");
   mkdirSync(browserDir, { recursive: true });
   writeFileSync(join(root, ".gitignore"), "");

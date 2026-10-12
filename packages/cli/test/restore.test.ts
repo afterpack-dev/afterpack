@@ -140,10 +140,11 @@ describe("afterpack restore", () => {
   });
 
   it("round-trips a single FILE target: protect then restore", async () => {
-    const file = join(root, "app.js");
+    mkdirSync(join(root, "bin"));
+    const file = join(root, "bin", "app.js");
     writeFileSync(file, "var a = 1;");
 
-    expect(await invoke(["app.js", ...QUIET])).toBe(0);
+    expect(await invoke(["bin/app.js", ...QUIET])).toBe(0);
     expect(readFileSync(file, "utf8")).toContain("OBF:");
 
     expect(await invoke(["restore"])).toBe(0);

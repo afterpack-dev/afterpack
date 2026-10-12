@@ -1,12 +1,36 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import { expect } from "@playwright/test";
 import {
-  findProtectionReceipt,
+  PROTECTION_RECEIPTS_DIR,
+  protectionReceiptPath,
   STALE_OUTPUT_RECEIPT_FILE,
   verifyProtectionReceipt,
 } from "../../packages/integration-utils/src/receipt.js";
 import type { Fixture } from "./registry.js";
+
+export function receiptOf(dir: string): string | null {
+  const path = protectionReceiptPath(dir);
+  return existsSync(path) ? path : null;
+}
+
+function shippedAfterpackFiles(dir: string): string[] {
+  const found: string[] = [];
+  const walk = (current: string): void => {
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      const full = join(current, entry.name);
+      if (entry.name === STALE_OUTPUT_RECEIPT_FILE || entry.name === ".afterpack") {
+        found.push(full);
+      } else if (entry.isDirectory()) {
+        if (entry.name !== "node_modules") walk(full);
+      } else if (basename(current) === PROTECTION_RECEIPTS_DIR && entry.name.endsWith(".json")) {
+        found.push(full);
+      }
+    }
+  };
+  if (existsSync(dir)) walk(dir);
+  return found;
+}
 
 function readBuildId(distDir: string): string | null {
   const path = join(distDir, "BUILD_ID");
@@ -30,7 +54,7 @@ export function expectProtectionReceipt(
   distDir: string,
   mirrorDir?: string,
 ): void {
-  const receiptPath = findProtectionReceipt(distDir);
+  const receiptPath = receiptOf(distDir);
   expect(receiptPath, `${fixture.name}: no protection receipt for ${distDir}`).not.toBeNull();
   if (!receiptPath) return;
   const { receipt, problems } = verifyProtectionReceipt(receiptPath, distDir, readBuildId(distDir));
@@ -38,9 +62,9 @@ export function expectProtectionReceipt(
   expect(receipt, `${fixture.name}: no protection receipt for ${distDir}`).not.toBeNull();
   for (const dir of mirrorDir ? [distDir, mirrorDir] : [distDir]) {
     expect(
-      existsSync(join(dir, STALE_OUTPUT_RECEIPT_FILE)),
-      `${fixture.name}: a protection receipt sits in ${dir}, where it would ship`,
-    ).toBe(false);
+      shippedAfterpackFiles(dir),
+      `${fixture.name}: AfterPack files sit in ${dir}, where they would ship`,
+    ).toEqual([]);
   }
   if (!receipt || !mirrorDir) return;
   for (const entry of receipt.files) {

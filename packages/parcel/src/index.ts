@@ -122,7 +122,6 @@ export default new Optimizer<ParcelConfig, void>({
         )
       : null;
 
-    const gitignoredNonServedAfterpackDir = join(options.projectRoot, ".afterpack");
     const seedEnvCopy = { ...options.env };
     const result = await runObfuscationPass({
       files: [projectedFilePath],
@@ -138,7 +137,6 @@ export default new Optimizer<ParcelConfig, void>({
       startedAt,
       combinedProtectionMap: {
         buildDir: bundle.target.distDir,
-        afterpackDir: gitignoredNonServedAfterpackDir,
         fileName: `${bundleLegIdentity}.protectionMap.html`,
       },
       buildLeg: bundleLegIdentity,

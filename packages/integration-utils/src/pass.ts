@@ -1,9 +1,8 @@
 import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import type { ProtectionMap } from "@afterpack/protection-map";
 import {
-  AFTERPACK_DIR,
   DEFAULT_LOGGER,
   type Logger,
   warnIfPublicPath,
@@ -36,6 +35,7 @@ import {
   scanDirectives,
 } from "./directives.js";
 import { detectGitContext } from "./git.js";
+import { afterpackHome, describeUnanchoredHome } from "./home.js";
 import { type CapturedModule, colorRegions, type DecodedSourceMap } from "./map-color.js";
 import { type CloudNotice, reportNotices, sanitizeServerText } from "./notices.js";
 import {
@@ -54,7 +54,8 @@ import {
 import {
   detectAlreadyObfuscatedInputs,
   type EngineSource,
-  removeStaleOutputReceipt,
+  prepareProtectionReceipt,
+  sweepOutputTree,
   type WriteProtectionReceiptInput,
   writeProtectionReceipt,
 } from "./receipt.js";
@@ -115,7 +116,7 @@ export interface ObfuscationEngine {
 
 export interface CombinedProtectionMapTarget {
   buildDir: string;
-  afterpackDir?: string;
+  subdir?: string;
   fileName?: string;
 }
 
@@ -318,12 +319,13 @@ export async function runObfuscationPass(
     ),
   );
 
-  const afterpackDir = combinedProtectionMap.afterpackDir ?? AFTERPACK_DIR;
+  const home = afterpackHome(combinedProtectionMap.buildDir);
+  const unanchored = describeUnanchoredHome(home);
+  if (unanchored) logger.log(prefix(unanchored));
   if (!options.emitToCaller) {
     const already = detectAlreadyObfuscatedInputs(
       onDiskFiles,
       combinedProtectionMap.buildDir,
-      afterpackDir,
       onDiskBytes,
       prefix,
     );
@@ -343,7 +345,11 @@ export async function runObfuscationPass(
     }
   }
 
-  removeStaleOutputReceipt(combinedProtectionMap.buildDir, label);
+  sweepOutputTree(
+    combinedProtectionMap.buildDir,
+    options.sourceMapSweepDir ?? (options.emitToCaller ? combinedProtectionMap.buildDir : null),
+    label,
+  );
 
   const resolvedSeed = resolveBuildSeed(
     options.seed,
@@ -628,6 +634,7 @@ export async function runObfuscationPass(
     verified.push({ result: f, source });
   }
 
+  prepareProtectionReceipt(combinedProtectionMap.buildDir, label);
   const writtenFiles: string[] = [];
   const emittedFiles: string[] = [];
   const engineMaps = new Set<string>();
@@ -669,7 +676,9 @@ export async function runObfuscationPass(
     buildDir: combinedProtectionMap.buildDir,
     docs: protectionMapDocs,
     policy,
-    afterpackDir: combinedProtectionMap.afterpackDir,
+    afterpackDir: combinedProtectionMap.subdir
+      ? join(home.dir, combinedProtectionMap.subdir)
+      : home.dir,
     fileName: combinedProtectionMap.fileName,
     logger,
   });
@@ -697,14 +706,12 @@ export async function runObfuscationPass(
     deferredReceipt = {
       ...receiptFields,
       dir: combinedProtectionMap.buildDir,
-      afterpackDir,
       files: emittedFiles,
     };
   } else {
     receiptPath = writeProtectionReceipt({
       ...receiptFields,
       dir: combinedProtectionMap.buildDir,
-      afterpackDir,
       files: writtenFiles,
     });
     if (style !== "cli") {

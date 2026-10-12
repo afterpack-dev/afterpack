@@ -11,7 +11,14 @@ import {
 } from "./backup.js";
 import { EXIT, type ExitCode } from "./exit.js";
 import { dim, green } from "./format.js";
-import { commandFailure, displayDir, documentPath, emitJson, type OutputMode } from "./output.js";
+import {
+  commandFailure,
+  displayDir,
+  documentPath,
+  emitJson,
+  type OutputMode,
+  realDir,
+} from "./output.js";
 import type { CliLogger } from "./run.js";
 
 export const RESTORE_USAGE = "usage: afterpack restore [dir]";
@@ -21,9 +28,9 @@ export const RESTORE_HELP = `${RESTORE_USAGE}
 Restores the original, pre-obfuscation files that a previous \`afterpack\` run backed up to
 .afterpack/backup/, undoing that run in place.
 
-Searches upward from [dir] (or the working directory) for the project root that holds
-.afterpack/backup/ — the same directory the \`afterpack\` run was launched from — so restore
-works whether it is pointed at that root or at the build directory beneath it.
+Finds .afterpack/backup/ where the \`afterpack\` run kept it: next to the nearest package.json,
+afterpack.json or .git above the build directory, otherwise beside the build directory. Point it
+at that project root or at the build directory itself.
 
 Verifies every recorded file against the hash it was obfuscated to BEFORE touching anything: if
 any file no longer matches, or the manifest itself is unreadable, restore changes nothing and
@@ -86,8 +93,8 @@ export function restore(deps: RestoreDeps): ExitCode {
     );
   }
   const requested = positionals[0] ?? ".";
-  const target = isAbsolute(requested) ? requested : resolve(cwd, requested);
-  if (!existsSync(target)) {
+  const requestedPath = isAbsolute(requested) ? requested : resolve(cwd, requested);
+  if (!existsSync(requestedPath)) {
     return fail(
       deps,
       EXIT.failure,
@@ -97,7 +104,7 @@ export function restore(deps: RestoreDeps): ExitCode {
     );
   }
 
-  const projectRoot = findBackupProjectRoot(target);
+  const projectRoot = findBackupProjectRoot(realDir(requestedPath));
   if (projectRoot === null) {
     return fail(
       deps,

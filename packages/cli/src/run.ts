@@ -2,6 +2,7 @@ import { existsSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import {
   AlreadyObfuscatedError,
+  afterpackHome,
   CLOUD_REFUSAL_SUMMARY,
   type ClientIdentity,
   CloudApiError,
@@ -41,7 +42,6 @@ import {
   captureOriginals,
   matchAlreadyObfuscated,
   type PendingBackup,
-  projectRootFor,
   readBackupManifest,
   type WriteBackupsResult,
   writeBackups,
@@ -68,6 +68,7 @@ import {
   type JsonDocument,
   type OutputMode,
   outputModeOf,
+  realDir,
   reportingLogger,
   resolveOutputMode,
   sanitizeEngineDiagnostics,
@@ -502,10 +503,7 @@ async function runObfuscationAndBackup(input: {
           label: "afterpack",
           cwd: input.cwd,
           startedAt: input.startedAt,
-          combinedProtectionMap: {
-            buildDir: input.buildDir,
-            afterpackDir: join(input.cwd, ".afterpack"),
-          },
+          combinedProtectionMap: { buildDir: input.buildDir },
           sourceMapSweepDir: input.sweepSourceMaps ? input.buildDir : null,
           artifactOptions: {
             ...input.parsed.artifactOptions,
@@ -705,7 +703,8 @@ export function defaultCliStdout(): CliStdout {
 
 export async function run(deps: CliDeps): Promise<number> {
   const startedAt = Date.now();
-  const { cwd, engine, logger, version } = deps;
+  const { engine, logger, version } = deps;
+  const cwd = realDir(deps.cwd);
   const env = deps.env ?? process.env;
   const stdout: CliStdout = deps.stdout ?? defaultCliStdout();
   const argv = expandShortFlags(deps.argv);
@@ -717,7 +716,7 @@ export async function run(deps: CliDeps): Promise<number> {
 
   const command = argv[0];
   if (command === "verify" || command === "audit" || command === "restore") {
-    return runSubcommand(command, argv.slice(1), { ...deps, env, stdout, argv });
+    return runSubcommand(command, argv.slice(1), { ...deps, cwd, env, stdout, argv });
   }
 
   const earlyMode = resolveOutputMode({ argv, env, cwd }).mode;
@@ -821,7 +820,6 @@ export async function run(deps: CliDeps): Promise<number> {
   }
 
   const parsed = toRunOptions(resolved.config);
-  const projectRoot = projectRootFor(cwd, resolved.configFile);
   const backupEnabled = parsed.artifactOptions.build?.backup ?? true;
   const configuredKey = getPath(resolved.config, "key");
   const hasConfiguredKey =
@@ -866,8 +864,8 @@ export async function run(deps: CliDeps): Promise<number> {
     }
   }
 
-  const target = isAbsolute(requested) ? requested : resolve(cwd, requested);
-  if (!existsSync(target)) {
+  const requestedPath = isAbsolute(requested) ? requested : resolve(cwd, requested);
+  if (!existsSync(requestedPath)) {
     return refuseHere(
       EXIT.failure,
       "PATH_NOT_FOUND",
@@ -875,8 +873,20 @@ export async function run(deps: CliDeps): Promise<number> {
       "Name an existing directory or .js file, or run `afterpack` with no path to detect the build output.",
     );
   }
+  const target = realDir(requestedPath);
   const isDirectory = statSync(target).isDirectory();
   const buildDir = isDirectory ? target : dirname(target);
+  let projectRoot: string;
+  try {
+    projectRoot = afterpackHome(buildDir).projectRoot;
+  } catch (error) {
+    return refuseHere(
+      EXIT.failure,
+      "AFTERPACK_DIR_IN_BUILD",
+      error instanceof Error ? error.message : String(error),
+      "Point AfterPack at a build directory below your project root.",
+    );
+  }
 
   const nestedProjects: string[] = [];
   const files = collectJsFiles(target, {

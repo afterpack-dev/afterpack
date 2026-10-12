@@ -54,6 +54,7 @@ let warnings: string[];
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "afterpack-parcel-test-"));
+  writeFileSync(join(root, "package.json"), "{}");
   distDir = join(root, "dist");
   mkdirSync(distDir, { recursive: true });
   writeFileSync(join(root, ".gitignore"), "");
@@ -316,6 +317,7 @@ describe("per-bundle Protection Map", () => {
       "app.js.aaa.protectionMap.html",
       "lazy.js.bbb.protectionMap.html",
       "parcel",
+      "receipts",
     ]);
   });
 });

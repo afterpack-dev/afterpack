@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -32,10 +33,11 @@ let outDir: string;
 
 beforeEach(() => {
   resetBuildSessions();
-  root = mkdtempSync(join(tmpdir(), "afterpack-pass-test-"));
+  root = realpathSync(mkdtempSync(join(tmpdir(), "afterpack-pass-test-")));
   outDir = join(root, "dist");
   mkdirSync(outDir, { recursive: true });
   writeFileSync(join(root, ".gitignore"), "");
+  writeFileSync(join(root, "package.json"), "{}");
 });
 afterEach(() => {
   resetBuildSessions();
@@ -132,7 +134,7 @@ function silentLogger() {
 }
 
 function receiptFor(dir: string): string {
-  return protectionReceiptPath(join(root, ".afterpack"), dir);
+  return protectionReceiptPath(dir);
 }
 
 const baseOptions = (files: string[], engine: ObfuscationEngine) =>
@@ -142,7 +144,7 @@ const baseOptions = (files: string[], engine: ObfuscationEngine) =>
     label: "afterpack-test",
     cwd: root,
     env: {},
-    combinedProtectionMap: { buildDir: outDir, afterpackDir: join(root, ".afterpack") },
+    combinedProtectionMap: { buildDir: outDir },
   }) as const;
 
 describe("runObfuscationPass (dev policy)", () => {
@@ -1454,7 +1456,7 @@ describe("runObfuscationPass — the cross-bundle build seed", () => {
       buildLeg: name,
       seed,
       diagnostics: "all",
-      combinedProtectionMap: { buildDir: dir, afterpackDir: join(root, ".afterpack", name) },
+      combinedProtectionMap: { buildDir: dir, subdir: name },
       logger: captured.logger,
     });
     return { result, config: calls[0].config, ...captured };
@@ -1606,7 +1608,6 @@ describe("runObfuscationPass in-memory seam (inputs + emitToCaller)", () => {
       artifactOptions: { protectionMap: { enabled: true } },
       combinedProtectionMap: {
         buildDir: outDir,
-        afterpackDir: join(root, ".afterpack"),
         fileName: "one-bundle.protectionMap.html",
       },
       logger: silentLogger().logger,
@@ -1720,23 +1721,26 @@ describe("runObfuscationPass — already-obfuscated pre-flight guard", () => {
     expect(readFileSync(a, "utf8")).toContain("OBF:export const a = 2;");
   });
 
-  it("(5) ignores a receipt (found above the target dir) naming files outside it", async () => {
-    const other = join(root, "other-app", "unrelated.js");
+  it("(5) ignores a receipt (for an ancestor dir) naming files outside the target", async () => {
+    const site = join(root, "site");
+    const other = join(site, "other-app", "unrelated.js");
     mkdirSync(dirname(other), { recursive: true });
     writeFileSync(other, "export const unrelated = 1;");
     const { engine } = makeEngine(() => ({}));
     await runObfuscationPass({
       ...baseOptions([other], engine),
-      combinedProtectionMap: { buildDir: root, afterpackDir: join(root, ".afterpack") },
+      combinedProtectionMap: { buildDir: site },
       logger: silentLogger().logger,
     });
-    expect(existsSync(receiptFor(root))).toBe(true);
+    expect(existsSync(receiptFor(site))).toBe(true);
 
-    const a = join(outDir, "a.js");
+    const a = join(site, "dist", "a.js");
+    mkdirSync(dirname(a), { recursive: true });
     writeFileSync(a, "export const a = 1;");
 
     const result = await runObfuscationPass({
       ...baseOptions([a], engine),
+      combinedProtectionMap: { buildDir: join(site, "dist") },
       logger: silentLogger().logger,
     });
     expect(result.fileCount).toBe(1);
@@ -1891,7 +1895,7 @@ describe("runObfuscationPass — the protection receipt it writes", () => {
     ]) {
       await runObfuscationPass({
         ...baseOptions([file], engine),
-        combinedProtectionMap: { buildDir: dir, afterpackDir: join(root, ".afterpack") },
+        combinedProtectionMap: { buildDir: dir },
         logger: silentLogger().logger,
       });
     }
@@ -1943,6 +1947,71 @@ describe("runObfuscationPass — the protection receipt it writes", () => {
       runObfuscationPass({ ...baseOptions([a], engine), logger: silentLogger().logger }),
     ).rejects.toThrow(/could not remove the stale protection receipt/);
     expect(readFileSync(a, "utf8")).toBe("export const a = 1;");
+  });
+
+  it("removes stale receipts throughout the tree it sweeps", async () => {
+    const a = join(outDir, "a.js");
+    writeFileSync(a, "export const a = 1;");
+    mkdirSync(join(outDir, "assets"));
+    writeFileSync(join(outDir, "assets", ".afterpack-protection.json"), "{}");
+    const { engine } = makeEngine(() => ({}));
+
+    await runObfuscationPass({
+      ...baseOptions([a], engine),
+      sourceMapSweepDir: outDir,
+      logger: silentLogger().logger,
+    });
+
+    expect(readdirSync(join(outDir, "assets"))).toEqual([]);
+  });
+
+  it("fails the run, leaving the output untouched, on a .afterpack/ dir inside the build dir", async () => {
+    const a = join(outDir, "a.js");
+    writeFileSync(a, "export const a = 1;");
+    mkdirSync(join(outDir, ".afterpack", "backup"), { recursive: true });
+    const { engine, calls } = makeEngine(() => ({}));
+
+    await expect(
+      runObfuscationPass({ ...baseOptions([a], engine), logger: silentLogger().logger }),
+    ).rejects.toThrow(/found .*\.afterpack inside the build output .*Delete it, then build again/);
+    expect(readFileSync(a, "utf8")).toBe("export const a = 1;");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("fails before rewriting any file when the receipt cannot be written", async () => {
+    const a = join(outDir, "a.js");
+    writeFileSync(a, "export const a = 1;");
+    mkdirSync(join(root, ".afterpack"), { recursive: true });
+    writeFileSync(join(root, ".afterpack", "receipts"), "not a directory");
+    const { engine } = makeEngine(() => ({}));
+
+    await expect(
+      runObfuscationPass({ ...baseOptions([a], engine), logger: silentLogger().logger }),
+    ).rejects.toThrow(/cannot write the protection receipt .*so no file was rewritten/);
+    expect(readFileSync(a, "utf8")).toBe("export const a = 1;");
+  });
+
+  it("keeps everything beside a build dir with no project marker above it, and says where", async () => {
+    rmSync(join(root, "package.json"));
+    const served = join(root, "public");
+    mkdirSync(served);
+    const a = join(served, "a.js");
+    writeFileSync(a, "export const a = 1;");
+    const { engine } = makeEngine(() => ({}));
+    const captured = silentLogger();
+
+    const result = await runObfuscationPass({
+      ...baseOptions([a], engine),
+      combinedProtectionMap: { buildDir: served },
+      logger: captured.logger,
+    });
+
+    expect(result.receiptPath).toBe(join(root, ".afterpack", "receipts", "public.json"));
+    expect(readdirSync(served)).toEqual(["a.js"]);
+    expect(captured.logs.join("\n")).toContain(
+      `no package.json, afterpack.json or .git above ${served}, so AfterPack keeps its files ` +
+        `beside it, in ${join(root, ".afterpack")}`,
+    );
   });
 
   it("replaces the previous run's receipt rather than merging into it", async () => {

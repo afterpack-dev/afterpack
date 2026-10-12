@@ -37,6 +37,16 @@ describe("collectJsFiles", () => {
     expect(rel(collectJsFiles(root))).toEqual(["a.js"]);
   });
 
+  it("never walks into an .afterpack/ dir, whose backups hold original source", () => {
+    mkdirSync(join(root, ".afterpack", "backup", "dist"), { recursive: true });
+    writeFileSync(join(root, "a.js"), "1");
+    writeFileSync(join(root, ".afterpack", "backup", "dist", "a.js"), "orig");
+    writeFileSync(join(root, ".afterpack", "backup", "dist", "a.js.map"), "{}");
+
+    expect(rel(collectJsFiles(root))).toEqual(["a.js"]);
+    expect(collectSourceMaps(root)).toEqual([]);
+  });
+
   it("returns [] for a missing directory", () => {
     expect(collectJsFiles(join(root, "does-not-exist"))).toEqual([]);
   });

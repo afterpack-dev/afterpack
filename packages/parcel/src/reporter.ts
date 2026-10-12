@@ -1,8 +1,8 @@
 import { rmSync } from "node:fs";
-import { join, relative } from "node:path";
+import { relative } from "node:path";
 import {
   protectionReceiptPath,
-  removeStaleOutputReceipt,
+  sweepOutputTree,
   writeProtectionReceipt,
 } from "@afterpack/integration-utils";
 import { Reporter } from "@parcel/plugin";
@@ -62,10 +62,9 @@ export default new Reporter({
     if (event.type === "buildStart") clearBundleRecords(options.projectRoot);
     if (event.type !== "buildSuccess") return;
     const trees = collectDistTrees(event.bundleGraph.getBundles(), options.projectRoot);
-    const afterpackDir = join(options.projectRoot, ".afterpack");
     for (const [dir, tree] of trees) {
-      removeStaleOutputReceipt(dir, LABEL);
-      const receiptPath = protectionReceiptPath(afterpackDir, dir);
+      sweepOutputTree(dir, dir, LABEL);
+      const receiptPath = protectionReceiptPath(dir);
       if (tree.unrecorded.length > 0) {
         rmSync(receiptPath, { force: true });
         logger.warn({
@@ -81,7 +80,6 @@ export default new Reporter({
       const records = tree.records;
       writeProtectionReceipt({
         dir,
-        afterpackDir,
         tool: records[0].tool,
         engine: agreed(records.map((r) => r.engine)),
         engineVersion: agreed(records.map((r) => r.engineVersion)),

@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { relative, sep } from "node:path";
 import {
   type AfterpackConfig,
@@ -87,6 +88,14 @@ export function reportingLogger(logger: CliLogger, mode: OutputMode): CliLogger 
         ? (m: string) => logger.error(m)
         : (m: string) => logger.log(m);
   return { log, warn: (m) => logger.warn(m), error: (m) => logger.error(m) };
+}
+
+export function realDir(path: string): string {
+  try {
+    return realpathSync.native(path);
+  } catch {
+    return path;
+  }
 }
 
 export function documentPath(cwd: string, filePath: string): string {
