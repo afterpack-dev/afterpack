@@ -76,6 +76,7 @@ import {
   type TelemetryFacts,
   type TelemetryReporter,
 } from "./telemetry.js";
+import { prepareWireBatch } from "./wire.js";
 
 export interface EngineFileInput {
   path: string;
@@ -177,6 +178,7 @@ export interface ObfuscationPassOptions {
   startedAt?: number;
   summaryStyle?: PassSummaryStyle;
   colorGlyph?: (glyph: string) => string;
+  onBatch?: (inputs: readonly EngineFileInput[], batch: EngineBatchResult) => void;
 }
 
 export interface PassTiming {
@@ -557,9 +559,15 @@ export async function runObfuscationPass(
     clientVersion: options.client?.coreVersion,
     client: clientString(options.client),
   });
+  const wire = prepareWireBatch(
+    inputs,
+    engineConfig,
+    combinedProtectionMap.buildDir,
+    home.projectRoot,
+  );
   let batch: EngineBatchResult;
   try {
-    batch = await engine.processBatch(inputs, engineConfig, context);
+    batch = wire.toLocal(await engine.processBatch(wire.inputs, wire.config, context));
   } catch (error) {
     const cloud = toCloudApiError(error, { identity: options.client, prefix });
     if (!cloud) throw error;
@@ -567,6 +575,7 @@ export async function runObfuscationPass(
     throw cloud;
   }
   const engineEndedAt = Date.now();
+  options.onBatch?.(inputs, batch);
   reportNotices(batch.notices, logger, prefix);
   const engineMs = engineEndedAt - engineStartedAt;
 

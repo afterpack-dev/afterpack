@@ -541,7 +541,7 @@ describe("runObfuscationPass never ships the bundler's source map", () => {
       logger: cap.logger,
     });
 
-    expect(calls[0].inputs.map((i) => i.path)).toEqual([a]);
+    expect(calls[0].inputs.map((i) => i.path)).toEqual(["a.js"]);
     expect(readFileSync(s, "utf8")).toBe("var s=1;\n//# sourceMappingURL=s.js.map\n");
     expect(readFileSync(join(shared, "s.js.map"), "utf8")).toBe(BUNDLER_MAP);
     expect(cap.warnings.some((w) => w.includes("left 1 file(s) untouched") && w.includes(s))).toBe(

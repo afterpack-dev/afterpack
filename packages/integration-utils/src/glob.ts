@@ -6,7 +6,7 @@ function segments(value: string): string[] {
   return value.split("/").filter((part) => part !== "");
 }
 
-function isAnchored(pattern: string): boolean {
+export function isAnchored(pattern: string): boolean {
   if (pattern.startsWith("/")) return true;
   return pattern.length >= 2 && pattern[1] === ":" && /^[A-Za-z]$/.test(pattern[0]);
 }

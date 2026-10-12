@@ -14,6 +14,7 @@ import {
   DIAG_ALREADY_OBFUSCATED,
   type EngineBatchResult,
   type EngineDiagnostic,
+  type EngineFileInput,
   type EngineFileResult,
   getPath,
   installedRequiredLine,
@@ -142,15 +143,12 @@ interface CapturedFile {
   diagnostics: EngineDiagnostic[];
 }
 
-function observeEngine(engine: ObfuscationEngine, into: CapturedFile[]): ObfuscationEngine {
-  return {
-    processBatch: async (inputs, config, buildContext) => {
-      const bytesIn = new Map(inputs.map((i) => [i.path, Buffer.byteLength(i.source)]));
-      const batch: EngineBatchResult = await engine.processBatch(inputs, config, buildContext);
-      for (const file of batch.files) into.push(captureFile(file, bytesIn.get(file.path) ?? 0));
-      return batch;
-    },
-    ...(engine.version ? { version: () => (engine.version as () => Promise<string>)() } : {}),
+function captureBatch(
+  into: CapturedFile[],
+): (inputs: readonly EngineFileInput[], batch: EngineBatchResult) => void {
+  return (inputs, batch) => {
+    const bytesIn = new Map(inputs.map((i) => [i.path, Buffer.byteLength(i.source)]));
+    for (const file of batch.files) into.push(captureFile(file, bytesIn.get(file.path) ?? 0));
   };
 }
 
@@ -501,7 +499,8 @@ async function runObfuscationAndBackup(input: {
       work: () =>
         runObfuscationPass({
           files: input.files,
-          engine: observeEngine(input.engine, captured),
+          engine: input.engine,
+          onBatch: captureBatch(captured),
           label: "afterpack",
           cwd: input.cwd,
           startedAt: input.startedAt,

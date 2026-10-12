@@ -1,3 +1,6 @@
+import { realpathSync } from "node:fs";
+import { homedir, tmpdir, userInfo } from "node:os";
+import { fileURLToPath } from "node:url";
 import type { ProtectionMap } from "../packages/protection-map/index.js";
 
 export interface EngineCall {
@@ -13,6 +16,113 @@ export const batchCalls: Array<{
   config: Record<string, unknown>;
   buildContext?: Record<string, unknown>;
 }> = [];
+
+export interface WirePayload {
+  files: Array<{ path: string; sourceMap?: string; regions?: unknown[] }>;
+  config: Record<string, unknown>;
+  buildContext?: Record<string, unknown>;
+}
+
+export const wirePayloads: WirePayload[] = [];
+
+function realOrSelf(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
+}
+
+function osUsername(): string | null {
+  try {
+    return userInfo().username;
+  } catch {
+    return null;
+  }
+}
+
+function localSentinels(): string[] {
+  const dirs = [
+    homedir(),
+    tmpdir(),
+    process.cwd(),
+    fileURLToPath(new URL("..", import.meta.url)).replace(/[\\/]+$/, ""),
+  ];
+  const out = new Set<string>();
+  for (const dir of dirs.flatMap((d) => [d, realOrSelf(d)])) {
+    if (dir.length < 2) continue;
+    out.add(dir);
+    out.add(dir.replaceAll("\\", "/"));
+  }
+  return [...out];
+}
+
+function isAbsoluteLike(value: string): boolean {
+  return /^(?:[\\/]|[A-Za-z]:[\\/]|file:)/i.test(value);
+}
+
+function scanStrings(value: unknown, at: string, visit: (text: string, at: string) => void): void {
+  if (typeof value === "string") {
+    visit(value, at);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const [i, item] of value.entries()) scanStrings(item, `${at}[${i}]`, visit);
+    return;
+  }
+  if (value !== null && typeof value === "object") {
+    for (const [key, item] of Object.entries(value)) scanStrings(item, `${at}.${key}`, visit);
+  }
+}
+
+function parsedMap(sourceMap: string): unknown {
+  try {
+    return JSON.parse(sourceMap);
+  } catch {
+    return sourceMap;
+  }
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function pathPattern(path: string): RegExp {
+  return new RegExp(`(?:^|[^A-Za-z0-9._~-])${escapeRegExp(path)}(?:[\\\\/]|$)`);
+}
+
+export function localPathLeaks(
+  payload: WirePayload,
+  extraSentinels: readonly string[] = [],
+): string[] {
+  const sentinels = [...localSentinels(), ...extraSentinels.filter((s) => s.length > 0)];
+  const patterns = sentinels.map((sentinel) => [sentinel, pathPattern(sentinel)] as const);
+  const username = osUsername();
+  const userSegment =
+    username && username.length >= 3
+      ? new RegExp(
+          `(?:^|[\\\\/])${escapeRegExp(username)}[\\\\/]|[\\\\/]${escapeRegExp(username)}$`,
+        )
+      : null;
+  const leaks: string[] = [];
+  const visit = (text: string, at: string): void => {
+    for (const [sentinel, pattern] of patterns) {
+      if (pattern.test(text)) leaks.push(`${at} carries ${JSON.stringify(sentinel)}`);
+    }
+    if (userSegment?.test(text)) leaks.push(`${at} carries the OS username`);
+  };
+  payload.files.forEach((file, i) => {
+    if (isAbsoluteLike(file.path)) leaks.push(`$.files[${i}].path is absolute: ${file.path}`);
+    visit(file.path, `$.files[${i}].path`);
+    if (file.sourceMap !== undefined) {
+      scanStrings(parsedMap(file.sourceMap), `$.files[${i}].sourceMap`, visit);
+    }
+    scanStrings(file.regions, `$.files[${i}].regions`, visit);
+  });
+  scanStrings(payload.config, "$.config", visit);
+  scanStrings(payload.buildContext, "$.buildContext", visit);
+  return leaks;
+}
 
 export interface FakeNotice {
   severity: string;
@@ -190,6 +300,7 @@ export function __setProcessResult(
 export function __reset(): void {
   engineCalls.length = 0;
   batchCalls.length = 0;
+  wirePayloads.length = 0;
   decorate = null;
   batchError = null;
   impl = (input) => defaultResult(input);
@@ -204,6 +315,16 @@ export async function processBatch(
   const configRecord = (config ?? {}) as Record<string, unknown>;
   const buildContextRecord = (buildContext ?? undefined) as Record<string, unknown> | undefined;
   batchCalls.push({ config: configRecord, buildContext: buildContextRecord });
+  const payload: WirePayload = {
+    files: files.map((f) => ({ path: f.path, sourceMap: f.sourceMap, regions: f.regions })),
+    config: configRecord,
+    buildContext: buildContextRecord,
+  };
+  wirePayloads.push(payload);
+  const leaks = localPathLeaks(payload);
+  if (leaks.length > 0) {
+    throw new Error(`the fake cloud endpoint received a local path: ${leaks.join("; ")}`);
+  }
   if (batchError) throw batchError;
   let successCount = 0;
   let failureCount = 0;
