@@ -239,7 +239,7 @@ export const CONFIG_KEYS = [
     tier: "free",
     surface: "engine",
     item: { kind: "boolean" },
-    default: "true in development when an input map exists; false in production",
+    default: "false; true in development mode when an input map exists",
   },
   {
     path: "sourceMap.sourcesContent",
@@ -248,7 +248,7 @@ export const CONFIG_KEYS = [
     tier: "free",
     surface: "engine",
     item: { kind: "boolean" },
-    default: "true in development; false in production",
+    default: "false; true in development mode",
   },
   {
     path: "sourceMap.emitUrl",
@@ -257,7 +257,7 @@ export const CONFIG_KEYS = [
     tier: "free",
     surface: "build",
     item: { kind: "boolean" },
-    default: "true in development; false in production",
+    default: "false; true in development mode",
   },
   {
     path: "protectionMap.enabled",
@@ -393,7 +393,7 @@ export const CONFIG_KEYS = [
     tier: "free",
     surface: "build",
     item: { kind: "enum", values: BUILD_MODE_VALUES },
-    default: "detected from the environment",
+    default: "production, unless NODE_ENV is development",
   },
   {
     path: "directives.enabled",

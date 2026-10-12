@@ -152,6 +152,7 @@ describe("runObfuscationPass (dev policy)", () => {
 
     const result = await runObfuscationPass({
       ...baseOptions([a, b], engine),
+      env: { NODE_ENV: "development" },
       artifactOptions: { protectionMap: { enabled: true }, sourceMap: { emitUrl: true } },
       logger: silentLogger().logger,
     });
@@ -193,7 +194,11 @@ describe("runObfuscationPass (dev policy)", () => {
     writeFileSync(`${a}.map`, upstream);
     const { engine, calls } = makeEngine(() => ({ sourceMap: '{"version":3}' }));
 
-    await runObfuscationPass({ ...baseOptions([a], engine), logger: silentLogger().logger });
+    await runObfuscationPass({
+      ...baseOptions([a], engine),
+      env: { NODE_ENV: "development" },
+      logger: silentLogger().logger,
+    });
 
     expect(calls[0].inputs[0].sourceMap).toBe(upstream);
     expect((calls[0].config.sourceMap as { enabled?: boolean }).enabled).toBeUndefined();
@@ -736,6 +741,7 @@ describe("runObfuscationPass diagnostics", () => {
     const cap = silentLogger();
     await runObfuscationPass({
       ...baseOptions([a], engine),
+      env: { NODE_ENV: "development" },
       artifactOptions: { sourceMap: { emitUrl: true } },
       logger: cap.logger,
     });

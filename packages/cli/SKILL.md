@@ -71,7 +71,11 @@ Rules:
 - `.afterpack/backup/`: the original files, on by default for the CLI, so `afterpack restore` can
   undo the run. `--build.backup=false` turns it off.
 - `.afterpack/protectionMap.html`: the Protection Map report, when the build has source maps.
-- `.map` files beside the output, when an input map exists and the run is not a production build.
+- `.map` files beside the output, only with `--sourceMap.enabled` or on a development run
+  (`--build.mode=development` or `NODE_ENV=development`) when an input map exists.
+
+Every other run is a production run, `CI` and an unset `NODE_ENV` included. It deletes the build's
+own source maps, hidden ones included, and the `sourceMappingURL` comments that name them.
 
 The backup and the Protection Map contain the original source. `.afterpack/` carries its own
 `.gitignore` and self-ignores. Never deploy, publish or commit them.
@@ -103,7 +107,7 @@ minification.
 | [`paths.include`][paths.include] | globs to add back to the walk | `[]` |
 | [`identifiers.reserved`][identifiers.reserved] | names never to rename | `[]` |
 | [`build.backup`][build.backup] | keep originals in `.afterpack/backup/` | `true` for the CLI, `false` in plugins |
-| [`sourceMap.enabled`][sourceMap.enabled] | write `.map` files | on when an input map exists, off in production |
+| [`sourceMap.enabled`][sourceMap.enabled] | write `.map` files | off; on in development mode when an input map exists |
 | [`protectionMap.enabled`][protectionMap.enabled] | write the Protection Map | on when an input map exists |
 | [`diagnostics.format`][diagnostics.format] | `text` or `json` | `text` |
 | [`diagnostics.level`][diagnostics.level] | `summary`, `all` or `none` (errors still print) | `summary` |

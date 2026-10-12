@@ -36,8 +36,12 @@ Each run writes:
   Turn it off with [`--build.backup`][build.backup]`=false`.
 - `.afterpack/protectionMap.html`, the [Protection Map](https://www.afterpack.dev/docs/protection-map),
   when your build has source maps.
-- `.map` files next to the output, when your build has source maps and the run is not a production
-  build.
+- `.map` files next to the output, only when you ask for them with
+  [`--sourceMap.enabled`][sourceMap.enabled] or run with `--build.mode=development` (or
+  `NODE_ENV=development`) on a build that has source maps.
+
+Every other run is a production run: it deletes your build's own source maps, hidden ones included,
+and the `sourceMappingURL` comments that name them, so no original source ships beside the output.
 
 The backup and the Protection Map contain your original source. `.afterpack/` carries its own
 `.gitignore` and self-ignores. Never deploy or commit them.
@@ -104,6 +108,7 @@ the [configuration reference](https://www.afterpack.dev/docs/config). The
 [identifiers.reserved]: https://www.afterpack.dev/docs/config#identifiers-reserved
 [build.backup]: https://www.afterpack.dev/docs/config#build-backup
 [protectionMap.enabled]: https://www.afterpack.dev/docs/config#protectionMap-enabled
+[sourceMap.enabled]: https://www.afterpack.dev/docs/config#sourceMap-enabled
 [diagnostics.format]: https://www.afterpack.dev/docs/config#diagnostics-format
 [inflation.max]: https://www.afterpack.dev/docs/config#inflation-max
 [key]: https://www.afterpack.dev/docs/config#key

@@ -50,7 +50,7 @@ export interface ReportPolicy {
 
 export function detectProduction(env: EnvLike = {}, opts: AfterpackArtifactOptions = {}): boolean {
   if (opts.build?.mode !== undefined) return opts.build.mode === "production";
-  return env.NODE_ENV === "production" || env.CI === "true";
+  return env.NODE_ENV !== "development";
 }
 
 export function resolveReportPolicy(

@@ -51,7 +51,7 @@ Pass them as the second argument: `withAfterpack(nextConfig, { preset: "hard", s
 | [`seed`][seed] | a number or string; `"git"` uses the current commit | a new random seed per build |
 | [`identifiers.reserved`][identifiers.reserved] | names never to rename | none |
 | [`paths.exclude`][paths.exclude] | globs for files to leave untouched | none |
-| [`sourceMap.enabled`][sourceMap.enabled] | write source maps for the obfuscated output | on in development when an input map exists, off in production |
+| [`sourceMap.enabled`][sourceMap.enabled] | write source maps for the obfuscated output | off; on in development mode (`build.mode` or `NODE_ENV=development`) when an input map exists |
 | [`protectionMap.enabled`][protectionMap.enabled] | write the Protection Map | on when Next emits browser source maps |
 | [`build.autorun`][build.autorun] | `false` turns AfterPack off | `true` |
 

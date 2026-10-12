@@ -75,7 +75,11 @@ function embeddedPaths(html: string): Array<string | undefined> {
 
 describe("writeArtifacts — single-file mode, dev policy", () => {
   it("writes the backup, code+sourceMappingURL, the .map, and a self-contained PM html", () => {
-    const policy = resolveReportPolicy({}, {}, { hasBundlerSourcemap: true });
+    const policy = resolveReportPolicy(
+      { NODE_ENV: "development" },
+      {},
+      { hasBundlerSourcemap: true },
+    );
     const outPath = join(dir, "main.js");
     const original = "export const a = 1;\n";
     const result = writeArtifacts({

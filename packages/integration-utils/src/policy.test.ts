@@ -15,12 +15,17 @@ function target(cfg: ReturnType<typeof buildEngineConfig>): number | undefined {
 }
 
 describe("detectProduction", () => {
-  it("is false in a bare dev env", () => {
-    expect(detectProduction({})).toBe(false);
+  it("is false only when the build says development", () => {
+    expect(detectProduction({ NODE_ENV: "development" })).toBe(false);
+    expect(detectProduction({}, { build: { mode: "development" } })).toBe(false);
   });
-  it("is true for NODE_ENV=production, CI=true, or an explicit hint", () => {
+  it("is true for a bare env, any CI, NODE_ENV=production or test, or an explicit hint", () => {
+    expect(detectProduction({})).toBe(true);
     expect(detectProduction({ NODE_ENV: "production" })).toBe(true);
+    expect(detectProduction({ NODE_ENV: "test" })).toBe(true);
     expect(detectProduction({ CI: "true" })).toBe(true);
+    expect(detectProduction({ CI: "1" })).toBe(true);
+    expect(detectProduction({ JENKINS_URL: "http://ci.example.com/" })).toBe(true);
     expect(detectProduction({}, { build: { mode: "production" } })).toBe(true);
   });
   it("an explicit build.mode wins over the environment", () => {
@@ -77,7 +82,7 @@ describe("resolveReportPolicy — PM couples to sourcemap presence, not dev/prod
   });
 
   it("sourceMappingURL + backup keep their dev/prod defaults (independent of PM)", () => {
-    const dev = resolveReportPolicy({}, {});
+    const dev = resolveReportPolicy({ NODE_ENV: "development" }, {});
     expect(dev.emitSourceMappingURL).toBe(true);
     expect(dev.sourceMap).toBe(true);
     expect(dev.backup).toBe(true);
@@ -86,6 +91,10 @@ describe("resolveReportPolicy — PM couples to sourcemap presence, not dev/prod
     expect(prod.sourceMap).toBe(false);
     expect(prod.backup).toBe(true);
     expect(resolveReportPolicy({ CI: "true" }, {}).emitSourceMappingURL).toBe(false);
+    const bare = resolveReportPolicy({}, {});
+    expect(bare.isProduction).toBe(true);
+    expect(bare.sourceMap).toBe(false);
+    expect(bare.emitSourceMappingURL).toBe(false);
   });
 
   it("inPlaceOutput defaults backup OFF (it would ship the original source), but explicit backup:true wins", () => {
@@ -149,7 +158,11 @@ describe("resolveSourceMapEnabled — auto = on iff input map exists", () => {
 
 describe("buildEngineConfig", () => {
   it("wires sourceMap/inputSourceMap/filePath/report from the policy (dev, with input map)", () => {
-    const policy = resolveReportPolicy({}, {}, { hasBundlerSourcemap: true });
+    const policy = resolveReportPolicy(
+      { NODE_ENV: "development" },
+      {},
+      { hasBundlerSourcemap: true },
+    );
     const cfg = buildEngineConfig({
       filePath: "out/main.js",
       inputSourceMap: '{"version":3}',
