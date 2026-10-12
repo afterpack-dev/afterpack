@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { expectObfuscationPass, readBuildLog } from "@e2e/helpers/build-log.js";
@@ -30,6 +30,8 @@ test.describe("Parcel 2 packages a code-split app", { tag: "@quick" }, () => {
     const output = `${verify.stdout}${verify.stderr}`;
     expect(verify.status, output).toBe(0);
     expect(output).toContain("Verified 2 files");
+    expect(existsSync(join(app.dir, ".afterpack", "receipts", "dist.json"))).toBe(true);
+    expect(existsSync(join(app.dir, "dist", ".afterpack-protection.json"))).toBe(false);
   });
 
   test(

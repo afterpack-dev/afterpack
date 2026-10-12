@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { expect } from "@playwright/test";
 import ts from "typescript";
+import { findProtectionReceipt } from "../../packages/integration-utils/src/receipt.js";
 import { stripHashes } from "./normalize.js";
 import type { Fixture } from "./registry.js";
 
@@ -16,7 +17,6 @@ export const SIGNATURE_THRESHOLDS = {
   minWordyLiteralsForSurvivalCheck: 20,
 };
 
-const RECEIPT = ".afterpack-protection.json";
 const JS_FILE = /\.(?:js|mjs|cjs)$/;
 const WORDY = /[A-Za-z]{3,}\s+[A-Za-z]{3,}/;
 const DIRECTIVE = /^use [a-z]+$/;
@@ -128,10 +128,9 @@ export interface ProtectedFile {
 
 export function protectedFilesOf(app: Fixture): ProtectedFile[] {
   return app.receipts.flatMap((root) => {
-    const receiptPath = join(root, RECEIPT);
-    expect(existsSync(receiptPath), `${app.name}: no protection receipt at ${receiptPath}`).toBe(
-      true,
-    );
+    const receiptPath = findProtectionReceipt(root);
+    expect(receiptPath, `${app.name}: no protection receipt for ${root}`).not.toBeNull();
+    if (!receiptPath) return [];
     const receipt = JSON.parse(readFileSync(receiptPath, "utf8")) as {
       files: { path: string; transformed?: boolean }[];
     };

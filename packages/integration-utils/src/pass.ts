@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import type { ProtectionMap } from "@afterpack/protection-map";
 import {
+  AFTERPACK_DIR,
   DEFAULT_LOGGER,
   type Logger,
   warnIfPublicPath,
@@ -53,6 +54,7 @@ import {
 import {
   detectAlreadyObfuscatedInputs,
   type EngineSource,
+  removeStaleOutputReceipt,
   type WriteProtectionReceiptInput,
   writeProtectionReceipt,
 } from "./receipt.js";
@@ -316,10 +318,12 @@ export async function runObfuscationPass(
     ),
   );
 
+  const afterpackDir = combinedProtectionMap.afterpackDir ?? AFTERPACK_DIR;
   if (!options.emitToCaller) {
     const already = detectAlreadyObfuscatedInputs(
       onDiskFiles,
       combinedProtectionMap.buildDir,
+      afterpackDir,
       onDiskBytes,
       prefix,
     );
@@ -338,6 +342,8 @@ export async function runObfuscationPass(
       );
     }
   }
+
+  removeStaleOutputReceipt(combinedProtectionMap.buildDir, label);
 
   const resolvedSeed = resolveBuildSeed(
     options.seed,
@@ -691,12 +697,14 @@ export async function runObfuscationPass(
     deferredReceipt = {
       ...receiptFields,
       dir: combinedProtectionMap.buildDir,
+      afterpackDir,
       files: emittedFiles,
     };
   } else {
     receiptPath = writeProtectionReceipt({
       ...receiptFields,
       dir: combinedProtectionMap.buildDir,
+      afterpackDir,
       files: writtenFiles,
     });
     if (style !== "cli") {

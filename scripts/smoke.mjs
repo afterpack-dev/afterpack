@@ -218,8 +218,11 @@ async function release(args) {
     }
     cli(bin, ["dist", "--protectionMap.enabled=false", "--telemetry.enabled=false"], project);
     const receipt = JSON.parse(
-      fs.readFileSync(path.join(dist, ".afterpack-protection.json"), "utf8"),
+      fs.readFileSync(path.join(project, ".afterpack", "receipts", "dist.json"), "utf8"),
     );
+    if (fs.existsSync(path.join(dist, ".afterpack-protection.json"))) {
+      fail("the protection receipt was written into the shipped dist/");
+    }
     if (receipt.engine !== "local") fail(`the receipt records engine '${receipt.engine}'`);
     for (const [fixture, want] of Object.entries(expected)) {
       const file = path.join(dist, fixture);

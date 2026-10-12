@@ -13,7 +13,7 @@ import {
 } from "./paths.js";
 import type { ReportPolicy } from "./policy.js";
 
-const AFTERPACK_DIR = ".afterpack";
+export const AFTERPACK_DIR = ".afterpack";
 
 const AFTERPACK_GITIGNORE_CONTENT = "*\n";
 
@@ -607,7 +607,7 @@ function logProtectionMapInProd(pmPath: string, logger: Logger): void {
   logger.log(`[afterpack] Protection Map -> ${display} (local only, not deployed)`);
 }
 
-function afterpackRoot(dir: string): string {
+export function afterpackRoot(dir: string): string {
   const resolved = resolve(dir);
   const segments = resolved.split(sep);
   const index = segments.lastIndexOf(AFTERPACK_DIR);

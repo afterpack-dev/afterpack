@@ -21,7 +21,7 @@ import {
   MIN_CORE_VERSION,
 } from "./compat.js";
 import { type ObfuscationPassOptions, runObfuscationPass } from "./pass.js";
-import { PROTECTION_RECEIPT_FILE, type ProtectionReceipt } from "./receipt.js";
+import { type ProtectionReceipt, protectionReceiptPath } from "./receipt.js";
 import { resetBuildSessions } from "./seed.js";
 import type { TelemetryFacts } from "./telemetry.js";
 
@@ -82,8 +82,12 @@ function options(extra: Partial<ObfuscationPassOptions> = {}): ObfuscationPassOp
   };
 }
 
+function receiptFile(): string {
+  return protectionReceiptPath(join(root, ".afterpack"), outDir);
+}
+
 function receipt(): ProtectionReceipt {
-  return JSON.parse(readFileSync(join(outDir, PROTECTION_RECEIPT_FILE), "utf8"));
+  return JSON.parse(readFileSync(receiptFile(), "utf8"));
 }
 
 describe("the build context carries the client identity", () => {
@@ -112,7 +116,7 @@ describe("the build context carries the client identity", () => {
     });
 
     writeFileSync(file, "export const a = 1;");
-    rmSync(join(outDir, PROTECTION_RECEIPT_FILE));
+    rmSync(receiptFile());
     await runObfuscationPass(options({ logger: capture().logger }));
     expect(batchCalls[1].buildContext).toBeUndefined();
   });
@@ -281,7 +285,7 @@ describe("the result status rule", () => {
       /failed to obfuscate .*app\.js: the engine reported status "skipped"/,
     );
     expect(readFileSync(file, "utf8")).toBe("export const a = 1;");
-    expect(existsSync(join(outDir, PROTECTION_RECEIPT_FILE))).toBe(false);
+    expect(existsSync(receiptFile())).toBe(false);
   });
 
   it("fails a file whose non-success status carries output anyway", async () => {
@@ -308,7 +312,7 @@ describe("the result status rule", () => {
       /app\.js: the engine could not obfuscate it and returned the original source/,
     );
     expect(readFileSync(file, "utf8")).toBe("export const a = 1;");
-    expect(existsSync(join(outDir, PROTECTION_RECEIPT_FILE))).toBe(false);
+    expect(existsSync(receiptFile())).toBe(false);
   });
 
   it("fails a file that came back with empty output on non-empty source", async () => {

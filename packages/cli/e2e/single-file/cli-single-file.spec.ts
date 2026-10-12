@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, cpSync, readdirSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
@@ -64,6 +64,9 @@ test.describe("the CLI's own protection receipt gates a deploy", { tag: "@quick"
     "verify passes the built tree, a re-run over it is refused, a rebuilt tree passes again",
     { tag: "@node" },
     () => {
+      expect(existsSync(join(app.dir, ".afterpack", "receipts", "dist.json"))).toBe(true);
+      expect(existsSync(join(dist, ".afterpack-protection.json"))).toBe(false);
+
       const verified = afterpack(["verify", "dist"]);
       expect(verified.status, `stderr: ${verified.stderr}`).toBe(0);
       expect(verified.stdout).toContain("Verified 1 file");

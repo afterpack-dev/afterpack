@@ -10,7 +10,6 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  PROTECTION_RECEIPT_FILE,
   type ProtectionReceipt,
   sha256Of,
   verifyProtectionReceipt,
@@ -57,8 +56,12 @@ function chunk(p: Project, name: string, source: string): string {
   return path;
 }
 
+function receiptPathOf(p: Project): string {
+  return join(p.projectDir, ".afterpack", "receipts", ".next.json");
+}
+
 function receiptOf(p: Project): ProtectionReceipt {
-  return JSON.parse(readFileSync(join(p.distDir, PROTECTION_RECEIPT_FILE), "utf8"));
+  return JSON.parse(readFileSync(receiptPathOf(p), "utf8"));
 }
 
 beforeEach(() => {
@@ -113,7 +116,7 @@ describe("runAfterpackHook", () => {
     await expect(runAfterpackHook({ metadata: p, options: {}, engine, env })).rejects.toThrow(
       /no client JS found/,
     );
-    expect(existsSync(join(p.distDir, PROTECTION_RECEIPT_FILE))).toBe(false);
+    expect(existsSync(receiptPathOf(p))).toBe(false);
   });
 
   it("skips on build.autorun=false, from the options object or the environment", async () => {
@@ -131,11 +134,35 @@ describe("runAfterpackHook", () => {
     });
 
     expect(engineCalls).toHaveLength(0);
-    expect(existsSync(join(a.distDir, PROTECTION_RECEIPT_FILE))).toBe(false);
+    expect(existsSync(receiptPathOf(a))).toBe(false);
   });
 });
 
 describe("the protection receipt", () => {
+  it("lives in the project's .afterpack/receipts/, never in .next/", async () => {
+    const p = project();
+    chunk(p, "main.js", "export const a = 1;");
+    writeFileSync(join(p.distDir, ".afterpack-protection.json"), "{}");
+
+    await runAfterpackHook({ metadata: p, options: {}, engine, env });
+
+    expect(existsSync(receiptPathOf(p))).toBe(true);
+    expect(existsSync(join(p.distDir, ".afterpack-protection.json"))).toBe(false);
+  });
+
+  it("keys a custom distDir by its own name", async () => {
+    const p = project();
+    const custom = { ...p, distDir: join(p.projectDir, ".next-webpack") };
+    mkdirSync(join(custom.distDir, "static", "chunks"), { recursive: true });
+    writeFileSync(join(custom.distDir, "static", "chunks", "main.js"), "export const a = 1;");
+
+    await runAfterpackHook({ metadata: custom, options: {}, engine, env });
+
+    expect(existsSync(join(p.projectDir, ".afterpack", "receipts", ".next-webpack.json"))).toBe(
+      true,
+    );
+  });
+
   it("records the engine, seed, bundler, the build id from build-manifest.json (no BUILD_ID file yet) and a sha256 per obfuscated file", async () => {
     const p = project();
     const main = chunk(p, "main.js", "export const a = 1;");
@@ -171,10 +198,10 @@ describe("the protection receipt", () => {
     const main = chunk(p, "main.js", "export const a = 1;");
 
     await runAfterpackHook({ metadata: p, options: {}, engine, env });
-    expect(verifyProtectionReceipt(p.distDir, BUILD_ID).problems).toEqual([]);
+    expect(verifyProtectionReceipt(receiptPathOf(p), p.distDir, BUILD_ID).problems).toEqual([]);
 
     writeFileSync(main, "export const a = 1;");
-    expect(verifyProtectionReceipt(p.distDir, BUILD_ID).problems).toEqual([
+    expect(verifyProtectionReceipt(receiptPathOf(p), p.distDir, BUILD_ID).problems).toEqual([
       "static/chunks/main.js: content changed since it was obfuscated",
     ]);
   });
@@ -185,7 +212,7 @@ describe("the protection receipt", () => {
 
     await runAfterpackHook({ metadata: p, options: {}, engine, env });
 
-    expect(verifyProtectionReceipt(p.distDir, "a-later-build").problems).toEqual([
+    expect(verifyProtectionReceipt(receiptPathOf(p), p.distDir, "a-later-build").problems).toEqual([
       expect.stringContaining("rebuilt without the AfterPack wrapper"),
     ]);
   });

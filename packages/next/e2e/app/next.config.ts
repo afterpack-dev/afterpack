@@ -20,7 +20,7 @@ const nextConfig: NextConfig = {
 // withAfterpack installs Next's own `compiler.runAfterProductionCompile`
 // hook, which runs INSIDE `next build` on either bundler. There is no
 // postbuild script and no bin: `npm run build` alone leaves .next/static/chunks
-// obfuscated, and the build writes .next/.afterpack-protection.json recording
+// obfuscated, and the build writes .afterpack/receipts/.next.json recording
 // what it protected. This fixture's package.json deliberately has no
 // "postbuild" -- e2e/helpers/receipt.ts fails if one comes back.
 export default withAfterpack(nextConfig, { seed: expectations.seed });

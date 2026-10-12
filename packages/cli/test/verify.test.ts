@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { writeProtectionReceipt } from "@afterpack/integration-utils";
@@ -31,6 +31,7 @@ function protectedBuild(opts: { transformed?: boolean } = {}): { distDir: string
   writeFileSync(join(distDir, "BUILD_ID"), BUILD_ID);
   writeProtectionReceipt({
     dir: distDir,
+    afterpackDir: join(root, ".afterpack"),
     tool: "@afterpack/next",
     engine: "cloud",
     engineVersion: "9.9.9-test",
@@ -126,7 +127,13 @@ describe("afterpack verify", () => {
     expect(out).toHaveLength(1);
     const doc = JSON.parse(out[0]) as Record<string, unknown>;
     expect(doc).toMatchObject({ command: "verify", exitCode: 0, ok: true });
-    expect(doc.summary).toMatchObject({ tool: "@afterpack/next", buildId: BUILD_ID, files: 1 });
+    expect(doc.summary).toMatchObject({
+      tool: "@afterpack/next",
+      buildId: BUILD_ID,
+      files: 1,
+      directory: ".next",
+      receipt: ".afterpack/receipts/.next.json",
+    });
     expect(doc.files).toEqual([
       {
         path: "static/chunks/main.js",
@@ -177,6 +184,52 @@ describe("afterpack <dir> writes the receipt afterpack verify reads", () => {
     expect(await invoke(["dist", ...QUIET])).toBe(0);
     expect(await invoke(["verify", "dist"])).toBe(0);
     expect(out.join("\n")).toContain("Verified 1 file");
+  });
+
+  it("keeps the receipt in .afterpack/receipts/, out of the tree that ships", async () => {
+    const dist = buildOutput();
+
+    expect(await invoke(["dist", ...QUIET])).toBe(0);
+    expect(existsSync(join(root, ".afterpack", "receipts", "dist.json"))).toBe(true);
+    expect(readdirSync(dist)).toEqual(["app.js"]);
+  });
+
+  it("removes a stale receipt an earlier run left in the tree, and still verifies", async () => {
+    const dist = buildOutput();
+    writeFileSync(join(dist, ".afterpack-protection.json"), "{}");
+
+    expect(await invoke(["dist", ...QUIET])).toBe(0);
+    expect(readdirSync(dist)).toEqual(["app.js"]);
+    expect(await invoke(["verify", "dist"])).toBe(0);
+  });
+
+  it("keeps one receipt per protected dir and verifies each against its own", async () => {
+    buildOutput("web");
+    buildOutput("worker");
+
+    expect(await invoke(["web", ...QUIET])).toBe(0);
+    expect(await invoke(["worker", ...QUIET])).toBe(0);
+    expect(readdirSync(join(root, ".afterpack", "receipts")).sort()).toEqual([
+      "web.json",
+      "worker.json",
+    ]);
+    expect(await invoke(["verify", "web"])).toBe(0);
+    expect(await invoke(["verify", "worker"])).toBe(0);
+  });
+
+  it("finds the receipt from a nested working directory", async () => {
+    buildOutput();
+    expect(await invoke(["dist", ...QUIET])).toBe(0);
+
+    const code = await run({
+      argv: ["verify", "."],
+      cwd: join(root, "dist"),
+      engine: { processBatch },
+      logger,
+      version: "9.9.9",
+      env: {},
+    });
+    expect(code).toBe(0);
   });
 
   it("FAILS the gate when a file is replaced after the run", async () => {

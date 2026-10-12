@@ -1,9 +1,17 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
-  PROTECTION_RECEIPT_FILE,
   type ProtectionReceipt,
+  protectionReceiptPath,
   verifyProtectionReceipt,
 } from "@afterpack/integration-utils";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -86,8 +94,12 @@ function report(bundles: unknown[], type = "buildSuccess"): void {
   });
 }
 
+function receiptFor(dir: string): string {
+  return protectionReceiptPath(join(root, ".afterpack"), dir);
+}
+
 function receiptIn(dir: string): ProtectionReceipt {
-  return JSON.parse(readFileSync(join(dir, PROTECTION_RECEIPT_FILE), "utf8"));
+  return JSON.parse(readFileSync(receiptFor(dir), "utf8"));
 }
 
 describe("the Parcel receipt reporter", () => {
@@ -114,8 +126,20 @@ describe("the Parcel receipt reporter", () => {
         { path: "lazy/counter.62303d69.js", transformed: false },
       ],
     });
-    expect(verifyProtectionReceipt(dist).problems).toEqual([]);
+    expect(verifyProtectionReceipt(receiptFor(dist), dist).problems).toEqual([]);
     expect(infos.join("\n")).toContain("wrote protection receipt");
+    expect(receiptFor(dist)).toBe(join(root, ".afterpack", "receipts", "dist.json"));
+    expect(readdirSync(dist).sort()).toEqual(["app.05f9e6d8.js", "index.html", "lazy"]);
+  });
+
+  it("removes a stale receipt an earlier build left in the dist dir", () => {
+    writeFileSync(join(dist, ".afterpack-protection.json"), "{}");
+    writeBundleRecord(root, "app", record());
+
+    report([bundle({ id: "app", file: "app.js" })]);
+
+    expect(readdirSync(dist)).toEqual(["app.js"]);
+    expect(existsSync(receiptFor(dist))).toBe(true);
   });
 
   it("fails a later verify once a shipped file changes", () => {
@@ -124,7 +148,7 @@ describe("the Parcel receipt reporter", () => {
 
     writeFileSync(join(dist, "app.js"), "tampered");
 
-    expect(verifyProtectionReceipt(dist).problems).toEqual([
+    expect(verifyProtectionReceipt(receiptFor(dist), dist).problems).toEqual([
       "app.js: content changed since it was obfuscated",
     ]);
   });
@@ -141,6 +165,10 @@ describe("the Parcel receipt reporter", () => {
 
     expect(receiptIn(dist).seed).toBe("1");
     expect(receiptIn(legacy).seed).toBe("2");
+    expect(readdirSync(join(root, ".afterpack", "receipts")).sort()).toEqual([
+      "dist-legacy.json",
+      "dist.json",
+    ]);
   });
 
   it("names every seed when the workers drew different ones", () => {
@@ -153,12 +181,15 @@ describe("the Parcel receipt reporter", () => {
   });
 
   it("writes no receipt, and removes an old one, when a shipped bundle has no record", () => {
-    writeFileSync(join(dist, PROTECTION_RECEIPT_FILE), "{}");
+    mkdirSync(join(root, ".afterpack", "receipts"), { recursive: true });
+    writeFileSync(receiptFor(dist), "{}");
+    writeFileSync(join(dist, ".afterpack-protection.json"), "{}");
     writeBundleRecord(root, "app", record());
 
     report([bundle({ id: "app", file: "app.js" }), bundle({ id: "cached", file: "chunk.js" })]);
 
-    expect(existsSync(join(dist, PROTECTION_RECEIPT_FILE))).toBe(false);
+    expect(existsSync(receiptFor(dist))).toBe(false);
+    expect(existsSync(join(dist, ".afterpack-protection.json"))).toBe(false);
     expect(warnings.join("\n")).toContain("no record of obfuscating dist/chunk.js");
   });
 
@@ -169,7 +200,7 @@ describe("the Parcel receipt reporter", () => {
       bundle({ id: "dev", shouldOptimize: false, file: "dev.js" }),
     ]);
 
-    expect(existsSync(join(dist, PROTECTION_RECEIPT_FILE))).toBe(false);
+    expect(existsSync(receiptFor(dist))).toBe(false);
     expect(warnings).toEqual([]);
   });
 
@@ -179,7 +210,7 @@ describe("the Parcel receipt reporter", () => {
     report([], "buildStart");
     report([bundle({ id: "app", file: "app.js", content: "cleartext" })]);
 
-    expect(existsSync(join(dist, PROTECTION_RECEIPT_FILE))).toBe(false);
+    expect(existsSync(receiptFor(dist))).toBe(false);
     expect(warnings.join("\n")).toContain("no record of obfuscating dist/app.js");
   });
 
@@ -188,6 +219,6 @@ describe("the Parcel receipt reporter", () => {
 
     report([bundle({ id: "app", file: "app.js" })], "buildFailure");
 
-    expect(existsSync(join(dist, PROTECTION_RECEIPT_FILE))).toBe(false);
+    expect(existsSync(receiptFor(dist))).toBe(false);
   });
 });

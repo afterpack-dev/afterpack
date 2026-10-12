@@ -94,7 +94,7 @@ describe("run", () => {
     expect(await invoke(["dist", "--protectionMap.enabled=false"])).toBe(0);
     const text = out.join("\n");
     expect(text).toContain("Protected 1 file");
-    expect(text).toContain("receipt  dist/.afterpack-protection.json");
+    expect(text).toContain("receipt  .afterpack/receipts/dist.json");
     expect(text).toContain("next  afterpack verify dist   before you deploy");
     expect(text).not.toContain("detected Vite");
   });

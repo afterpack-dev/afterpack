@@ -9,7 +9,6 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PROTECTION_RECEIPT_FILE } from "@afterpack/integration-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __reset, __setProcessResult, __setVersion, engineCalls } from "../../../test/core-fake.js";
 import { AfterpackWebpackPlugin } from "./index.js";
@@ -238,22 +237,32 @@ describe("AfterpackWebpackPlugin processAssets", () => {
 });
 
 describe("AfterpackWebpackPlugin protection receipt", () => {
-  it("writes .afterpack-protection.json in afterEmit for the files webpack actually wrote", async () => {
+  it("writes the receipt to .afterpack/receipts/ in afterEmit for the files webpack actually wrote", async () => {
     writeFileSync(join(outDir, "main.js"), "OBF:export const a = 1;");
     const invoke = applyPlugin(new AfterpackWebpackPlugin({}));
     await invoke(fixture({ "main.js": "export const a = 1;" }, ["main.js"]));
 
-    const receiptPath = join(outDir, PROTECTION_RECEIPT_FILE);
+    const receiptPath = join(root, ".afterpack", "receipts", "dist.json");
     expect(existsSync(receiptPath)).toBe(true);
     const receipt = JSON.parse(readFileSync(receiptPath, "utf8"));
     expect(receipt.files.map((f: { path: string }) => f.path)).toEqual(["main.js"]);
+    expect(readdirSync(outDir)).toEqual(["main.js"]);
+  });
+
+  it("removes a stale receipt an earlier build left in the output path", async () => {
+    writeFileSync(join(outDir, "main.js"), "OBF:export const a = 1;");
+    writeFileSync(join(outDir, ".afterpack-protection.json"), "{}");
+    const invoke = applyPlugin(new AfterpackWebpackPlugin({}));
+    await invoke(fixture({ "main.js": "export const a = 1;" }, ["main.js"]));
+
+    expect(readdirSync(outDir)).toEqual(["main.js"]);
   });
 
   it("does not write a receipt for a file the bundler never flushed to disk", async () => {
     const invoke = applyPlugin(new AfterpackWebpackPlugin({}));
     await invoke(fixture({ "main.js": "export const a = 1;" }, ["main.js"]));
 
-    expect(existsSync(join(outDir, PROTECTION_RECEIPT_FILE))).toBe(false);
+    expect(existsSync(join(root, ".afterpack", "receipts", "dist.json"))).toBe(false);
   });
 });
 

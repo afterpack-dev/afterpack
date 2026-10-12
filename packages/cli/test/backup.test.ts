@@ -77,7 +77,7 @@ describe("writeBackups", () => {
       protectedRoot: join(root, "dist"),
       cliVersion: "9.9.9",
       pending,
-      receiptPath: join(root, "dist", ".afterpack-protection.json"),
+      receiptPath: join(root, ".afterpack", "receipts", "dist.json"),
     });
 
     const manifest = okManifest(root);
@@ -85,7 +85,7 @@ describe("writeBackups", () => {
       schema: 1,
       protectedRoot: join(root, "dist"),
       cliVersion: "9.9.9",
-      receiptPath: join(root, "dist", ".afterpack-protection.json"),
+      receiptPath: join(root, ".afterpack", "receipts", "dist.json"),
       files: [
         {
           path: "dist/app.js",

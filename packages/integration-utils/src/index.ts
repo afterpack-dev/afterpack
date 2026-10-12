@@ -106,10 +106,13 @@ export {
 } from "./policy.js";
 export {
   DIAG_RECEIPT_UNREADABLE,
-  PROTECTION_RECEIPT_FILE,
+  findProtectionReceipt,
+  PROTECTION_RECEIPTS_DIR,
   type ProtectionReceipt,
   type ProtectionReceiptFile,
   type ProtectionVerification,
+  protectionReceiptPath,
+  removeStaleOutputReceipt,
   sha256Of,
   UnreadableReceiptError,
   verifyProtectionReceipt,

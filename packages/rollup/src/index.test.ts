@@ -147,7 +147,7 @@ describe("afterpackRollup generateBundle", () => {
 });
 
 describe("afterpackRollup writeBundle (protection receipt)", () => {
-  it("writes .afterpack-protection.json in writeBundle for the files rollup actually wrote", async () => {
+  it("writes the receipt to .afterpack/receipts/ in writeBundle for the files rollup actually wrote", async () => {
     const plugin = afterpackRollup({});
     const outputOptions = { dir: outDir };
     const bundle = bundleOf(chunk("index.js", "export const a = 1;"));
@@ -159,10 +159,45 @@ describe("afterpackRollup writeBundle (protection receipt)", () => {
     writeFileSync(join(outDir, "index.js"), emitted);
     await p.writeBundle(outputOptions, bundle);
 
-    const receiptPath = join(outDir, ".afterpack-protection.json");
+    const receiptPath = join(root, ".afterpack", "receipts", "dist.json");
     expect(existsSync(receiptPath)).toBe(true);
     const receipt = JSON.parse(readFileSync(receiptPath, "utf8"));
     expect(receipt.files.map((f: { path: string }) => f.path)).toEqual(["index.js"]);
+    expect(readdirSync(outDir)).toEqual(["index.js"]);
+  });
+
+  it("removes a stale receipt an earlier build left in the output dir", async () => {
+    writeFileSync(join(outDir, ".afterpack-protection.json"), "{}");
+    const plugin = afterpackRollup({});
+    const outputOptions = { dir: outDir };
+    const bundle = bundleOf(chunk("index.js", "export const a = 1;"));
+    // biome-ignore lint/suspicious/noExplicitAny: exercising the Rollup hooks directly in a test.
+    const p = plugin as any;
+    await p.generateBundle.handler.call({}, outputOptions, bundle);
+
+    expect(existsSync(join(outDir, ".afterpack-protection.json"))).toBe(false);
+  });
+
+  it("keeps a receipt per output dir when one build writes two", async () => {
+    const plugin = afterpackRollup({});
+    // biome-ignore lint/suspicious/noExplicitAny: exercising the Rollup hooks directly in a test.
+    const p = plugin as any;
+    for (const format of ["esm", "cjs"]) {
+      const dir = join(outDir, format);
+      mkdirSync(dir, { recursive: true });
+      const outputOptions = { dir };
+      const bundle = bundleOf(chunk("index.js", `export const ${format} = 1;`));
+      await p.generateBundle.handler.call({}, outputOptions, bundle);
+      const emitted = bundle["index.js"].code;
+      if (emitted === undefined) throw new Error("the pass left the chunk with no code");
+      writeFileSync(join(dir, "index.js"), emitted);
+      await p.writeBundle(outputOptions, bundle);
+    }
+
+    expect(readdirSync(join(root, ".afterpack", "receipts")).sort()).toEqual([
+      "dist%2Fcjs.json",
+      "dist%2Fesm.json",
+    ]);
   });
 
   it("does not write a receipt for a file rollup never flushed to disk", async () => {
@@ -174,7 +209,7 @@ describe("afterpackRollup writeBundle (protection receipt)", () => {
     await p.generateBundle.handler.call({}, outputOptions, bundle);
     await p.writeBundle(outputOptions, bundle);
 
-    expect(existsSync(join(outDir, ".afterpack-protection.json"))).toBe(false);
+    expect(existsSync(join(root, ".afterpack", "receipts", "dist.json"))).toBe(false);
   });
 });
 

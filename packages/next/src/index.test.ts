@@ -1,7 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PROTECTION_RECEIPT_FILE } from "@afterpack/integration-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __reset, __setProcessResult } from "../../../test/core-fake.js";
 import { withAfterpack } from "./index.js";
@@ -57,7 +56,8 @@ describe("withAfterpack", () => {
 
     expect(readFileSync(chunk, "utf8")).toContain("OBF:export const secret = 1;");
     expect(existsSync(join(projectDir, ".afterpack", "next-options.json"))).toBe(false);
-    expect(existsSync(join(distDir, PROTECTION_RECEIPT_FILE))).toBe(true);
+    expect(existsSync(join(projectDir, ".afterpack", "receipts", ".next.json"))).toBe(true);
+    expect(existsSync(join(distDir, ".afterpack-protection.json"))).toBe(false);
   });
 
   it("carries options straight into the engine, with no second resolution to drop them", async () => {

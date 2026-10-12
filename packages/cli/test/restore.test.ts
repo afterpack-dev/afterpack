@@ -1,7 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PROTECTION_RECEIPT_FILE } from "@afterpack/integration-utils";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { __reset, __setProcessResult, processBatch } from "../../../test/core-fake.js";
 import { CONTACT_FOOTER } from "../src/args.js";
@@ -101,11 +100,12 @@ describe("afterpack restore", () => {
   it("deletes the receipt and the whole backup dir on success, but leaves .afterpack/ in place", async () => {
     writeFileSync(join(buildDir, "app.js"), "export const a = 1;");
     expect(await invoke(["dist", ...QUIET])).toBe(0);
-    expect(existsSync(join(buildDir, PROTECTION_RECEIPT_FILE))).toBe(true);
+    const receipt = join(root, ".afterpack", "receipts", "dist.json");
+    expect(existsSync(receipt)).toBe(true);
     expect(existsSync(join(root, ".afterpack", "backup"))).toBe(true);
 
     expect(await invoke(["restore"])).toBe(0);
-    expect(existsSync(join(buildDir, PROTECTION_RECEIPT_FILE))).toBe(false);
+    expect(existsSync(receipt)).toBe(false);
     expect(existsSync(join(root, ".afterpack", "backup"))).toBe(false);
     expect(existsSync(join(root, ".afterpack"))).toBe(true);
   });
@@ -115,7 +115,8 @@ describe("afterpack restore", () => {
     expect(await invoke(["dist", ...QUIET])).toBe(0);
 
     const outside = mkdtempSync(join(tmpdir(), "afterpack-restore-outsider-"));
-    const decoy = join(outside, PROTECTION_RECEIPT_FILE);
+    mkdirSync(join(outside, ".afterpack", "receipts"), { recursive: true });
+    const decoy = join(outside, ".afterpack", "receipts", "dist.json");
     writeFileSync(decoy, '{"someone":"else"}');
     const manifestPath = backupManifestPath(root);
     const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));

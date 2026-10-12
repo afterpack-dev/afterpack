@@ -11,7 +11,7 @@
       "client",
       "server"
     ],
-    "note": "obfuscation runs INSIDE `next build`, via @afterpack/next's compiler.runAfterProductionCompile hook -- no postbuild script and no separate step; the build also writes .next/.afterpack-protection.json"
+    "note": "obfuscation runs INSIDE `next build`, via @afterpack/next's compiler.runAfterProductionCompile hook -- no postbuild script and no separate step; the build also writes .afterpack/receipts/.next.json"
   },
   "obfuscation": {
     "minFiles": 25,

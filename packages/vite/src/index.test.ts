@@ -341,7 +341,7 @@ describe("afterpackVite writeBundle (protection receipt)", () => {
     __setProcessResult((input) => ({ code: `OBF:${input}`, sourceMap: null, protectionMap: null }));
   });
 
-  it("writes .afterpack-protection.json in writeBundle for the files vite actually wrote", async () => {
+  it("writes the receipt to .afterpack/receipts/ in writeBundle for the files vite actually wrote", async () => {
     const plugin = afterpackVite({});
     // biome-ignore lint/suspicious/noExplicitAny: exercising Vite hooks directly in a test.
     const p = plugin as any;
@@ -353,10 +353,40 @@ describe("afterpackVite writeBundle (protection receipt)", () => {
     writeFileSync(join(outDir, "a.js"), emitted);
     await p.writeBundle();
 
-    const receiptPath = join(outDir, ".afterpack-protection.json");
+    const receiptPath = join(root, ".afterpack", "receipts", "dist.json");
     expect(existsSync(receiptPath)).toBe(true);
     const receipt = JSON.parse(readFileSync(receiptPath, "utf8"));
     expect(receipt.files.map((f: { path: string }) => f.path)).toEqual(["a.js"]);
+    expect(readdirSync(outDir)).toEqual(["a.js"]);
+  });
+
+  it("removes a stale receipt an earlier build left in outDir", async () => {
+    writeFileSync(join(outDir, ".afterpack-protection.json"), "{}");
+    const plugin = afterpackVite({});
+    // biome-ignore lint/suspicious/noExplicitAny: exercising Vite hooks directly in a test.
+    const p = plugin as any;
+    p.configResolved({ root, build: { outDir } });
+    const bundle = bundleOf(chunk("a.js", "export const a = 1;"));
+    await p.generateBundle.handler.call({}, { dir: outDir }, bundle);
+
+    expect(existsSync(join(outDir, ".afterpack-protection.json"))).toBe(false);
+  });
+
+  it("keys a leg's receipt by its own outDir, in the project's one receipts dir", async () => {
+    const ssrOut = join(root, "dist", "server");
+    mkdirSync(ssrOut, { recursive: true });
+    const plugin = afterpackVite({ leg: "server" });
+    // biome-ignore lint/suspicious/noExplicitAny: exercising Vite hooks directly in a test.
+    const p = plugin as any;
+    p.configResolved({ root, build: { outDir: ssrOut } });
+    const bundle = bundleOf(chunk("entry.js", "export const s = 1;"));
+    await p.generateBundle.handler.call({}, { dir: ssrOut }, bundle);
+    const emitted = bundle["entry.js"].code;
+    if (emitted === undefined) throw new Error("the pass left the chunk with no code");
+    writeFileSync(join(ssrOut, "entry.js"), emitted);
+    await p.writeBundle();
+
+    expect(existsSync(join(root, ".afterpack", "receipts", "dist%2Fserver.json"))).toBe(true);
   });
 
   it("still writes the receipt on diagnostics.level=none, but says nothing about it", async () => {
@@ -376,7 +406,7 @@ describe("afterpackVite writeBundle (protection receipt)", () => {
       writeFileSync(join(outDir, "a.js"), emitted);
       await p.writeBundle();
 
-      expect(existsSync(join(outDir, ".afterpack-protection.json"))).toBe(true);
+      expect(existsSync(join(root, ".afterpack", "receipts", "dist.json"))).toBe(true);
       expect(logged.join("\n")).not.toContain("protection receipt");
     } finally {
       spy.mockRestore();
@@ -392,7 +422,7 @@ describe("afterpackVite writeBundle (protection receipt)", () => {
     await p.generateBundle.handler.call({}, { dir: outDir }, bundle);
     await p.writeBundle();
 
-    expect(existsSync(join(outDir, ".afterpack-protection.json"))).toBe(false);
+    expect(existsSync(join(root, ".afterpack", "receipts", "dist.json"))).toBe(false);
   });
 });
 

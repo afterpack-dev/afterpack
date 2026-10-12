@@ -336,9 +336,9 @@ jobs:
           rm -rf "$RUNNER_TEMP/pro" && mkdir -p "$RUNNER_TEMP/pro/dist"
           echo '{"name":"pro-path-check","private":true}' > "$RUNNER_TEMP/pro/package.json"
           echo 'export const k="paid";export function f(a){return a*2}' > "$RUNNER_TEMP/pro/dist/app.js"
-          node packages/cli/dist/cli.js "$RUNNER_TEMP/pro/dist" \
-            --protectionMap.enabled=false --telemetry.enabled=false
-          ENGINE=$(node -p "require('$RUNNER_TEMP/pro/dist/.afterpack-protection.json').engine")
+          (cd "$RUNNER_TEMP/pro" && node "$GITHUB_WORKSPACE/packages/cli/dist/cli.js" dist \
+            --protectionMap.enabled=false --telemetry.enabled=false)
+          ENGINE=$(node -p "require('$RUNNER_TEMP/pro/.afterpack/receipts/dist.json').engine")
           echo "receipt records engine: $ENGINE"
           if [ "$ENGINE" != "cloud" ]; then
             echo "a build with a Pro key did not run on the cloud engine (receipt says '$ENGINE')" >&2
@@ -357,8 +357,8 @@ jobs:
           echo '{"name":"fail-closed-check","private":true}' > "$RUNNER_TEMP/closed/package.json"
           SOURCE='export const k="paid";export function f(a){return a*2}'
           printf '%s' "$SOURCE" > "$RUNNER_TEMP/closed/dist/app.js"
-          if node packages/cli/dist/cli.js "$RUNNER_TEMP/closed/dist" \
-            --protectionMap.enabled=false --telemetry.enabled=false; then
+          if (cd "$RUNNER_TEMP/closed" && node "$GITHUB_WORKSPACE/packages/cli/dist/cli.js" dist \
+            --protectionMap.enabled=false --telemetry.enabled=false); then
             echo "a rejected key produced a successful build" >&2
             exit 1
           fi
@@ -366,7 +366,7 @@ jobs:
             echo "a rejected key rewrote the input" >&2
             exit 1
           fi
-          if [ -f "$RUNNER_TEMP/closed/dist/.afterpack-protection.json" ]; then
+          if [ -e "$RUNNER_TEMP/closed/.afterpack/receipts" ]; then
             echo "a rejected key still wrote a protection receipt" >&2
             exit 1
           fi

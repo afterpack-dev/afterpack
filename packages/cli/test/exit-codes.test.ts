@@ -250,8 +250,9 @@ describe("the exit-code contract", () => {
   });
 
   it("1 — a receipt written by a newer AfterPack is refused with its own code, not BUILD_FAILED", async () => {
+    mkdirSync(join(root, ".afterpack", "receipts"), { recursive: true });
     writeFileSync(
-      join(buildDir, ".afterpack-protection.json"),
+      join(root, ".afterpack", "receipts", "dist.json"),
       JSON.stringify({ schema: 9, outputs: {} }),
     );
     expect(await invoke(["dist", ...QUIET, "--diagnostics.format=json"])).toBe(1);

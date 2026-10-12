@@ -552,6 +552,7 @@ function renderNextSteps(input: {
   env: Record<string, string | undefined>;
   stdout: CliStdout;
   projectRoot: string;
+  buildDir: string;
   receiptPath: string | null | undefined;
   backupWritten: WriteBackupsResult | null;
   hasConfiguredKey: boolean;
@@ -568,7 +569,7 @@ function renderNextSteps(input: {
     report.log("");
   }
   if (receiptPath) {
-    const verifyDir = documentPath(cwd, dirname(receiptPath));
+    const verifyDir = documentPath(cwd, input.buildDir);
     const verifyCommand = verifyDir === "." ? "afterpack verify" : `afterpack verify ${verifyDir}`;
     report.log(alignRow("next", `${verifyCommand}   before you deploy`));
   }
@@ -999,6 +1000,7 @@ export async function run(deps: CliDeps): Promise<number> {
     env,
     stdout,
     projectRoot,
+    buildDir,
     receiptPath: result?.receiptPath,
     backupWritten,
     hasConfiguredKey,

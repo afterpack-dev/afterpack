@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -69,6 +77,25 @@ describe("afterpackAngular", () => {
       "export const a = 1;",
       "export const b = 2;",
     ]);
+    expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe("");
+  });
+
+  it("writes the protection receipt to .afterpack/receipts/, never into the served browser dir", async () => {
+    writeFileSync(join(browserDir, "main.js"), "export const a = 1;");
+    writeFileSync(join(browserDir, ".afterpack-protection.json"), "{}");
+
+    await afterpackAngular({ cwd: root });
+
+    const receiptPath = join(
+      root,
+      ".afterpack",
+      "receipts",
+      "dist%2Fangular-fixture%2Fbrowser.json",
+    );
+    expect(existsSync(receiptPath)).toBe(true);
+    const receipt = JSON.parse(readFileSync(receiptPath, "utf8"));
+    expect(receipt.files.map((f: { path: string }) => f.path)).toEqual(["main.js"]);
+    expect(readdirSync(browserDir)).toEqual(["main.js"]);
     expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe("");
   });
 

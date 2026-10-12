@@ -1,9 +1,18 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, sep } from "node:path";
-import { findUpward } from "./paths.js";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { AFTERPACK_DIR, afterpackRoot, ensureAfterpackGitignore } from "./artifacts.js";
 
-export const PROTECTION_RECEIPT_FILE = ".afterpack-protection.json";
+export const PROTECTION_RECEIPTS_DIR = "receipts";
+
+export const STALE_OUTPUT_RECEIPT_FILE = ".afterpack-protection.json";
 
 export const PROTECTION_RECEIPT_SCHEMA = 1;
 
@@ -39,8 +48,65 @@ function receiptPathOf(dir: string, file: string): string {
   return relative(dir, file).split(sep).join("/");
 }
 
+function realOrResolved(path: string): string {
+  const resolved = resolve(path);
+  try {
+    return realpathSync(resolved);
+  } catch {
+    const parent = dirname(resolved);
+    return parent === resolved ? resolved : join(realOrResolved(parent), basename(resolved));
+  }
+}
+
+function receiptKey(projectRoot: string, buildDir: string): string {
+  const rel = relative(realOrResolved(projectRoot), realOrResolved(buildDir)).split(sep).join("/");
+  return encodeURIComponent(rel === "" ? "." : rel).replace(/\*/g, "%2A");
+}
+
+export function protectionReceiptPath(afterpackDir: string, buildDir: string): string {
+  const root = afterpackRoot(afterpackDir);
+  return join(root, PROTECTION_RECEIPTS_DIR, `${receiptKey(dirname(root), buildDir)}.json`);
+}
+
+function selfAndAncestors(dir: string): string[] {
+  const dirs: string[] = [];
+  let current = resolve(dir);
+  for (;;) {
+    dirs.push(current);
+    const parent = dirname(current);
+    if (parent === current) return dirs;
+    current = parent;
+  }
+}
+
+export function findProtectionReceipt(
+  buildDir: string,
+  projectRoots: readonly string[] = [],
+): string | null {
+  for (const root of [...selfAndAncestors(buildDir), ...projectRoots]) {
+    const afterpackDir = join(root, AFTERPACK_DIR);
+    if (!existsSync(afterpackDir)) continue;
+    const path = protectionReceiptPath(afterpackDir, buildDir);
+    if (existsSync(path)) return path;
+  }
+  return null;
+}
+
+export function removeStaleOutputReceipt(buildDir: string, label: string): void {
+  const path = join(buildDir, STALE_OUTPUT_RECEIPT_FILE);
+  try {
+    unlinkSync(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw new Error(
+      `[${label}] could not remove the stale protection receipt ${path}, refusing to ship it: ${error}`,
+    );
+  }
+}
+
 export interface WriteProtectionReceiptInput {
   dir: string;
+  afterpackDir: string;
   tool: string;
   engine: EngineSource | null;
   engineVersion: string | null;
@@ -79,7 +145,9 @@ export function writeProtectionReceipt(input: WriteProtectionReceiptInput): stri
       }))
       .sort((a, b) => a.path.localeCompare(b.path)),
   };
-  const path = join(input.dir, PROTECTION_RECEIPT_FILE);
+  const path = protectionReceiptPath(input.afterpackDir, input.dir);
+  mkdirSync(dirname(path), { recursive: true });
+  ensureAfterpackGitignore(input.afterpackDir);
   writeFileSync(path, `${JSON.stringify(receipt, null, 2)}\n`);
   return path;
 }
@@ -146,10 +214,10 @@ export class UnreadableReceiptError extends Error {
 }
 
 export function verifyProtectionReceipt(
+  receiptPath: string,
   dir: string,
   expectedBuildId?: string | null,
 ): ProtectionVerification {
-  const receiptPath = join(dir, PROTECTION_RECEIPT_FILE);
   if (!existsSync(receiptPath)) {
     return { receiptPath, receipt: null, problems: [`no protection receipt at ${receiptPath}`] };
   }
@@ -189,9 +257,12 @@ export function verifyProtectionReceipt(
   return { receiptPath, receipt: parsed, problems };
 }
 
-function findReceiptDir(startDir: string): string | null {
-  const receiptPath = findUpward(startDir, PROTECTION_RECEIPT_FILE);
-  return receiptPath ? dirname(receiptPath) : null;
+function findOwnReceipt(startDir: string, afterpackDir: string): string | null {
+  for (const dir of selfAndAncestors(startDir)) {
+    const path = protectionReceiptPath(afterpackDir, dir);
+    if (existsSync(path)) return path;
+  }
+  return null;
 }
 
 interface AlreadyObfuscatedInputs {
@@ -202,12 +273,12 @@ interface AlreadyObfuscatedInputs {
 export function detectAlreadyObfuscatedInputs(
   files: readonly string[],
   startDir: string,
+  afterpackDir: string,
   bytesByPath?: ReadonlyMap<string, Uint8Array>,
   prefix: (message: string) => string = (m) => m,
 ): AlreadyObfuscatedInputs | null {
-  const dir = findReceiptDir(startDir);
-  if (!dir) return null;
-  const receiptPath = join(dir, PROTECTION_RECEIPT_FILE);
+  const receiptPath = findOwnReceipt(startDir, afterpackDir);
+  if (!receiptPath) return null;
   const result = parseReceipt(receiptPath);
   if (result.error !== undefined) {
     const schema = result.newerSchema;
@@ -222,7 +293,9 @@ export function detectAlreadyObfuscatedInputs(
       schema,
     );
   }
-  const outputHashes = new Set(result.receipt.files.map((f) => f.sha256));
+  const outputHashes = new Set(
+    result.receipt.files.filter((f) => f.transformed !== false).map((f) => f.sha256),
+  );
   if (outputHashes.size === 0) return null;
   const matches = files.filter((file) => {
     const bytes = bytesByPath?.get(file);

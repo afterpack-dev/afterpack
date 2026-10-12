@@ -19,8 +19,8 @@ import type { EngineFileInput, EngineFileResult, ObfuscationEngine } from "./pas
 import { runObfuscationPass } from "./pass.js";
 import type { BuildContext, CoreConfig } from "./policy.js";
 import {
-  PROTECTION_RECEIPT_FILE,
   type ProtectionReceipt,
+  protectionReceiptPath,
   sha256Of,
   verifyProtectionReceipt,
 } from "./receipt.js";
@@ -129,6 +129,10 @@ function silentLogger() {
     warnings,
     logs,
   };
+}
+
+function receiptFor(dir: string): string {
+  return protectionReceiptPath(join(root, ".afterpack"), dir);
 }
 
 const baseOptions = (files: string[], engine: ObfuscationEngine) =>
@@ -1655,7 +1659,7 @@ describe("runObfuscationPass — already-obfuscated pre-flight guard", () => {
     const { engine } = makeEngine(() => ({}));
 
     await runObfuscationPass({ ...baseOptions([a], engine), logger: silentLogger().logger });
-    const receiptPath = join(outDir, PROTECTION_RECEIPT_FILE);
+    const receiptPath = receiptFor(outDir);
     const receiptBefore = readFileSync(receiptPath, "utf8");
     const bytesBefore = readFileSync(a, "utf8");
 
@@ -1690,7 +1694,7 @@ describe("runObfuscationPass — already-obfuscated pre-flight guard", () => {
     const { engine } = makeEngine(() => ({}));
 
     await runObfuscationPass({ ...baseOptions([a], engine), logger: silentLogger().logger });
-    rmSync(join(outDir, PROTECTION_RECEIPT_FILE));
+    rmSync(receiptFor(outDir));
 
     const result = await runObfuscationPass({
       ...baseOptions([a], engine),
@@ -1726,7 +1730,7 @@ describe("runObfuscationPass — already-obfuscated pre-flight guard", () => {
       combinedProtectionMap: { buildDir: root, afterpackDir: join(root, ".afterpack") },
       logger: silentLogger().logger,
     });
-    expect(existsSync(join(root, PROTECTION_RECEIPT_FILE))).toBe(true);
+    expect(existsSync(receiptFor(root))).toBe(true);
 
     const a = join(outDir, "a.js");
     writeFileSync(a, "export const a = 1;");
@@ -1757,7 +1761,7 @@ describe("runObfuscationPass — already-obfuscated pre-flight guard", () => {
 
 describe("runObfuscationPass — the protection receipt it writes", () => {
   function receiptIn(dir: string): ProtectionReceipt {
-    return JSON.parse(readFileSync(join(dir, PROTECTION_RECEIPT_FILE), "utf8"));
+    return JSON.parse(readFileSync(receiptFor(dir), "utf8"));
   }
 
   it("names every file the pass wrote, hashed as shipped, and verifies clean", async () => {
@@ -1777,7 +1781,7 @@ describe("runObfuscationPass — the protection receipt it writes", () => {
       { path: "a.js", sha256: sha256Of(a), transformed: true },
       { path: "chunks/b.js", sha256: sha256Of(nested), transformed: true },
     ]);
-    expect(verifyProtectionReceipt(outDir).problems).toEqual([]);
+    expect(verifyProtectionReceipt(receiptFor(outDir), outDir).problems).toEqual([]);
   });
 
   it("records the pass label as the tool, the engine version, the seed and the caller's build identity", async () => {
@@ -1826,7 +1830,7 @@ describe("runObfuscationPass — the protection receipt it writes", () => {
     });
 
     expect(receiptIn(outDir).files[0].sha256).toBe(sha256Of(a));
-    expect(verifyProtectionReceipt(outDir).problems).toEqual([]);
+    expect(verifyProtectionReceipt(receiptFor(outDir), outDir).problems).toEqual([]);
   });
 
   it("writes NO receipt when the run throws — a failed build never reports a protected tree", async () => {
@@ -1838,7 +1842,7 @@ describe("runObfuscationPass — the protection receipt it writes", () => {
       runObfuscationPass({ ...baseOptions([a], engine), logger: silentLogger().logger }),
     ).rejects.toThrow(/failed to obfuscate/);
 
-    expect(existsSync(join(outDir, PROTECTION_RECEIPT_FILE))).toBe(false);
+    expect(existsSync(receiptFor(outDir))).toBe(false);
   });
 
   it("writes NO receipt for an in-memory (emitToCaller) caller — nothing of its own reached disk", async () => {
@@ -1852,7 +1856,93 @@ describe("runObfuscationPass — the protection receipt it writes", () => {
       logger: silentLogger().logger,
     });
 
-    expect(existsSync(join(outDir, PROTECTION_RECEIPT_FILE))).toBe(false);
+    expect(existsSync(receiptFor(outDir))).toBe(false);
+  });
+
+  it("writes it under the project's .afterpack/receipts/, keyed by the build dir, and nothing into the build dir", async () => {
+    const a = join(outDir, "a.js");
+    writeFileSync(a, "export const a = 1;");
+    const { engine } = makeEngine(() => ({}));
+
+    const result = await runObfuscationPass({
+      ...baseOptions([a], engine),
+      logger: silentLogger().logger,
+    });
+
+    expect(result.receiptPath).toBe(join(root, ".afterpack", "receipts", "dist.json"));
+    expect(readdirSync(outDir)).toEqual(["a.js"]);
+    expect(readFileSync(join(root, ".afterpack", ".gitignore"), "utf8")).toBe("*\n");
+  });
+
+  it("keeps one receipt per build dir, so two builds in one project never overwrite each other", async () => {
+    const client = join(root, "dist", "client");
+    const server = join(root, "dist", "server");
+    mkdirSync(client, { recursive: true });
+    mkdirSync(server, { recursive: true });
+    const a = join(client, "a.js");
+    const b = join(server, "b.js");
+    writeFileSync(a, "export const a = 1;");
+    writeFileSync(b, "export const b = 2;");
+    const { engine } = makeEngine(() => ({}));
+
+    for (const [dir, file] of [
+      [client, a],
+      [server, b],
+    ]) {
+      await runObfuscationPass({
+        ...baseOptions([file], engine),
+        combinedProtectionMap: { buildDir: dir, afterpackDir: join(root, ".afterpack") },
+        logger: silentLogger().logger,
+      });
+    }
+
+    expect(readdirSync(join(root, ".afterpack", "receipts")).sort()).toEqual([
+      "dist%2Fclient.json",
+      "dist%2Fserver.json",
+    ]);
+    expect(receiptIn(client).files.map((f) => f.path)).toEqual(["a.js"]);
+    expect(receiptIn(server).files.map((f) => f.path)).toEqual(["b.js"]);
+    expect(verifyProtectionReceipt(receiptFor(client), client).problems).toEqual([]);
+    expect(verifyProtectionReceipt(receiptFor(server), server).problems).toEqual([]);
+  });
+
+  it("removes a stale receipt an earlier run left in the build dir, so it stops shipping", async () => {
+    const a = join(outDir, "a.js");
+    writeFileSync(a, "export const a = 1;");
+    writeFileSync(join(outDir, ".afterpack-protection.json"), "{}");
+    const { engine } = makeEngine(() => ({}));
+
+    await runObfuscationPass({ ...baseOptions([a], engine), logger: silentLogger().logger });
+
+    expect(readdirSync(outDir)).toEqual(["a.js"]);
+    expect(existsSync(receiptFor(outDir))).toBe(true);
+  });
+
+  it("removes a stale receipt from the build dir for an in-memory (emitToCaller) caller too", async () => {
+    const path = join(outDir, "virtual.js");
+    writeFileSync(join(outDir, ".afterpack-protection.json"), "{}");
+    const { engine } = makeEngine(() => ({}));
+
+    await runObfuscationPass({
+      ...baseOptions([path], engine),
+      inputs: new Map([[path, { source: "export const a = 1;" }]]),
+      emitToCaller: true,
+      logger: silentLogger().logger,
+    });
+
+    expect(readdirSync(outDir)).toEqual([]);
+  });
+
+  it("fails the run when the stale receipt in the build dir cannot be removed", async () => {
+    const a = join(outDir, "a.js");
+    writeFileSync(a, "export const a = 1;");
+    mkdirSync(join(outDir, ".afterpack-protection.json"));
+    const { engine } = makeEngine(() => ({}));
+
+    await expect(
+      runObfuscationPass({ ...baseOptions([a], engine), logger: silentLogger().logger }),
+    ).rejects.toThrow(/could not remove the stale protection receipt/);
+    expect(readFileSync(a, "utf8")).toBe("export const a = 1;");
   });
 
   it("replaces the previous run's receipt rather than merging into it", async () => {
@@ -1870,7 +1960,7 @@ describe("runObfuscationPass — the protection receipt it writes", () => {
     await runObfuscationPass({ ...baseOptions([a], engine), logger: silentLogger().logger });
 
     expect(receiptIn(outDir).files.map((f) => f.path)).toEqual(["a.js"]);
-    expect(verifyProtectionReceipt(outDir).problems).toEqual([]);
+    expect(verifyProtectionReceipt(receiptFor(outDir), outDir).problems).toEqual([]);
   });
 });
 

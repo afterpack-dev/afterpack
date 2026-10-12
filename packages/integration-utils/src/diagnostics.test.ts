@@ -289,12 +289,12 @@ describe("formatAlreadyObfuscatedMessage", () => {
   it("names the code, every file, the receipt, and the fix — under the cap", () => {
     const message = formatAlreadyObfuscatedMessage({
       files: ["/out/a.js", "/out/b.js"],
-      receiptPath: "/out/.afterpack-protection.json",
+      receiptPath: "/app/.afterpack/receipts/out.json",
       dir: "/out",
     });
     expect(message).toBe(
       `error ${DIAG_ALREADY_OBFUSCATED} · 2 file(s) already carry AfterPack's obfuscated output ` +
-        "from a previous run (matched by content hash against /out/.afterpack-protection.json): " +
+        "from a previous run (matched by content hash against /app/.afterpack/receipts/out.json): " +
         "/out/a.js, /out/b.js — rebuild from source before running AfterPack again " +
         "(delete `/out` or run your bundler's clean); AfterPack output is not idempotent",
     );
@@ -304,7 +304,7 @@ describe("formatAlreadyObfuscatedMessage", () => {
     const files = Array.from({ length: 13 }, (_, i) => `/out/f${i}.js`);
     const message = formatAlreadyObfuscatedMessage({
       files,
-      receiptPath: "/out/.afterpack-protection.json",
+      receiptPath: "/app/.afterpack/receipts/out.json",
       dir: "/out",
     });
     expect(message).toContain(files.slice(0, 10).join(", "));
@@ -316,7 +316,7 @@ describe("formatAlreadyObfuscatedMessage", () => {
     const files = Array.from({ length: 10 }, (_, i) => `/out/f${i}.js`);
     const message = formatAlreadyObfuscatedMessage({
       files,
-      receiptPath: "/out/.afterpack-protection.json",
+      receiptPath: "/app/.afterpack/receipts/out.json",
       dir: "/out",
     });
     expect(message).not.toContain("more");

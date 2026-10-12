@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { basename, isAbsolute, relative, resolve } from "node:path";
-import { PROTECTION_RECEIPT_FILE, sha256Of } from "@afterpack/integration-utils";
+import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
+import { PROTECTION_RECEIPTS_DIR, sha256Of } from "@afterpack/integration-utils";
 import { CONTACT_FOOTER } from "./args.js";
 import {
   absoluteFilePath,
@@ -27,8 +27,8 @@ works whether it is pointed at that root or at the build directory beneath it.
 
 Verifies every recorded file against the hash it was obfuscated to BEFORE touching anything: if
 any file no longer matches, or the manifest itself is unreadable, restore changes nothing and
-fails closed. On success it deletes the backup and the stale protection receipt it recorded,
-leaving .afterpack/ itself in place.
+fails closed. On success it deletes the backup and the stale protection receipt it recorded in
+.afterpack/receipts/, leaving .afterpack/ itself in place.
 
 Arguments:
   [dir]                    a directory at or beneath the project root that holds
@@ -65,7 +65,8 @@ function fail(
 }
 
 function isRecordedReceipt(projectRoot: string, receiptPath: string): boolean {
-  if (basename(receiptPath) !== PROTECTION_RECEIPT_FILE) return false;
+  if (basename(dirname(receiptPath)) !== PROTECTION_RECEIPTS_DIR) return false;
+  if (!receiptPath.endsWith(".json")) return false;
   const rel = relative(projectRoot, receiptPath);
   return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel) && existsSync(receiptPath);
 }

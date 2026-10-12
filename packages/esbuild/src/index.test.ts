@@ -67,6 +67,19 @@ describe("afterpackEsbuild onEnd", () => {
     ]);
   });
 
+  it("writes the protection receipt to .afterpack/receipts/, never into the outdir", async () => {
+    writeFileSync(join(outDir, "app.js"), "export const a = 1;");
+    writeFileSync(join(outDir, ".afterpack-protection.json"), "{}");
+
+    await applyPlugin({}, { outdir: outDir, absWorkingDir: root, write: true })();
+
+    const receipt = JSON.parse(
+      readFileSync(join(root, ".afterpack", "receipts", "dist.json"), "utf8"),
+    );
+    expect(receipt.files.map((f: { path: string }) => f.path)).toEqual(["app.js"]);
+    expect(readdirSync(outDir)).toEqual(["app.js"]);
+  });
+
   it("resolves a relative outdir against absWorkingDir", async () => {
     writeFileSync(join(outDir, "app.js"), "export const a = 1;");
     await applyPlugin({}, { outdir: "dist", absWorkingDir: root })();
