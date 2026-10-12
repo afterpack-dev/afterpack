@@ -140,6 +140,7 @@ export default new Optimizer<ParcelConfig, void>({
         fileName: `${bundleLegIdentity}.protectionMap.html`,
       },
       buildLeg: bundleLegIdentity,
+      outputSweep: false,
       sourceType: sourceTypeForOutputFormat(bundle.env.outputFormat),
       artifactOptions: {
         ...config.options.artifactOptions,

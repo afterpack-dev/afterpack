@@ -271,6 +271,7 @@ describe("afterpack <dir> writes the receipt afterpack verify reads", () => {
     const project = join(root, "apps", "web");
     mkdirSync(join(project, "dist"), { recursive: true });
     writeFileSync(join(project, "package.json"), "{}");
+    writeFileSync(join(project, "package-lock.json"), "{}");
     writeFileSync(join(project, "dist", "app.js"), "export const a = 1;");
 
     expect(await invoke(["apps/web/dist", ...QUIET])).toBe(0);
@@ -296,7 +297,7 @@ describe("afterpack <dir> writes the receipt afterpack verify reads", () => {
     expect(readdirSync(served)).toEqual(["app.js"]);
     expect(existsSync(join(root, ".afterpack", "receipts", "public.json"))).toBe(true);
     expect(existsSync(join(root, ".afterpack", "backup", "manifest.json"))).toBe(true);
-    expect(out.join("\n")).toContain("no package.json, afterpack.json or .git above");
+    expect(out.join("\n")).toContain("no lockfile, afterpack.json, .git or package.json above");
     expect(await invokeIn(served, ["verify"])).toBe(0);
     expect(await invokeIn(served, ["restore"])).toBe(0);
     expect(readFileSync(join(served, "app.js"), "utf8")).toBe("export const a = 1;");
@@ -340,6 +341,7 @@ describe("afterpack <dir> writes the receipt afterpack verify reads", () => {
 
   it("keeps a single file's .afterpack in the project root it sits in, and verifies it", async () => {
     writeFileSync(join(root, "package.json"), "{}");
+    writeFileSync(join(root, "package-lock.json"), "{}");
     writeFileSync(join(root, "app.js"), "export const a = 1;");
 
     expect(await invoke(["app.js", ...QUIET])).toBe(0);
@@ -353,6 +355,79 @@ describe("afterpack <dir> writes the receipt afterpack verify reads", () => {
     expect(err.join("\n")).toContain("Already obfuscated");
     expect(await invoke(["restore"])).toBe(0);
     expect(readFileSync(join(root, "app.js"), "utf8")).toBe("export const a = 1;");
+  });
+
+  it("refuses a/b/a single-file runs in one dir, keeping both receipts and both backups", async () => {
+    writeFileSync(join(root, "package-lock.json"), "{}");
+    const dist = buildOutput();
+    writeFileSync(join(dist, "b.js"), "export const b = 2;");
+
+    expect(await invoke(["dist/app.js", ...QUIET])).toBe(0);
+    const once = readFileSync(join(dist, "app.js"), "utf8");
+    expect(await invoke(["dist/b.js", ...QUIET])).toBe(0);
+    err = [];
+    expect(await invoke(["dist/app.js", ...QUIET])).toBe(1);
+    expect(err.join("\n")).toContain("Already obfuscated");
+    expect(readFileSync(join(dist, "app.js"), "utf8")).toBe(once);
+
+    rmSync(join(root, ".afterpack", "receipts"), { recursive: true });
+    err = [];
+    expect(await invoke(["dist/app.js", ...QUIET])).toBe(1);
+    expect(err.join("\n")).toContain("Already obfuscated");
+
+    expect(await invoke(["restore"])).toBe(0);
+    expect(readFileSync(join(dist, "app.js"), "utf8")).toBe("export const a = 1;");
+    expect(readFileSync(join(dist, "b.js"), "utf8")).toBe("export const b = 2;");
+  });
+
+  it("keeps backups out of Nitro's .output/server, for a file and for a dir", async () => {
+    writeFileSync(join(root, "package.json"), "{}");
+    writeFileSync(join(root, "package-lock.json"), "{}");
+    const server = join(root, ".output", "server");
+    mkdirSync(join(server, "chunks"), { recursive: true });
+    writeFileSync(join(server, "package.json"), '{"type":"module"}');
+    writeFileSync(join(server, "index.mjs"), "export const s = 1;");
+    writeFileSync(join(server, "chunks", "c.mjs"), "export const c = 1;");
+
+    expect(await invoke([".output/server/index.mjs", ...QUIET])).toBe(0);
+    expect(await invoke([".output/server/chunks", ...QUIET])).toBe(0);
+
+    expect(existsSync(join(server, ".afterpack"))).toBe(false);
+    expect(existsSync(join(root, ".afterpack", "backup", "manifest.json"))).toBe(true);
+    expect(readdirSync(join(root, ".afterpack", "receipts")).sort()).toEqual([
+      ".output%2Fserver%2Fchunks.json",
+      ".output%2Fserver.json",
+    ]);
+    err = [];
+    expect(await invoke([".output/server/index.mjs", ...QUIET])).toBe(1);
+    expect(err.join("\n")).toContain("Already obfuscated");
+  });
+
+  it("refuses a .afterpack/ an earlier run left in Nitro's .output/server", async () => {
+    writeFileSync(join(root, "package-lock.json"), "{}");
+    const server = join(root, ".output", "server");
+    mkdirSync(join(server, ".afterpack", "backup"), { recursive: true });
+    writeFileSync(join(server, "package.json"), "{}");
+    writeFileSync(join(server, "index.mjs"), "export const s = 1;");
+
+    expect(await invoke([".output/server/index.mjs", ...QUIET])).toBe(1);
+    expect(err.join("\n")).toContain(`found ${join(server, ".afterpack")} inside the build output`);
+    expect(readFileSync(join(server, "index.mjs"), "utf8")).toBe("export const s = 1;");
+  });
+
+  it("keeps backups out of a dual-package dist/cjs", async () => {
+    writeFileSync(join(root, "package.json"), "{}");
+    writeFileSync(join(root, "pnpm-lock.yaml"), "");
+    const lib = join(root, "dist", "cjs", "lib");
+    mkdirSync(lib, { recursive: true });
+    writeFileSync(join(root, "dist", "cjs", "package.json"), '{"type":"commonjs"}');
+    writeFileSync(join(lib, "index.js"), "module.exports = 1;");
+
+    expect(await invoke(["dist/cjs/lib", ...QUIET])).toBe(0);
+
+    expect(existsSync(join(root, "dist", "cjs", ".afterpack"))).toBe(false);
+    expect(existsSync(join(root, ".afterpack", "receipts", "dist%2Fcjs%2Flib.json"))).toBe(true);
+    expect(existsSync(join(root, ".afterpack", "backup", "manifest.json"))).toBe(true);
   });
 
   it("keeps a single served file's .afterpack outside the folder it is served from", async () => {

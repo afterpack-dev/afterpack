@@ -12,7 +12,15 @@ import {
 } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import { ensureAfterpackGitignore } from "./artifacts.js";
-import { AFTERPACK_DIR, type AfterpackHome, afterpackHome, realPath } from "./home.js";
+import {
+  AFTERPACK_DIR,
+  AfterpackFilesError,
+  type AfterpackHome,
+  afterpackHome,
+  DIAG_AFTERPACK_DIR_IN_OUTPUT,
+  DIAG_RECEIPT_UNWRITABLE,
+  realPath,
+} from "./home.js";
 
 export const PROTECTION_RECEIPTS_DIR = "receipts";
 
@@ -63,7 +71,7 @@ function buildDirOf(home: AfterpackHome): string {
 }
 
 function receiptKey(buildDir: string): string {
-  const encoded = encodeURIComponent(buildDir).replace(/\*/g, "%2A");
+  const encoded = encodeURIComponent(buildDir).replace(/\*/g, "%2A").replace(/~/g, "%7E");
   if (Buffer.byteLength(encoded) <= MAX_KEY_BYTES) return encoded;
   const prefix = encoded.slice(0, HASHED_KEY_PREFIX_BYTES).replace(/%[0-9A-F]?$/, "");
   const digest = createHash("sha256").update(buildDir, "utf8").digest("hex").slice(0, 16);
@@ -82,24 +90,6 @@ export type HomeTarget = string | AfterpackHome;
 
 function homeOf(target: HomeTarget): AfterpackHome {
   return typeof target === "string" ? afterpackHome(target) : target;
-}
-
-export const DIAG_AFTERPACK_DIR_IN_OUTPUT = "DIAG_AFTERPACK_DIR_IN_OUTPUT";
-
-export const DIAG_RECEIPT_UNWRITABLE = "DIAG_RECEIPT_UNWRITABLE";
-
-export class AfterpackFilesError extends Error {
-  readonly code: string;
-  readonly summary: string;
-  readonly fix: string;
-
-  constructor(code: string, summary: string, fix: string) {
-    super(`${summary} ${fix}`);
-    this.name = "AfterpackFilesError";
-    this.code = code;
-    this.summary = summary;
-    this.fix = fix;
-  }
 }
 
 export function protectionReceiptPath(target: HomeTarget): string {
@@ -170,7 +160,6 @@ function sweepDir(dir: string, context: SweepContext, recursive: boolean): void 
         refuseShippedAfterpackDir(full, context.buildDir, context.label);
       }
       if (!recursive || entry.name === "node_modules") continue;
-      if (existsSync(join(full, "package.json"))) continue;
       sweepDir(full, context, true);
     }
   }
@@ -182,7 +171,7 @@ export function sweepOutputTree(
   label: string,
   ownHome: AfterpackHome | null = null,
 ): void {
-  const context = { buildDir, label, ownHome: ownHome ? realPath(ownHome.dir) : null };
+  const context = { buildDir, label, ownHome: ownHome?.strong ? realPath(ownHome.dir) : null };
   const walksBuildDir = walkedDir !== null && realPath(walkedDir) === realPath(buildDir);
   sweepDir(buildDir, context, walksBuildDir);
   if (walkedDir !== null && !walksBuildDir) sweepDir(walkedDir, context, true);
@@ -200,6 +189,16 @@ export interface WriteProtectionReceiptInput {
   buildId: string | null;
   files: string[];
   transformed: readonly string[];
+  merge?: boolean;
+}
+
+function keptEntries(path: string, replaced: Set<string>): ProtectionReceiptFile[] {
+  if (!existsSync(path)) return [];
+  const previous = parseReceipt(path);
+  if (previous.error !== undefined || previous.receipt.schema !== PROTECTION_RECEIPT_SCHEMA) {
+    return [];
+  }
+  return previous.receipt.files.filter((entry) => !replaced.has(entry.path));
 }
 
 export function writeDeferredProtectionReceipt(
@@ -233,6 +232,12 @@ export function writeProtectionReceipt(input: WriteProtectionReceiptInput): stri
   const home = input.home ?? afterpackHome(input.dir);
   receipt.buildDir = buildDirOf(home);
   const path = receiptPathIn(home);
+  if (input.merge) {
+    const replaced = new Set(receipt.files.map((entry) => entry.path));
+    receipt.files = [...keptEntries(path, replaced), ...receipt.files].sort((a, b) =>
+      a.path.localeCompare(b.path),
+    );
+  }
   mkdirSync(dirname(path), { recursive: true });
   ensureAfterpackGitignore(home.dir);
   writeFileSync(path, `${JSON.stringify(receipt, null, 2)}\n`);

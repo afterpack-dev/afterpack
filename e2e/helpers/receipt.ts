@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { expect } from "@playwright/test";
 import {
   PROTECTION_RECEIPTS_DIR,
@@ -21,9 +21,14 @@ function shippedAfterpackFiles(dir: string): string[] {
       const full = join(current, entry.name);
       if (entry.name === STALE_OUTPUT_RECEIPT_FILE || entry.name === ".afterpack") {
         found.push(full);
-      } else if (entry.isDirectory()) {
+      }
+      if (entry.isDirectory()) {
         if (entry.name !== "node_modules") walk(full);
-      } else if (basename(current) === PROTECTION_RECEIPTS_DIR && entry.name.endsWith(".json")) {
+      } else if (
+        basename(current) === PROTECTION_RECEIPTS_DIR &&
+        basename(dirname(current)) === ".afterpack" &&
+        entry.name.endsWith(".json")
+      ) {
         found.push(full);
       }
     }

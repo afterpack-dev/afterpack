@@ -168,6 +168,7 @@ export interface ObfuscationPassOptions {
   receipt?: PassReceiptIdentity;
   afterWrite?: () => void;
   sourceMapSweepDir?: string | null;
+  outputSweep?: boolean;
   diagnostics?: DiagnosticsVerbosity;
   telemetry?: TelemetryReporter;
   clientVersion?: string;
@@ -343,12 +344,15 @@ export async function runObfuscationPass(
     }
   }
 
-  sweepOutputTree(
-    combinedProtectionMap.buildDir,
-    options.sourceMapSweepDir ?? (options.emitToCaller ? combinedProtectionMap.buildDir : null),
-    label,
-    home,
-  );
+  if (options.outputSweep !== false) {
+    sweepOutputTree(
+      combinedProtectionMap.buildDir,
+      options.sourceMapSweepDir ?? (options.emitToCaller ? combinedProtectionMap.buildDir : null),
+      label,
+      home,
+    );
+  }
+  prepareProtectionReceipt(home, label);
 
   const resolvedSeed = resolveBuildSeed(
     options.seed,
@@ -633,7 +637,6 @@ export async function runObfuscationPass(
     verified.push({ result: f, source });
   }
 
-  prepareProtectionReceipt(home, label);
   const writtenFiles: string[] = [];
   const emittedFiles: string[] = [];
   const engineMaps = new Set<string>();
@@ -651,6 +654,7 @@ export async function runObfuscationPass(
       originalSource: source,
       policy,
       mode: "framework",
+      afterpackDir: home.dir,
       logger,
     });
     writtenFiles.push(written.codePath);
@@ -713,6 +717,7 @@ export async function runObfuscationPass(
       ...receiptFields,
       dir: combinedProtectionMap.buildDir,
       home,
+      merge: combinedProtectionMap.fileTarget === true,
       files: writtenFiles,
     });
     if (style !== "cli") {

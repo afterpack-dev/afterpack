@@ -105,6 +105,7 @@ interface WriteBackupsInput {
   cliVersion: string;
   pending: readonly PendingBackup[];
   receiptPath: string | null;
+  merge?: boolean;
 }
 
 export interface WriteBackupsResult {
@@ -114,10 +115,15 @@ export interface WriteBackupsResult {
 
 export function writeBackups(input: WriteBackupsInput): WriteBackupsResult {
   const dir = backupDir(input.projectRoot);
-  rmSync(dir, { recursive: true, force: true });
+  const previous = input.merge ? readBackupManifest(input.projectRoot) : null;
+  const replaced = new Set(input.pending.map((p) => p.relPath));
+  const files: BackupManifestFile[] =
+    previous?.status === "ok" && previous.manifest.protectedRoot === input.protectedRoot
+      ? previous.manifest.files.filter((f) => !replaced.has(f.path))
+      : [];
+  if (files.length === 0) rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
   ensureAfterpackGitignore(dir);
-  const files: BackupManifestFile[] = [];
   for (const pending of input.pending) {
     const dest = absoluteFilePath(dir, pending.relPath);
     mkdirSync(dirname(dest), { recursive: true });

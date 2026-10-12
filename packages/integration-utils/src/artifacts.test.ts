@@ -123,6 +123,7 @@ describe("writeArtifacts — production policy", () => {
       originalSource: "orig",
       policy,
       mode: "single",
+      afterpackDir: join(dir, ".afterpack"),
     });
 
     expect(result.mapPath).toBeNull();
@@ -174,6 +175,7 @@ describe("writeArtifacts — source-map feature disabled", () => {
       originalSource: "orig",
       policy,
       mode: "single",
+      afterpackDir: join(dir, ".afterpack"),
     });
     expect(result.mapPath).toBeNull();
     expect(existsSync(`${outPath}.map`)).toBe(false);
@@ -243,10 +245,22 @@ describe("writeCombinedProtectionMap — directory / framework build", () => {
   it("returns null when PM is disabled or there are no docs", () => {
     const off = resolveReportPolicy({ NODE_ENV: "production" }, {});
     expect(
-      writeCombinedProtectionMap({ buildDir: dir, docs: [pmDoc("x")], policy: off }),
+      writeCombinedProtectionMap({
+        buildDir: dir,
+        docs: [pmDoc("x")],
+        policy: off,
+        afterpackDir: join(dir, ".afterpack"),
+      }),
     ).toBeNull();
     const on = resolveReportPolicy({}, {});
-    expect(writeCombinedProtectionMap({ buildDir: dir, docs: [], policy: on })).toBeNull();
+    expect(
+      writeCombinedProtectionMap({
+        buildDir: dir,
+        docs: [],
+        policy: on,
+        afterpackDir: join(dir, ".afterpack"),
+      }),
+    ).toBeNull();
   });
 
   it("redirects a prod-forced combined PM into .afterpack/ and logs calmly", () => {

@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterpackHome } from "./home.js";
 import {
   detectAlreadyObfuscatedInputs,
   prepareProtectionReceipt,
@@ -260,6 +261,29 @@ describe("where a protection receipt lives", () => {
     expect(protectionReceiptPath(join(root, "Dist"))).toBe(join(receiptsDir(), "dist.json"));
   });
 
+  it("encodes ~ so a real dir name can never equal a hashed key", () => {
+    const dir = join(root, "a~b");
+    mkdirSync(dir);
+    expect(basename(protectionReceiptPath(dir))).toBe("a%7Eb.json");
+  });
+
+  it("gives two workspace packages of one lockfile root distinct keys in one receipts dir", () => {
+    writeFileSync(join(root, "pnpm-lock.yaml"), "");
+    const a = distWith("index.js", "OBF:a", join("packages", "a", "dist"));
+    const b = distWith("index.js", "OBF:b", join("packages", "b", "dist"));
+    writeFileSync(join(root, "packages", "a", "package.json"), "{}");
+    writeFileSync(join(root, "packages", "b", "package.json"), "{}");
+    receiptAt(a.dir, [a.file]);
+    receiptAt(b.dir, [b.file]);
+
+    expect(readdirSync(receiptsDir()).sort()).toEqual([
+      "packages%2Fa%2Fdist.json",
+      "packages%2Fb%2Fdist.json",
+    ]);
+    expect(detectAlreadyObfuscatedInputs([a.file], a.dir)?.files).toEqual([a.file]);
+    expect(detectAlreadyObfuscatedInputs([b.file], a.dir)).toBeNull();
+  });
+
   it("keeps a short CJK key readable", () => {
     const dir = join(root, "构建");
     mkdirSync(dir);
@@ -323,6 +347,33 @@ describe("prepareProtectionReceipt", () => {
 });
 
 describe("sweepOutputTree", () => {
+  it("refuses a stale .afterpack/ inside a nested project of the output", () => {
+    const dir = join(root, "dist");
+    mkdirSync(join(dir, "cjs", ".afterpack", "backup"), { recursive: true });
+    writeFileSync(join(dir, "cjs", "package.json"), "{}");
+    expect(() => sweepOutputTree(dir, dir, "afterpack-test")).toThrow(
+      /found .*cjs\/\.afterpack inside the build output/,
+    );
+  });
+
+  it("still skips node_modules", () => {
+    const dir = join(root, "dist");
+    mkdirSync(join(dir, "node_modules", "x", ".afterpack"), { recursive: true });
+    expect(() => sweepOutputTree(dir, dir, "afterpack-test")).not.toThrow();
+  });
+
+  it("spares the run's own home only when it sits at a strong marker", () => {
+    writeFileSync(join(root, "package-lock.json"), "{}");
+    mkdirSync(join(root, ".afterpack"), { recursive: true });
+    const strong = afterpackHome(root, { fileTarget: true });
+    expect(() => sweepOutputTree(root, null, "afterpack-test", strong)).not.toThrow();
+
+    const weak = { ...strong, strong: false };
+    expect(() => sweepOutputTree(root, null, "afterpack-test", weak)).toThrow(
+      /inside the build output/,
+    );
+  });
+
   it("removes stale receipts throughout the tree it walks", () => {
     const { dir } = distWith(".afterpack-protection.json", "{}");
     mkdirSync(join(dir, "assets"), { recursive: true });

@@ -540,6 +540,7 @@ async function runObfuscationAndBackup(input: {
       cliVersion: input.version,
       pending: input.pendingBackups,
       receiptPath: result?.receiptPath ?? null,
+      merge: input.fileTarget,
     });
   }
 
@@ -890,12 +891,8 @@ export async function run(deps: CliDeps): Promise<number> {
   try {
     projectRoot = afterpackHome(buildDir, { fileTarget: !isDirectory }).projectRoot;
   } catch (error) {
-    return refuseHere(
-      EXIT.failure,
-      "AFTERPACK_DIR_IN_BUILD",
-      error instanceof Error ? error.message : String(error),
-      "Point AfterPack at a build directory below your project root.",
-    );
+    if (!(error instanceof AfterpackFilesError)) throw error;
+    return refuseHere(EXIT.failure, error.code, error.summary, error.fix);
   }
 
   const nestedProjects: string[] = [];

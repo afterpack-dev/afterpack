@@ -23,8 +23,9 @@ const VERIFY_USAGE = "usage: afterpack verify [dir] [--diagnostics.format=text|j
 export const VERIFY_HELP = `${VERIFY_USAGE}
 
 Re-checks a build output tree against the protection receipt the build wrote
-for it in .afterpack/receipts/, next to the nearest package.json, afterpack.json
-or .git above the tree (otherwise beside it): every recorded file must still
+for it in .afterpack/receipts/, next to the nearest lockfile, afterpack.json or
+.git above the tree (failing those the nearest package.json, otherwise beside
+the tree): every recorded file must still
 hash to the value it was obfuscated to. Run it in the deploy step, after the
 build and before the upload.
 

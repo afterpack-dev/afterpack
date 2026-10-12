@@ -46,7 +46,7 @@ export interface WriteArtifactsInput {
   originalSource: string | null;
   policy: ReportPolicy;
   mode?: ArtifactMode;
-  afterpackDir?: string;
+  afterpackDir: string;
   logger?: Logger;
 }
 
@@ -68,7 +68,7 @@ function appendSourceMappingURL(code: string, mapPath: string): string {
 export function writeArtifacts(input: WriteArtifactsInput): WriteArtifactsResult {
   const { outPath, code, sourceMapJson, protectionMapJson, originalSource, policy } = input;
   const mode = input.mode ?? "single";
-  const afterpackDir = input.afterpackDir ?? AFTERPACK_DIR;
+  const afterpackDir = input.afterpackDir;
   const logger = input.logger ?? DEFAULT_LOGGER;
 
   const hash = policy.backup && originalSource != null ? shortHash(originalSource) : undefined;
@@ -124,7 +124,7 @@ interface WriteCombinedProtectionMapInput {
   buildDir: string;
   docs: ProtectionMap[];
   policy: ReportPolicy;
-  afterpackDir?: string;
+  afterpackDir: string;
   fileName?: string;
   logger?: Logger;
 }
@@ -559,7 +559,7 @@ export function buildProjectFileTree(files: unknown[]): PmFileEntry[] {
 
 export function writeCombinedProtectionMap(input: WriteCombinedProtectionMapInput): string | null {
   const { buildDir, docs, policy } = input;
-  const afterpackDir = input.afterpackDir ?? AFTERPACK_DIR;
+  const afterpackDir = input.afterpackDir;
   const logger = input.logger ?? DEFAULT_LOGGER;
 
   if (!policy.protectionMap || docs.length === 0) return null;

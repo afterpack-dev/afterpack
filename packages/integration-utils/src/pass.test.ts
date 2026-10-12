@@ -1983,15 +1983,52 @@ describe("runObfuscationPass — the protection receipt it writes", () => {
     writeFileSync(a, "export const a = 1;");
     mkdirSync(join(root, ".afterpack"), { recursive: true });
     writeFileSync(join(root, ".afterpack", "receipts"), "not a directory");
-    const { engine } = makeEngine(() => ({}));
+    const { engine, calls } = makeEngine(() => ({}));
 
     await expect(
       runObfuscationPass({ ...baseOptions([a], engine), logger: silentLogger().logger }),
     ).rejects.toThrow(/cannot write the protection receipt .*so no file was rewritten/);
     expect(readFileSync(a, "utf8")).toBe("export const a = 1;");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("merges a single-file run into the dir's receipt, so a/b/a is still refused", async () => {
+    const a = join(outDir, "a.js");
+    const b = join(outDir, "b.js");
+    writeFileSync(a, "export const a = 1;");
+    writeFileSync(b, "export const b = 2;");
+    const { engine } = makeEngine(() => ({}));
+    const fileRun = (file: string) =>
+      runObfuscationPass({
+        ...baseOptions([file], engine),
+        combinedProtectionMap: { buildDir: outDir, fileTarget: true },
+        logger: silentLogger().logger,
+      });
+
+    await fileRun(a);
+    await fileRun(b);
+    expect(receiptIn(outDir).files.map((f) => f.path)).toEqual(["a.js", "b.js"]);
+    await expect(fileRun(a)).rejects.toThrow(new RegExp(DIAG_ALREADY_OBFUSCATED));
+    expect(verifyProtectionReceipt(receiptFor(outDir), outDir).problems).toEqual([]);
+  });
+
+  it("leaves the output sweep to the caller that asks for none", async () => {
+    const a = join(outDir, "a.js");
+    writeFileSync(a, "export const a = 1;");
+    writeFileSync(join(outDir, ".afterpack-protection.json"), "{}");
+    const { engine } = makeEngine(() => ({}));
+
+    await runObfuscationPass({
+      ...baseOptions([a], engine),
+      outputSweep: false,
+      logger: silentLogger().logger,
+    });
+
+    expect(existsSync(join(outDir, ".afterpack-protection.json"))).toBe(true);
   });
 
   it("keeps a single file's receipt in its own project when the file sits in the project root", async () => {
+    writeFileSync(join(root, "package-lock.json"), "{}");
     const a = join(root, "app.js");
     writeFileSync(a, "export const a = 1;");
     const { engine } = makeEngine(() => ({}));
@@ -2030,8 +2067,8 @@ describe("runObfuscationPass — the protection receipt it writes", () => {
     expect(result.receiptPath).toBe(join(root, ".afterpack", "receipts", "public.json"));
     expect(readdirSync(served)).toEqual(["a.js"]);
     expect(captured.logs.join("\n")).toContain(
-      `no package.json, afterpack.json or .git above ${served}, so AfterPack keeps its files ` +
-        `beside it, in ${join(root, ".afterpack")}`,
+      `no lockfile, afterpack.json, .git or package.json above ${served}, so AfterPack keeps ` +
+        `its files beside it, in ${join(root, ".afterpack")}`,
     );
   });
 

@@ -294,6 +294,14 @@ describe("build seed across a target's bundles", () => {
   });
 });
 
+describe("the output sweep", () => {
+  it("is left to the reporter, once per build, never run per bundle", async () => {
+    writeFileSync(join(distDir, ".afterpack-protection.json"), "{}");
+    await run();
+    expect(existsSync(join(distDir, ".afterpack-protection.json"))).toBe(true);
+  });
+});
+
 describe("per-bundle Protection Map", () => {
   it("names the map from the bundle so two bundles do not overwrite each other", async () => {
     __setProcessResult(() => ({

@@ -28,9 +28,10 @@ export const RESTORE_HELP = `${RESTORE_USAGE}
 Restores the original, pre-obfuscation files that a previous \`afterpack\` run backed up to
 .afterpack/backup/, undoing that run in place.
 
-Finds .afterpack/backup/ where the \`afterpack\` run kept it: next to the nearest package.json,
-afterpack.json or .git above the build directory, otherwise beside the build directory. Point it
-at that project root or at the build directory itself.
+Finds .afterpack/backup/ where the \`afterpack\` run kept it: next to the nearest lockfile,
+afterpack.json or .git above the build directory (failing those the nearest package.json,
+otherwise beside the build directory). Point it at that project root or at the build directory
+itself.
 
 Verifies every recorded file against the hash it was obfuscated to BEFORE touching anything: if
 any file no longer matches, or the manifest itself is unreadable, restore changes nothing and
