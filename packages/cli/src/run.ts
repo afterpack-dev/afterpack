@@ -1066,6 +1066,7 @@ async function runSubcommand(
     return restore({ cwd, logger, report, positionals: args.positionals, mode, version });
   }
   return audit({
+    cwd,
     positionals: args.positionals,
     logger,
     report,

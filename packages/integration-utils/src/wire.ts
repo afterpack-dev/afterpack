@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
-import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { homedir, tmpdir, userInfo } from "node:os";
+import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isAnchored, matchesPath } from "./glob.js";
 import { realPath } from "./home.js";
@@ -14,7 +14,23 @@ const DRIVE_PATH = /^[A-Za-z]:[\\/]/;
 
 const URL_SCHEME = /^[A-Za-z][A-Za-z0-9+.-]+:/;
 
-const FILE_URL = /^fi(?:)le:/i;
+const FILE_URL = /^file:/i;
+
+const PATH_CHARS = "[^\\s\"'`|!?#()<>,;:*\\\\]";
+
+const EMBEDDED_PATH = new RegExp(
+  `(^|[^A-Za-z0-9._~/\\\\-])((?:[A-Za-z]:[\\\\/]|/)(?:${PATH_CHARS}|\\\\(?!/))*)`,
+  "g",
+);
+
+const ESCAPED_PATH = new RegExp(`(^|[^A-Za-z0-9._~/\\\\-])((?:\\\\/${PATH_CHARS}+)+\\\\/?)`, "g");
+
+export class WirePathError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WirePathError";
+  }
+}
 
 function toPosix(path: string): string {
   return path.includes("\\") ? path.replaceAll("\\", "/") : path;
@@ -39,6 +55,26 @@ function relativeWithin(file: string, baseDir: string): string | null {
   return toPosix(rel);
 }
 
+function osUsername(): string | null {
+  try {
+    return userInfo().username;
+  } catch {
+    return null;
+  }
+}
+
+function personalNames(): Set<string> {
+  const names = new Set([basename(homedir())]);
+  const user = osUsername();
+  if (user) names.add(user);
+  return names;
+}
+
+function safeName(path: string): string {
+  const name = lastSegment(path);
+  return personalNames().has(name) ? "file" : name;
+}
+
 export function toWirePaths(files: readonly string[], baseDir: string): Map<string, string> {
   const wire = new Map<string, string>();
   const taken = new Set<string>();
@@ -58,7 +94,7 @@ export function toWirePaths(files: readonly string[], baseDir: string): Map<stri
     if (wire.has(file)) continue;
     let label: string;
     do {
-      label = `${EXTERNAL_WIRE_DIR}/${n}/${lastSegment(file)}`;
+      label = `${EXTERNAL_WIRE_DIR}/${n}/${safeName(file)}`;
       n += 1;
     } while (taken.has(label));
     wire.set(file, label);
@@ -92,34 +128,92 @@ interface MapPlace {
   dir: string;
   root: string;
   privateRoots: string[];
+  scratchRoots: string[];
+  labels: Map<string, string>;
+  shipped: string;
 }
 
-function privateRootsOf(root: string): string[] {
-  const roots = [homedir(), tmpdir(), root];
-  return [...new Set(roots.flatMap((r) => [resolve(r), realPath(r)]))];
+function bothForms(path: string): string[] {
+  return [...new Set([resolve(path), realPath(path)])];
 }
 
-const EMBEDDED_PATH = /(^|[^A-Za-z0-9._~/-])((?:[A-Za-z]:[\\/]|\/)[^\s"'`|!?#()<>,;:*]+)/g;
-
-function scrubEmbedded(text: string, place: MapPlace): string {
-  if (!text.includes("/") && !text.includes("\\")) return text;
-  return text.replace(EMBEDDED_PATH, (whole, lead: string, path: string) =>
-    place.privateRoots.some((r) => isUnder(path, r) && resolve(path) !== resolve(r))
-      ? `${lead}${relativeSource(path, place)}`
-      : whole,
-  );
+function newPlace(dir: string, root: string, labels: Map<string, string>, shipped = ""): MapPlace {
+  return {
+    dir,
+    root,
+    privateRoots: [...new Set([homedir(), root].flatMap(bothForms))],
+    scratchRoots: bothForms(tmpdir()),
+    labels,
+    shipped,
+  };
 }
 
-function relativeSource(path: string, place: MapPlace): string {
-  if (DRIVE_PATH.test(path) && !isAbsolute(path)) return lastSegment(path);
+function isPrivate(path: string, place: MapPlace): boolean {
+  if (DRIVE_PATH.test(path) && !isAbsolute(path)) return true;
+  if (place.privateRoots.some((r) => isUnder(path, r))) return true;
+  return place.scratchRoots.some((r) => isUnder(path, r) && resolve(path) !== resolve(r));
+}
+
+function inProject(path: string, place: MapPlace): string | null {
+  if (DRIVE_PATH.test(path) && !isAbsolute(path)) return null;
   const real = realPath(path);
   const mapDir = realPath(place.dir);
   const home = realPath(homedir());
-  if (!isUnder(real, realPath(place.root))) return lastSegment(path);
-  if (isUnder(real, home) && !isUnder(mapDir, home)) return lastSegment(path);
+  if (!isUnder(real, realPath(place.root))) return null;
+  if (isUnder(real, home) && !isUnder(mapDir, home)) return null;
   const rel = relative(mapDir, real);
-  if (rel === "" || isAbsolute(rel) || DRIVE_PATH.test(rel)) return lastSegment(path);
+  if (rel === "" || isAbsolute(rel) || DRIVE_PATH.test(rel)) return null;
   return toPosix(rel);
+}
+
+function externalLabel(path: string, place: MapPlace): string {
+  const key = resolve(path);
+  const known = place.labels.get(key);
+  if (known !== undefined) return known;
+  const label = `${EXTERNAL_WIRE_DIR}/${place.labels.size}/${safeName(path)}`;
+  place.labels.set(key, label);
+  return label;
+}
+
+function fitLength(target: number, candidate: string, slash: string): string | null {
+  const unit = `.${slash}`;
+  const room = target - candidate.length;
+  for (let a = Math.floor(Math.max(room, 0) / unit.length); a >= 0; a--) {
+    const rest = room - a * unit.length;
+    if (rest % slash.length !== 0) continue;
+    const body = unit.repeat(a) + candidate;
+    const extra = rest / slash.length;
+    if (extra === 0) return body;
+    const at = body.indexOf(slash);
+    if (at < 0) continue;
+    return body.slice(0, at) + slash.repeat(extra) + body.slice(at);
+  }
+  return null;
+}
+
+function sameLength(original: string, candidates: string[], slash: string): string {
+  for (const candidate of candidates) {
+    const fitted = fitLength(original.length, candidate, slash);
+    if (fitted !== null) return fitted;
+  }
+  return "_".repeat(original.length);
+}
+
+function scrubText(text: string, place: MapPlace, keepLength: boolean): string {
+  if (!text.includes("/") && !text.includes("\\")) return text;
+  const plain = text.replace(EMBEDDED_PATH, (whole, lead: string, path: string) => {
+    if (!isPrivate(path, place) || (keepLength && place.shipped.includes(path))) return whole;
+    const name = inProject(path, place) ?? safeName(path);
+    return `${lead}${keepLength ? sameLength(path, [name, safeName(path)], "/") : name}`;
+  });
+  return plain.replace(ESCAPED_PATH, (whole, lead: string, escaped: string) => {
+    const path = escaped.replaceAll("\\/", "/");
+    if (!isPrivate(path, place) || (keepLength && place.shipped.includes(escaped))) return whole;
+    const names = [inProject(path, place) ?? safeName(path), safeName(path)].map((c) =>
+      c.replaceAll("/", "\\/"),
+    );
+    return `${lead}${keepLength ? sameLength(escaped, names, "\\/") : names[0]}`;
+  });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -130,18 +224,31 @@ function joinRoot(root: string, source: string): string {
   return root.endsWith("/") || root.endsWith("\\") ? `${root}${source}` : `${root}/${source}`;
 }
 
-type RestoreTable = Map<string, string | null>;
+type Table = Map<string, string | null>;
 
-function remember(restore: RestoreTable, wire: string, original: string): void {
-  const known = restore.get(wire);
-  if (known === undefined) restore.set(wire, original);
-  else if (known !== original) restore.set(wire, null);
+interface MapRestore {
+  sources: Table;
+  pmPaths: Table;
+  contents: Table;
+  sourceRoot?: string;
+  file?: string;
+}
+
+function newRestore(): MapRestore {
+  return { sources: new Map(), pmPaths: new Map(), contents: new Map() };
+}
+
+function remember(table: Table, wire: string, original: string): void {
+  const known = table.get(wire);
+  if (known === undefined) table.set(wire, original);
+  else if (known !== original) table.set(wire, null);
 }
 
 function wireMapObject(
   map: Record<string, unknown>,
   place: MapPlace,
-  restore: RestoreTable,
+  restore: MapRestore,
+  top: boolean,
 ): { map: Record<string, unknown>; changed: boolean } {
   const out: Record<string, unknown> = { ...map };
   let changed = false;
@@ -149,8 +256,22 @@ function wireMapObject(
   const rootIsLocal = root !== "" && localPathOf(root) !== null;
   if (rootIsLocal) {
     delete out.sourceRoot;
+    if (top) restore.sourceRoot = root;
     changed = true;
   }
+  const sentRoot = rootIsLocal ? "" : root;
+  const pmPath = (r: string, s: string) => (r === "" ? s : joinRoot(r, s));
+  const taken = new Map<string, string>();
+  const claim = (wired: string, original: string, local: string): string => {
+    const owner = taken.get(wired);
+    if (owner === undefined || owner === original) {
+      taken.set(wired, original);
+      return wired;
+    }
+    const label = externalLabel(local, place);
+    taken.set(label, original);
+    return label;
+  };
   if (Array.isArray(map.sources)) {
     out.sources = map.sources.map((source: unknown) => {
       if (typeof source !== "string") return source;
@@ -159,40 +280,43 @@ function wireMapObject(
           ? joinRoot(root, source)
           : source;
       const local = localPathOf(rooted);
+      let wired: string;
       if (local === null) {
-        const scrubbed = scrubEmbedded(rooted, place);
-        if (scrubbed === rooted) return rooted;
-        changed = true;
-        remember(restore, scrubbed, rooted);
-        return scrubbed;
+        const scrubbed = scrubText(rooted, place, false);
+        if (scrubbed === source) {
+          taken.set(source, source);
+          return source;
+        }
+        wired = claim(scrubbed, source, rooted);
+      } else {
+        const rel = inProject(local, place);
+        wired = claim(rel ?? externalLabel(local, place), source, local);
       }
       changed = true;
-      const wired = relativeSource(local, place);
-      remember(restore, wired, rooted);
-      if (root !== "" && !rootIsLocal) {
-        remember(restore, joinRoot(root, wired), joinRoot(root, rooted));
-      }
+      remember(restore.sources, wired, source);
+      remember(restore.pmPaths, pmPath(sentRoot, wired), pmPath(root, source));
       return wired;
     });
   }
   if (typeof map.file === "string" && localPathOf(map.file) !== null) {
-    out.file = lastSegment(map.file);
+    if (top) restore.file = map.file;
+    out.file = safeName(map.file);
     changed = true;
   }
   if (Array.isArray(map.sourcesContent)) {
     out.sourcesContent = map.sourcesContent.map((content: unknown) => {
       if (typeof content !== "string") return content;
-      const scrubbed = scrubEmbedded(content, place);
+      const scrubbed = scrubText(content, place, true);
       if (scrubbed === content) return content;
       changed = true;
-      remember(restore, scrubbed, content);
+      remember(restore.contents, scrubbed, content);
       return scrubbed;
     });
   }
   if (Array.isArray(map.sections)) {
     out.sections = map.sections.map((section: unknown) => {
       if (!isRecord(section) || !isRecord(section.map)) return section;
-      const nested = wireMapObject(section.map, place, restore);
+      const nested = wireMapObject(section.map, place, restore, false);
       if (!nested.changed) return section;
       changed = true;
       return { ...section, map: nested.map };
@@ -204,8 +328,8 @@ function wireMapObject(
 function wireSourceMapWithRestore(
   json: string,
   place: MapPlace,
-): { json: string | undefined; restore: RestoreTable } {
-  const restore: RestoreTable = new Map();
+): { json: string | undefined; restore: MapRestore } {
+  const restore = newRestore();
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);
@@ -213,7 +337,7 @@ function wireSourceMapWithRestore(
     return { json: undefined, restore };
   }
   if (!isRecord(parsed)) return { json: undefined, restore };
-  const { map, changed } = wireMapObject(parsed, place, restore);
+  const { map, changed } = wireMapObject(parsed, place, restore, true);
   return { json: changed ? JSON.stringify(map) : json, restore };
 }
 
@@ -222,37 +346,65 @@ export function wireSourceMap(
   mapDir: string,
   rootDir: string = mapDir,
 ): string | undefined {
-  return wireSourceMapWithRestore(json, {
-    dir: mapDir,
-    root: rootDir,
-    privateRoots: privateRootsOf(rootDir),
-  }).json;
+  return wireSourceMapWithRestore(json, newPlace(mapDir, rootDir, new Map())).json;
 }
 
-function restored(restore: RestoreTable, path: string): string {
-  return restore.get(path) ?? path;
+export function scrubLocalPaths(text: string, mapDir: string, rootDir: string = mapDir): string {
+  return scrubText(text, newPlace(mapDir, rootDir, new Map()), true);
+}
+
+function lookup(table: Table, value: string): string {
+  return table.get(value) ?? value;
+}
+
+interface FileRestore {
+  map: MapRestore;
+  wire: string;
+  local: string;
 }
 
 function restoreMapObject(
   map: Record<string, unknown>,
-  restore: RestoreTable,
+  ctx: FileRestore,
+  top: boolean,
 ): { map: Record<string, unknown>; changed: boolean } {
   let changed = false;
   const out: Record<string, unknown> = { ...map };
-  for (const key of ["sources", "sourcesContent"] as const) {
-    const list = map[key];
-    if (!Array.isArray(list)) continue;
-    out[key] = list.map((entry: unknown) => {
+  if (Array.isArray(map.sources)) {
+    out.sources = map.sources.map((entry: unknown) => {
       if (typeof entry !== "string") return entry;
-      const back = restored(restore, entry);
+      const back = entry === ctx.wire ? ctx.local : lookup(ctx.map.sources, entry);
       if (back !== entry) changed = true;
       return back;
     });
   }
+  if (Array.isArray(map.sourcesContent)) {
+    out.sourcesContent = map.sourcesContent.map((entry: unknown) => {
+      if (typeof entry !== "string") return entry;
+      const back = lookup(ctx.map.contents, entry);
+      if (back !== entry) changed = true;
+      return back;
+    });
+  }
+  if (top && ctx.map.sourceRoot !== undefined && !map.sourceRoot) {
+    const root = ctx.map.sourceRoot;
+    const entries = Object.entries(out).filter(([key]) => key !== "sourceRoot");
+    const at = "sourceRoot" in map ? Object.keys(map).indexOf("sourceRoot") : -1;
+    const after = entries.findIndex(([key]) => key === "sources");
+    const index = at >= 0 ? at : after >= 0 ? after + 1 : entries.length;
+    entries.splice(index, 0, ["sourceRoot", root]);
+    for (const key of Object.keys(out)) delete out[key];
+    Object.assign(out, Object.fromEntries(entries));
+    changed = true;
+  }
+  if (top && ctx.map.file !== undefined && typeof map.file === "string") {
+    out.file = ctx.map.file;
+    changed = true;
+  }
   if (Array.isArray(map.sections)) {
     out.sections = map.sections.map((section: unknown) => {
       if (!isRecord(section) || !isRecord(section.map)) return section;
-      const nested = restoreMapObject(section.map, restore);
+      const nested = restoreMapObject(section.map, ctx, false);
       if (!nested.changed) return section;
       changed = true;
       return { ...section, map: nested.map };
@@ -261,8 +413,7 @@ function restoreMapObject(
   return { map: out, changed };
 }
 
-function restoreSourceMap(json: string, restore: RestoreTable): string {
-  if (restore.size === 0) return json;
+function restoreSourceMap(json: string, ctx: FileRestore): string {
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);
@@ -270,24 +421,37 @@ function restoreSourceMap(json: string, restore: RestoreTable): string {
     return json;
   }
   if (!isRecord(parsed)) return json;
-  const { map, changed } = restoreMapObject(parsed, restore);
+  const { map, changed } = restoreMapObject(parsed, ctx, true);
   return changed ? JSON.stringify(map) : json;
 }
 
-function restoreProtectionMap<T>(doc: T, restore: RestoreTable, wire: string, local: string): T {
+function restoredSize(size: unknown, wired: string, original: string): unknown {
+  if (typeof size !== "number") return size;
+  if (size === Buffer.byteLength(wired)) return Buffer.byteLength(original);
+  if (size === wired.length) return original.length;
+  return size;
+}
+
+function restoreProtectionMap<T>(doc: T, ctx: FileRestore): T {
   if (!isRecord(doc) || !Array.isArray(doc.files)) return doc;
   return {
     ...doc,
     files: doc.files.map((entry: unknown) => {
-      if (!isRecord(entry) || !isRecord(entry.file) || typeof entry.file.path !== "string") {
-        return entry;
+      if (!isRecord(entry) || !isRecord(entry.file)) return entry;
+      const file = entry.file;
+      const next: Record<string, unknown> = { ...file };
+      if (typeof file.path === "string") {
+        next.path = file.path === ctx.wire ? ctx.local : lookup(ctx.map.pmPaths, file.path);
       }
-      const path = entry.file.path === wire ? local : restored(restore, entry.file.path);
-      const original = entry.file.originalSource;
-      const originalSource = typeof original === "string" ? restored(restore, original) : original;
-      return path === entry.file.path && originalSource === original
-        ? entry
-        : { ...entry, file: { ...entry.file, path, originalSource } };
+      if (typeof file.originalSource === "string") {
+        const original = lookup(ctx.map.contents, file.originalSource);
+        if (original !== file.originalSource) {
+          next.originalSource = original;
+          next.inputSize = restoredSize(file.inputSize, file.originalSource, original);
+        }
+      }
+      const same = Object.keys(next).every((k) => next[k] === file[k]);
+      return same ? entry : { ...entry, file: next };
     }),
   } as T;
 }
@@ -304,19 +468,63 @@ function wireGlob(pattern: string, pairs: readonly (readonly [string, string])[]
   return matched.map((wire) => `/${wire}`);
 }
 
-export function wireEngineConfig(
+function anyMatch(patterns: readonly string[], path: string): boolean {
+  return patterns.some((p) => matchesPath(p, path));
+}
+
+function reservedNames(entries: readonly (string | GlobReserved)[], path: string): string {
+  const names = entries.flatMap((e) =>
+    typeof e === "string" ? [] : matchesPath(e.glob, path) ? e.names : [],
+  );
+  return [...new Set(names)].sort().join("\n");
+}
+
+function verifyTranslation(
+  config: CoreConfig,
+  out: CoreConfig,
+  pairs: readonly (readonly [string, string])[],
+): void {
+  const exclude = config.paths?.exclude ?? [];
+  const sentExclude = out.paths?.exclude ?? [];
+  const reserved = config.identifiers?.reserved ?? [];
+  const sentReserved = out.identifiers?.reserved ?? [];
+  for (const [local, wire] of pairs) {
+    if (anyMatch(exclude, local) !== anyMatch(sentExclude, wire)) {
+      throw new WirePathError(
+        `could not send \`paths.exclude\` to the engine without changing which files it ` +
+          `selects: ${wire} would be ${anyMatch(exclude, local) ? "protected" : "left unprotected"}. ` +
+          "Rename the file or write the pattern so it does not depend on glob characters in file names.",
+      );
+    }
+    if (reservedNames(reserved, local) !== reservedNames(sentReserved, wire)) {
+      throw new WirePathError(
+        "could not send `identifiers.reserved` to the engine without changing which files its " +
+          `globs select: ${wire} would keep a different set of names. Rename the file or write ` +
+          "the glob so it does not depend on glob characters in file names.",
+      );
+    }
+  }
+}
+
+function translateConfig(
   config: CoreConfig,
   wirePaths: ReadonlyMap<string, string>,
-): CoreConfig {
+): { config: CoreConfig; origins: Map<string, string> } {
   const exclude = config.paths?.exclude;
   const reserved = config.identifiers?.reserved;
-  if (exclude === undefined && reserved === undefined) return config;
+  const origins = new Map<string, string>();
+  if (exclude === undefined && reserved === undefined) return { config, origins };
   const pairs = [...wirePaths.entries()];
+  const translate = (pattern: string): string[] => {
+    const patterns = wireGlob(pattern, pairs);
+    for (const p of patterns) if (!origins.has(p)) origins.set(p, pattern);
+    return patterns;
+  };
   const out: CoreConfig = { ...config };
   if (exclude !== undefined) {
     out.paths = {
       ...config.paths,
-      exclude: [...new Set(exclude.flatMap((pattern) => wireGlob(pattern, pairs)))],
+      exclude: [...new Set(exclude.flatMap((pattern) => translate(pattern)))],
     };
   }
   if (reserved !== undefined) {
@@ -325,11 +533,19 @@ export function wireEngineConfig(
       reserved: reserved.flatMap((entry): (string | GlobReserved)[] =>
         typeof entry === "string"
           ? [entry]
-          : wireGlob(entry.glob, pairs).map((glob) => ({ ...entry, glob })),
+          : translate(entry.glob).map((glob) => ({ ...entry, glob })),
       ),
     };
   }
-  return out;
+  verifyTranslation(config, out, pairs);
+  return { config: out, origins };
+}
+
+export function wireEngineConfig(
+  config: CoreConfig,
+  wirePaths: ReadonlyMap<string, string>,
+): CoreConfig {
+  return translateConfig(config, wirePaths).config;
 }
 
 export interface WireBatch {
@@ -338,15 +554,36 @@ export interface WireBatch {
   toLocal(batch: EngineBatchResult): EngineBatchResult;
 }
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function localMessage(message: string, wire: string, local: string, origins: Map<string, string>) {
+  let out = message;
+  for (const [sent, original] of origins) {
+    if (sent !== original) out = out.split(`"${sent}"`).join(`"${original}"`);
+  }
+  const bounded = new RegExp(
+    `(^|[\\s"'\`(\\[])${escapeRegExp(wire)}(?=$|[\\s"'\`)\\]:,;]|\\.(?:\\s|$))`,
+    "g",
+  );
+  return out.replace(bounded, (_m, lead: string) => `${lead}${local}`);
+}
+
 function localDiagnostics(
   diagnostics: unknown,
   localPaths: ReadonlyMap<string, string>,
+  wire: string,
+  local: string,
+  origins: Map<string, string>,
 ): EngineFileResult["diagnostics"] {
   if (!Array.isArray(diagnostics)) return diagnostics as EngineFileResult["diagnostics"];
   return diagnostics.map((d) => {
-    if (!isRecord(d) || typeof d.file !== "string") return d;
-    const local = localPaths.get(d.file);
-    return local === undefined ? d : { ...d, file: local };
+    if (!isRecord(d)) return d;
+    const next: Record<string, unknown> = { ...d };
+    if (typeof d.file === "string") next.file = localPaths.get(d.file) ?? d.file;
+    if (typeof d.message === "string") next.message = localMessage(d.message, wire, local, origins);
+    return next.file === d.file && next.message === d.message ? d : next;
   }) as EngineFileResult["diagnostics"];
 }
 
@@ -361,13 +598,14 @@ export function prepareWireBatch(
     baseDir,
   );
   const localPaths = new Map([...wirePaths].map(([local, wire]) => [wire, local]));
-  const restores = new Map<string, RestoreTable>();
-  const privateRoots = privateRootsOf(rootDir);
+  const translated = translateConfig(config, wirePaths);
+  const restores = new Map<string, MapRestore>();
+  const labels = new Map<string, string>();
   const wiredInputs = inputs.map((input) => {
     const path = wirePaths.get(input.path) ?? input.path;
     const wired: EngineFileInput = { ...input, path };
     if (input.sourceMap !== undefined) {
-      const place = { dir: dirname(resolve(input.path)), root: rootDir, privateRoots };
+      const place = newPlace(dirname(resolve(input.path)), rootDir, labels, input.source);
       const map = wireSourceMapWithRestore(input.sourceMap, place);
       restores.set(path, map.restore);
       if (map.json === undefined) delete wired.sourceMap;
@@ -377,25 +615,33 @@ export function prepareWireBatch(
   });
   return {
     inputs: wiredInputs,
-    config: wireEngineConfig(config, wirePaths),
+    config: translated.config,
     toLocal: (batch) => ({
       ...batch,
       files: batch.files.map((f) => {
         const local = localPaths.get(f.path);
         if (local === undefined) return f;
-        const restore = restores.get(f.path) ?? new Map();
+        const ctx: FileRestore = { map: restores.get(f.path) ?? newRestore(), wire: f.path, local };
         return {
           ...f,
           path: local,
           ...(f.diagnostics === undefined
             ? {}
-            : { diagnostics: localDiagnostics(f.diagnostics, localPaths) }),
+            : {
+                diagnostics: localDiagnostics(
+                  f.diagnostics,
+                  localPaths,
+                  f.path,
+                  local,
+                  translated.origins,
+                ),
+              }),
           ...(typeof f.sourceMap === "string"
-            ? { sourceMap: restoreSourceMap(f.sourceMap, restore) }
+            ? { sourceMap: restoreSourceMap(f.sourceMap, ctx) }
             : {}),
           ...(f.protectionMap == null
             ? {}
-            : { protectionMap: restoreProtectionMap(f.protectionMap, restore, f.path, local) }),
+            : { protectionMap: restoreProtectionMap(f.protectionMap, ctx) }),
         };
       }),
     }),

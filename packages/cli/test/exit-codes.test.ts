@@ -10,6 +10,7 @@ import {
   batchCalls,
   cloudRefusal,
   engineCalls,
+  guardedEngine,
   processBatch,
 } from "../../../test/core-fake.js";
 import { MIN_CORE_VERSION } from "../../integration-utils/src/compat.js";
@@ -311,9 +312,9 @@ describe("the exit-code contract", () => {
   });
 
   it("1 — cloud-down on a Pro build fails closed and is never softened to 2", async () => {
-    const engine = {
+    const engine = guardedEngine({
       processBatch: () => Promise.reject(new Error("cloud unreachable: connect ETIMEDOUT")),
-    };
+    });
     const code = await run({
       argv: ["dist", ...QUIET, "--key=ap_live_x"],
       cwd: root,

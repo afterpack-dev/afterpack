@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { processBatch as ProcessBatch, version as Version } from "@afterpack/core";
 import type { CoreConfig, ObfuscationEngine } from "@afterpack/integration-utils";
 import { afterEach, describe, expect, it } from "vitest";
+import { guardedEngine } from "../../../test/core-fake.js";
 import { run } from "../src/run.js";
 
 const { processBatch, version } = createRequire(import.meta.url)("@afterpack/core") as {
@@ -13,13 +14,13 @@ const { processBatch, version } = createRequire(import.meta.url)("@afterpack/cor
 };
 
 function recordingEngine(onConfig: (config: CoreConfig) => void): ObfuscationEngine {
-  return {
+  return guardedEngine({
     version,
     processBatch: (files, config, buildContext) => {
       onConfig(config);
       return processBatch(files, config, buildContext);
     },
-  };
+  });
 }
 
 const APP = `export function computeOrderTotal(items) {

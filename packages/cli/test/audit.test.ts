@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -166,10 +166,24 @@ describe("afterpack audit", () => {
     "~/app",
     "C:\\Users\\alice\\app",
     "file:///home/alice/app",
+    "dist/index.html",
+    "home/alice/app/dist",
   ])("never sends the local path %s to the scanner", async (target) => {
     expect(await invoke(["audit", target])).toBe(64);
     expect(err.join("\n")).toContain("not a URL");
     expect(received).toEqual([]);
+  });
+
+  it("never sends a target that names a file in the current directory", async () => {
+    mkdirSync(join(root, "site.example"));
+    expect(await invoke(["audit", "site.example"])).toBe(64);
+    expect(err.join("\n")).toContain("not a URL");
+    expect(received).toEqual([]);
+  });
+
+  it("still scans localhost", async () => {
+    await invoke(["audit", "http://localhost:3000"]);
+    expect(err.join("\n")).not.toContain("not a URL");
   });
 
   it("rejects a flag this command does not have rather than ignoring it", async () => {

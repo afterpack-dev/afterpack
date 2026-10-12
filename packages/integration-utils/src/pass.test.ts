@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { ProtectionMap } from "@afterpack/protection-map";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { guardedEngine } from "../../../test/core-fake.js";
 import type { EngineDiagnostic } from "./diagnostics.js";
 import { DIAG_ALREADY_OBFUSCATED } from "./diagnostics.js";
 import type { EngineFileInput, EngineFileResult, ObfuscationEngine } from "./pass.js";
@@ -65,7 +66,7 @@ function makeEngine(
     config: CoreConfig;
     buildContext?: BuildContext;
   }[] = [];
-  const engine: ObfuscationEngine = {
+  const engine: ObfuscationEngine = guardedEngine({
     async processBatch(inputs, config, buildContext) {
       calls.push({ inputs, config, buildContext: buildContext ?? undefined });
       const files: EngineFileResult[] = inputs.map((f) => {
@@ -96,7 +97,7 @@ function makeEngine(
         source: source as "local" | "cloud",
       };
     },
-  };
+  });
   if (version !== undefined) engine.version = async () => version;
   return { engine, calls };
 }
@@ -592,7 +593,7 @@ describe("runObfuscationPass fail-closed", () => {
   it("throws when the engine returns a path with no captured source", async () => {
     const a = join(outDir, "a.js");
     writeFileSync(a, "const a = 1;");
-    const engine: ObfuscationEngine = {
+    const engine: ObfuscationEngine = guardedEngine({
       async processBatch() {
         return {
           files: [{ path: "/ghost.js", code: "x", status: "success" }],
@@ -602,7 +603,7 @@ describe("runObfuscationPass fail-closed", () => {
           source: "local",
         };
       },
-    };
+    });
     await expect(
       runObfuscationPass({ ...baseOptions([a], engine), logger: silentLogger().logger }),
     ).rejects.toThrow(/no captured source/);
@@ -1099,7 +1100,7 @@ describe("runObfuscationPass engine diagnostics", () => {
   it("says so, rather than implying a clean build, when the cloud path returns no lane", async () => {
     const a = join(outDir, "a.js");
     writeFileSync(a, "const x = 1;");
-    const engine: ObfuscationEngine = {
+    const engine: ObfuscationEngine = guardedEngine({
       async processBatch(inputs) {
         return {
           files: inputs.map((i) => ({
@@ -1113,7 +1114,7 @@ describe("runObfuscationPass engine diagnostics", () => {
           source: "cloud",
         };
       },
-    };
+    });
     const cap = silentLogger();
     await runObfuscationPass({ ...baseOptions([a], engine), logger: cap.logger });
     expect(cap.warnings).toContain(
@@ -1125,7 +1126,7 @@ describe("runObfuscationPass engine diagnostics", () => {
   it("stays quiet about a missing lane on a local engine that simply omits it", async () => {
     const a = join(outDir, "a.js");
     writeFileSync(a, "const x = 1;");
-    const engine: ObfuscationEngine = {
+    const engine: ObfuscationEngine = guardedEngine({
       async processBatch(inputs) {
         return {
           files: inputs.map((i) => ({
@@ -1139,7 +1140,7 @@ describe("runObfuscationPass engine diagnostics", () => {
           source: "local",
         };
       },
-    };
+    });
     const cap = silentLogger();
     await runObfuscationPass({ ...baseOptions([a], engine), logger: cap.logger });
     expect(cap.warnings.some((w) => w.includes("Pro Cloud"))).toBe(false);

@@ -76,7 +76,7 @@ import {
   type TelemetryFacts,
   type TelemetryReporter,
 } from "./telemetry.js";
-import { prepareWireBatch } from "./wire.js";
+import { prepareWireBatch, type WireBatch, WirePathError } from "./wire.js";
 
 export interface EngineFileInput {
   path: string;
@@ -559,12 +559,13 @@ export async function runObfuscationPass(
     clientVersion: options.client?.coreVersion,
     client: clientString(options.client),
   });
-  const wire = prepareWireBatch(
-    inputs,
-    engineConfig,
-    combinedProtectionMap.buildDir,
-    home.projectRoot,
-  );
+  let wire: WireBatch;
+  try {
+    wire = prepareWireBatch(inputs, engineConfig, combinedProtectionMap.buildDir, home.projectRoot);
+  } catch (error) {
+    if (error instanceof WirePathError) throw new Error(prefix(error.message));
+    throw error;
+  }
   let batch: EngineBatchResult;
   try {
     batch = wire.toLocal(await engine.processBatch(wire.inputs, wire.config, context));

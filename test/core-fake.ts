@@ -18,7 +18,7 @@ export const batchCalls: Array<{
 }> = [];
 
 export interface WirePayload {
-  files: Array<{ path: string; sourceMap?: string; regions?: unknown[] }>;
+  files: Array<{ path: string; source?: string; sourceMap?: string; regions?: unknown[] }>;
   config: Record<string, unknown>;
   buildContext?: Record<string, unknown>;
 }
@@ -53,6 +53,7 @@ function localSentinels(): string[] {
     if (dir.length < 2) continue;
     out.add(dir);
     out.add(dir.replaceAll("\\", "/"));
+    out.add(dir.replaceAll("\\", "/").replaceAll("/", "\\/"));
   }
   return [...out];
 }
@@ -88,7 +89,7 @@ function escapeRegExp(text: string): string {
 }
 
 function pathPattern(path: string): RegExp {
-  return new RegExp(`(?:^|[^A-Za-z0-9._~-])${escapeRegExp(path)}(?:[\\\\/]|$)`);
+  return new RegExp(`(?:^|[^A-Za-z0-9._~-])${escapeRegExp(path)}(?![A-Za-z0-9._~-])`);
 }
 
 export function localPathLeaks(
@@ -105,17 +106,31 @@ export function localPathLeaks(
         )
       : null;
   const leaks: string[] = [];
-  const visit = (text: string, at: string): void => {
-    for (const [sentinel, pattern] of patterns) {
-      if (pattern.test(text)) leaks.push(`${at} carries ${JSON.stringify(sentinel)}`);
-    }
-    if (userSegment?.test(text)) leaks.push(`${at} carries the OS username`);
-  };
+  const visitWith =
+    (shipped: string) =>
+    (text: string, at: string): void => {
+      for (const [sentinel, pattern] of patterns) {
+        if (pattern.test(text) && !(at.includes(".sourcesContent[") && pattern.test(shipped))) {
+          leaks.push(`${at} carries ${JSON.stringify(sentinel)}`);
+        }
+      }
+      if (
+        userSegment?.test(text) &&
+        !(at.includes(".sourcesContent[") && userSegment.test(shipped))
+      ) {
+        leaks.push(`${at} carries the OS username`);
+      }
+    };
+  const visit = visitWith("");
   payload.files.forEach((file, i) => {
     if (isAbsoluteLike(file.path)) leaks.push(`$.files[${i}].path is absolute: ${file.path}`);
     visit(file.path, `$.files[${i}].path`);
     if (file.sourceMap !== undefined) {
-      scanStrings(parsedMap(file.sourceMap), `$.files[${i}].sourceMap`, visit);
+      scanStrings(
+        parsedMap(file.sourceMap),
+        `$.files[${i}].sourceMap`,
+        visitWith(file.source ?? ""),
+      );
     }
     scanStrings(file.regions, `$.files[${i}].regions`, visit);
   });
@@ -307,6 +322,47 @@ export function __reset(): void {
   fakeVersion = DEFAULT_VERSION;
 }
 
+export function assertNoLocalPaths(
+  files: ReadonlyArray<{ path: string; source?: string; sourceMap?: string; regions?: unknown[] }>,
+  config: unknown,
+  buildContext?: unknown,
+): void {
+  const payload: WirePayload = {
+    files: files.map((f) => ({
+      path: f.path,
+      source: f.source,
+      sourceMap: f.sourceMap,
+      regions: f.regions,
+    })),
+    config: (config ?? {}) as Record<string, unknown>,
+    buildContext: (buildContext ?? undefined) as Record<string, unknown> | undefined,
+  };
+  wirePayloads.push(payload);
+  const leaks = localPathLeaks(payload);
+  if (leaks.length > 0) {
+    throw new Error(`the fake cloud endpoint received a local path: ${leaks.join("; ")}`);
+  }
+}
+
+export function guardedEngine<
+  T extends {
+    processBatch(
+      files: Array<{ path: string; source?: string; sourceMap?: string; regions?: unknown[] }>,
+      config: never,
+      buildContext?: never,
+    ): unknown;
+  },
+>(engine: T): T {
+  const inner = engine.processBatch.bind(engine) as (...args: unknown[]) => unknown;
+  return {
+    ...engine,
+    processBatch: (files: Parameters<T["processBatch"]>[0], config: unknown, context?: unknown) => {
+      assertNoLocalPaths(files, config, context);
+      return inner(files, config, context);
+    },
+  } as T;
+}
+
 export async function processBatch(
   files: Array<{ path: string; source: string; sourceMap?: string; regions?: unknown[] }>,
   config: unknown,
@@ -315,16 +371,7 @@ export async function processBatch(
   const configRecord = (config ?? {}) as Record<string, unknown>;
   const buildContextRecord = (buildContext ?? undefined) as Record<string, unknown> | undefined;
   batchCalls.push({ config: configRecord, buildContext: buildContextRecord });
-  const payload: WirePayload = {
-    files: files.map((f) => ({ path: f.path, sourceMap: f.sourceMap, regions: f.regions })),
-    config: configRecord,
-    buildContext: buildContextRecord,
-  };
-  wirePayloads.push(payload);
-  const leaks = localPathLeaks(payload);
-  if (leaks.length > 0) {
-    throw new Error(`the fake cloud endpoint received a local path: ${leaks.join("; ")}`);
-  }
+  assertNoLocalPaths(files, config, buildContext);
   if (batchError) throw batchError;
   let successCount = 0;
   let failureCount = 0;

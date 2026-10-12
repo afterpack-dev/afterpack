@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { CONTACT_FOOTER } from "./args.js";
 import { EXIT, type ExitCode } from "./exit.js";
 import { bold, cyan, dim, green, header, red, severityColor, stripAnsi, yellow } from "./format.js";
@@ -59,6 +61,7 @@ interface ScanResult {
 }
 
 interface AuditDeps {
+  cwd?: string;
   positionals: string[];
   logger: CliLogger;
   report: CliLogger;
@@ -69,13 +72,21 @@ interface AuditDeps {
   fetchImpl?: FetchLike;
 }
 
-function normalizeUrl(input: string): string | null {
+const LOCAL_PATH = /^(?:[\\/.~]|[A-Za-z]:[\\/]|file:)/i;
+
+function isNamedHost(hostname: string): boolean {
+  if (hostname === "localhost" || hostname.startsWith("[")) return true;
+  return hostname.includes(".");
+}
+
+function normalizeUrl(input: string, cwd: string): string | null {
   const raw = input.trim();
-  if (/^(?:[\\/.~]|[A-Za-z]:[\\/]|file:)/i.test(raw)) return null;
+  if (LOCAL_PATH.test(raw) || existsSync(resolve(cwd, raw))) return null;
   const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
   try {
     const parsed = new URL(candidate);
-    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.toString() : null;
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    return isNamedHost(parsed.hostname) ? parsed.toString() : null;
   } catch {
     return null;
   }
@@ -231,7 +242,7 @@ export async function audit(deps: AuditDeps): Promise<ExitCode> {
       `audit takes a single <url>, got ${deps.positionals.length}`,
     );
   }
-  const url = normalizeUrl(deps.positionals[0]);
+  const url = normalizeUrl(deps.positionals[0], deps.cwd ?? process.cwd());
   if (!url) return misuse(deps, "INVALID_URL", `not a URL: ${deps.positionals[0]}`);
 
   const interactive = deps.mode.format !== "json" && deps.stdout.isTTY;

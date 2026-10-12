@@ -44,7 +44,7 @@ const CREDENTIAL = [
 ];
 const RESOLVED_AT_RUNTIME = /^(?:\$\{\{|\$\{?[A-Za-z_])/;
 
-const FILE_SCHEME = /(?<![\w])fi(?:)le:([^\s"'`)<>]*)/g;
+const FILE_SCHEME = /(?<![\w^])fi(?:)le:([^\s"'`)<>]*)/g;
 const TARBALL_KEY = /\btar(?:)ball:\s*(\S+)/;
 const ESCAPE_CHAIN = /(?<![\w.-])((?:\.\.\/)+[^\s"'`)<>]*)/g;
 

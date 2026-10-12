@@ -1,20 +1,23 @@
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import { matchesPath } from "./glob.js";
+import type { EngineFileResult } from "./pass.js";
 import type { CoreConfig } from "./policy.js";
 import {
   EXTERNAL_WIRE_DIR,
   prepareWireBatch,
   toWirePaths,
+  WirePathError,
   wireEngineConfig,
   wireSourceMap,
 } from "./wire.js";
 
 const root = mkdtempSync(join(tmpdir(), "afterpack-wire-"));
-const dist = join(root, "app", "dist");
+const project = join(root, "app");
+const dist = join(project, "dist");
 mkdirSync(join(dist, "static", "chunks"), { recursive: true });
 
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -43,7 +46,7 @@ describe("toWirePaths", () => {
   });
 
   it("labels a file outside the build directory without naming where it lives", () => {
-    const outside = [join(root, "app", "other", "x.js"), join(homedir(), "elsewhere", "x.js")];
+    const outside = [join(project, "other", "x.js"), join(homedir(), "elsewhere", "x.js")];
     const wire = toWirePaths([join(dist, "x.js"), ...outside], dist);
     const labels = outside.map((f) => wire.get(f) ?? "");
     expect(new Set([wire.get(join(dist, "x.js")), ...labels]).size).toBe(3);
@@ -59,8 +62,9 @@ describe("toWirePaths", () => {
 
 describe("wireSourceMap", () => {
   const mapDir = join(dist, "static", "chunks");
-  const project = join(root, "app");
   const src = join(project, "src", "greet.ts");
+  const sent = (map: unknown) =>
+    JSON.parse(wireSourceMap(JSON.stringify(map), mapDir, project) ?? "{}");
 
   it("returns an untouched map byte for byte", () => {
     const json =
@@ -69,76 +73,110 @@ describe("wireSourceMap", () => {
   });
 
   it("rewrites absolute, file: and scheme-prefixed local sources relative to the map", () => {
-    const json = JSON.stringify({
+    const out = sent({
       version: 3,
       file: join(mapDir, "x.js"),
-      sources: [src, pathToFileURL(src).href, `webpack://${src}`, "webpack:///src/kept.ts"],
-      sourcesContent: ["a", "b", "c", "d"],
+      sources: [
+        src,
+        pathToFileURL(join(project, "src", "b.ts")).href,
+        `webpack://${join(project, "src", "c.ts")}`,
+        "webpack:///src/kept.ts",
+      ],
       mappings: "",
     });
-    const out = JSON.parse(wireSourceMap(json, mapDir, project) ?? "{}");
     expect(out.sources).toEqual([
       "../../../src/greet.ts",
-      "../../../src/greet.ts",
-      "../../../src/greet.ts",
+      "../../../src/b.ts",
+      "../../../src/c.ts",
       "webpack:///src/kept.ts",
     ]);
     expect(out.file).toBe("x.js");
-    expect(out.sourcesContent).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("keeps two spellings of one file distinct so each can be handed back", () => {
+    const out = sent({ version: 3, sources: [src, pathToFileURL(src).href], mappings: "" });
+    expect(out.sources[0]).toBe("../../../src/greet.ts");
+    expect(out.sources[1]).not.toBe(out.sources[0]);
+    expect(out.sources[1]).not.toContain(root);
   });
 
   it("folds a local sourceRoot into the sources and drops it", () => {
-    const json = JSON.stringify({
+    const out = sent({
       version: 3,
-      sourceRoot: `${join(root, "app")}/`,
+      sourceRoot: `${project}/`,
       sources: ["src/greet.ts"],
       mappings: "",
     });
-    const out = JSON.parse(wireSourceMap(json, mapDir, project) ?? "{}");
     expect(out.sourceRoot).toBeUndefined();
     expect(out.sources).toEqual(["../../../src/greet.ts"]);
   });
 
   it("rewrites the maps nested in an index map", () => {
-    const json = JSON.stringify({
+    const out = sent({
       version: 3,
       sections: [
         { offset: { line: 0, column: 0 }, map: { version: 3, sources: [src], mappings: "" } },
       ],
     });
-    const out = JSON.parse(wireSourceMap(json, mapDir, project) ?? "{}");
     expect(out.sections[0].map.sources).toEqual(["../../../src/greet.ts"]);
   });
 
-  it("rewrites a local path embedded in a source name or in the source content", () => {
-    const json = JSON.stringify({
+  it("rewrites a local path embedded in a source name", () => {
+    const out = sent({
       version: 3,
       sources: [
         `webpack://_N_E/ignored|${project}/node_modules/next/dist/lib|x`,
         "webpack://_N_E/?969b",
       ],
-      sourcesContent: ["const a = 1 / 2;", `import(/* eager */ "${project}/app/page.tsx");`],
       mappings: "",
     });
-    const out = JSON.parse(wireSourceMap(json, mapDir, project) ?? "{}");
     expect(out.sources).toEqual([
       "webpack://_N_E/ignored|../../../node_modules/next/dist/lib|x",
       "webpack://_N_E/?969b",
     ]);
-    expect(out.sourcesContent).toEqual([
-      "const a = 1 / 2;",
-      'import(/* eager */ "../../../app/page.tsx");',
-    ]);
   });
 
-  it("names a source outside the project by its file name alone", () => {
-    const json = JSON.stringify({
+  it("replaces a local path in the source content with one of the same length, so offsets hold", () => {
+    const user = basename(homedir());
+    const escapedProject = project.replaceAll("/", "\\/");
+    const contents = [
+      "const a = 1 / 2;",
+      `import(/* eager */ "${project}/app/page.tsx");`,
+      `const home = "${homedir()}"; const slash = "${homedir()}/";`,
+      `const json = "${escapedProject}\\/app\\/a.js";`,
+      `const win = "C:\\Users\\${user}\\app\\a.js";`,
+    ];
+    const out = sent({ version: 3, sources: ["a.ts"], sourcesContent: contents, mappings: "" });
+    expect(out.sourcesContent[0]).toBe(contents[0]);
+    contents.forEach((content, i) => {
+      expect(out.sourcesContent[i]).toHaveLength(content.length);
+      expect(out.sourcesContent[i]).not.toContain(root);
+      expect(out.sourcesContent[i]).not.toContain(homedir());
+    });
+    expect(out.sourcesContent[1].startsWith('import(/* eager */ ".')).toBe(true);
+    expect(out.sourcesContent[1].endsWith('../../app/page.tsx");')).toBe(true);
+    expect(out.sourcesContent[2]).not.toContain(user);
+    expect(out.sourcesContent[3]).not.toContain(escapedProject);
+    expect(out.sourcesContent[4]).not.toContain(user);
+  });
+
+  it("labels each source outside the project uniquely, without its directories", () => {
+    const out = sent({
       version: 3,
-      sources: ["/Users/someone/proj/src/greet.ts", join(root, "elsewhere", "lib.ts")],
+      sources: [
+        "/Users/someone/other/a/index.ts",
+        "/Users/someone/other/b/index.ts",
+        join(root, "elsewhere", "lib.ts"),
+      ],
       mappings: "",
     });
-    const out = JSON.parse(wireSourceMap(json, mapDir, project) ?? "{}");
-    expect(out.sources).toEqual(["greet.ts", "lib.ts"]);
+    expect(new Set(out.sources).size).toBe(3);
+    for (const source of out.sources) {
+      expect(source.startsWith(`${EXTERNAL_WIRE_DIR}/`)).toBe(true);
+      expect(source).not.toContain("someone");
+      expect(source).not.toContain(root);
+    }
+    expect(out.sources[2].endsWith("/lib.ts")).toBe(true);
   });
 
   it("drops a map it cannot read rather than forward it", () => {
@@ -183,6 +221,13 @@ describe("wireEngineConfig", () => {
     ]);
   });
 
+  it("refuses a translation that would select different files", () => {
+    const odd = toWirePaths([join(dist, "a*.js"), join(dist, "abc.js")], dist);
+    expect(() =>
+      wireEngineConfig({ ...BASE, paths: { exclude: [join(dist, "a?.js")] } }, odd),
+    ).toThrow(WirePathError);
+  });
+
   it("leaves a config without path globs untouched", () => {
     const config = { ...BASE, preset: "hard" as const };
     expect(wireEngineConfig(config, wire)).toBe(config);
@@ -190,13 +235,28 @@ describe("wireEngineConfig", () => {
 });
 
 describe("prepareWireBatch", () => {
+  const file = join(dist, "static", "chunks", "x.js");
+  const src = join(project, "src", "greet.ts");
+
+  function resultFor(
+    batch: ReturnType<typeof prepareWireBatch>,
+    fields: Partial<EngineFileResult>,
+  ): EngineFileResult {
+    return batch.toLocal({
+      files: [{ path: batch.inputs[0].path, code: "b", status: "success", ...fields }],
+      totalFiles: 1,
+      successCount: 1,
+      failureCount: 0,
+      source: "cloud",
+    }).files[0];
+  }
+
   it("maps results and their diagnostics back to the local files", () => {
-    const a = join(dist, "static", "chunks", "x.js");
-    const b = join(dist, "server", "chunks", "x.js");
+    const other = join(dist, "server", "chunks", "x.js");
     const batch = prepareWireBatch(
       [
-        { path: a, source: "a" },
-        { path: b, source: "b" },
+        { path: file, source: "a" },
+        { path: other, source: "b" },
       ],
       BASE,
       dist,
@@ -215,70 +275,95 @@ describe("prepareWireBatch", () => {
       source: "cloud",
     });
     expect(local.files.map((f) => [f.path, f.code, f.diagnostics?.[0]?.file])).toEqual([
-      [a, "OBF:a", a],
-      [b, "OBF:b", b],
+      [file, "OBF:a", file],
+      [other, "OBF:b", other],
     ]);
   });
 
-  it("hands back the engine's source map and Protection Map with the local paths they replaced", () => {
-    const file = join(dist, "static", "chunks", "x.js");
-    const src = join(root, "app", "src", "greet.ts");
+  it("hands back the output map of a file that had no input map with its local path", () => {
+    const batch = prepareWireBatch([{ path: file, source: "a" }], BASE, dist, project);
+    const out = resultFor(batch, {
+      sourceMap: '{"version":3,"sources":["static/chunks/x.js"],"mappings":""}',
+    });
+    expect(JSON.parse(out.sourceMap ?? "{}").sources).toEqual([file]);
+  });
+
+  it("hands back sources, sourceRoot, file, content and Protection Map exactly as they were", () => {
+    const original = {
+      version: 3,
+      file,
+      sourceRoot: `${project}/`,
+      sources: ["src/greet.ts"],
+      sourcesContent: [`import "${src}";`],
+      mappings: "",
+    };
     const batch = prepareWireBatch(
-      [
-        {
-          path: file,
-          source: "a",
-          sourceMap: JSON.stringify({
-            version: 3,
-            sources: [src],
-            sourcesContent: [`import "${src}";`],
-            mappings: "",
-          }),
-        },
-      ],
+      [{ path: file, source: "a", sourceMap: JSON.stringify(original) }],
       BASE,
       dist,
-      join(root, "app"),
+      project,
     );
-    const sentMap = JSON.parse(batch.inputs[0].sourceMap ?? "{}");
-    expect(sentMap.sources).toEqual(["../../../src/greet.ts"]);
-    const pm = {
-      schemaVersion: 3,
-      generatedAt: null,
-      engine: { version: "t", backend: "t", seed: 0, preset: null, complexity: 0 },
-      files: [
+    const wired = JSON.parse(batch.inputs[0].sourceMap ?? "{}");
+    expect(wired.sources).toEqual(["../../../src/greet.ts"]);
+    expect(wired.sourcesContent[0]).toHaveLength(original.sourcesContent[0].length);
+    const pmFile = (path: string, content: string) => ({
+      file: { path, originalSource: content, inputSize: content.length, outputSize: 1 },
+      regions: [],
+      spotlights: [],
+      aggregate: {},
+    });
+    const out = resultFor(batch, {
+      sourceMap: JSON.stringify(wired),
+      protectionMap: {
+        schemaVersion: 3,
+        generatedAt: null,
+        engine: { version: "t", backend: "t", seed: 0, preset: null, complexity: 0 },
+        files: [
+          pmFile(wired.sources[0], wired.sourcesContent[0]),
+          pmFile("static/chunks/x.js", "a"),
+        ],
+      },
+    });
+    const back = JSON.parse(out.sourceMap ?? "{}");
+    expect(back).toEqual(original);
+    expect(Object.keys(back)).toEqual([
+      "version",
+      "file",
+      "sources",
+      "sourceRoot",
+      "sourcesContent",
+      "mappings",
+    ]);
+    expect(
+      out.protectionMap?.files.map((f) => [f.file.path, f.file.originalSource, f.file.inputSize]),
+    ).toEqual([
+      [src, original.sourcesContent[0], original.sourcesContent[0].length],
+      [file, "a", 1],
+    ]);
+  });
+
+  it("names the user's own pattern and file in a diagnostic", () => {
+    const batch = prepareWireBatch(
+      [{ path: file, source: "a" }],
+      { ...BASE, paths: { exclude: [file] } },
+      dist,
+      project,
+    );
+    expect(batch.config.paths?.exclude).toEqual(["/static/chunks/x.js"]);
+    const out = resultFor(batch, {
+      diagnostics: [
         {
-          file: { path: "../../../src/greet.ts", originalSource: "a", inputSize: 1, outputSize: 1 },
-          regions: [],
-          spotlights: [],
-          aggregate: {},
-        },
-        {
-          file: { path: "static/chunks/x.js", originalSource: "a", inputSize: 1, outputSize: 1 },
-          regions: [],
-          spotlights: [],
-          aggregate: {},
+          severity: "info",
+          code: "DIAG_PATH_EXCLUDED",
+          message:
+            'Excluded by paths.exclude pattern "/static/chunks/x.js": in static/chunks/x.js.',
+          file: "static/chunks/x.js",
         },
       ],
-    };
-    const [result] = batch.toLocal({
-      files: [
-        {
-          path: "static/chunks/x.js",
-          code: "b",
-          status: "success",
-          sourceMap: batch.inputs[0].sourceMap,
-          protectionMap: pm,
-        },
-      ],
-      totalFiles: 1,
-      successCount: 1,
-      failureCount: 0,
-      source: "cloud",
-    }).files;
-    expect(sentMap.sourcesContent).toEqual(['import "../../../src/greet.ts";']);
-    expect(JSON.parse(result.sourceMap ?? "{}").sources).toEqual([src]);
-    expect(JSON.parse(result.sourceMap ?? "{}").sourcesContent).toEqual([`import "${src}";`]);
-    expect(result.protectionMap?.files.map((f) => f.file.path)).toEqual([src, file]);
+    });
+    expect(out.diagnostics?.[0]).toMatchObject({
+      file,
+      message: `Excluded by paths.exclude pattern "${file}": in ${file}.`,
+    });
   });
 });

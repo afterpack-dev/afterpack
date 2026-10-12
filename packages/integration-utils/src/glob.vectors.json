@@ -232,6 +232,26 @@
       ]
     },
     {
+      "name": "an anchored pattern matches a relative path as the whole path, never as a suffix",
+      "cases": [
+        {
+          "pattern": "/a/b.js",
+          "path": "a/b.js",
+          "matches": true
+        },
+        {
+          "pattern": "/a/**",
+          "path": "a/b.js",
+          "matches": true
+        },
+        {
+          "pattern": "/b.js",
+          "path": "a/b.js",
+          "matches": false
+        }
+      ]
+    },
+    {
       "name": "backslashes normalize to / on both sides",
       "cases": [
         {

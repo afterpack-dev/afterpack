@@ -85,7 +85,12 @@ beforeEach(() => {
 function buildTree(): { files: string[]; sources: Map<string, string> } {
   const src = join(project, "src", "greet.ts");
   const maps = [
-    { sources: [src, join(base, "home", OTHER_USER, "lib", "x.ts")] },
+    {
+      sources: [
+        join(base, "home", OTHER_USER, "a", "index.ts"),
+        join(base, "home", OTHER_USER, "b", "index.ts"),
+      ],
+    },
     { sources: [pathToFileURL(src).href] },
     { sourceRoot: `${project}/`, sources: ["src/greet.ts"] },
     {
@@ -109,7 +114,10 @@ function buildTree(): { files: string[]; sources: Map<string, string> } {
       JSON.stringify({
         version: 3,
         ...maps[i],
-        sourcesContent: [`import("${src}");`, `require("${home}/lib.js");`],
+        sourcesContent: [
+          `import("${src}");`,
+          `require("${home}/lib.js"); const h = "${home}"; const j = "${home.replaceAll("/", "\\/")}\\/x";`,
+        ],
         mappings: "AAAA",
       }),
     );
@@ -283,6 +291,13 @@ describe("no path the cloud receives names the machine it came from", () => {
         sentinels(),
       ).length,
     ).toBeGreaterThanOrEqual(2);
+    const escapedHome = home.replaceAll("/", "\\/");
+    for (const content of [`const h = "${home}";`, `const j = "${escapedHome}\\/x";`]) {
+      const map = JSON.stringify({ sources: ["a.ts"], sourcesContent: [content] });
+      expect(
+        localPathLeaks({ files: [{ path: "x.js", sourceMap: map }], config: {} }, sentinels()),
+      ).not.toEqual([]);
+    }
   });
 });
 
@@ -296,11 +311,28 @@ function packageDirs(): string[] {
   });
 }
 
-function sourceFiles(pkg: string): { rel: string; text: string }[] {
-  const src = join(PACKAGES, pkg, "src");
-  return readdirSync(src)
-    .filter((f) => f.endsWith(".ts") && !f.includes(".test."))
-    .map((f) => ({ rel: `${pkg}/src/${f}`, text: readFileSync(join(src, f), "utf8") }));
+const CODE_FILE = /\.(?:[cm]?ts|tsx|[cm]?js|jsx)$/;
+
+function walk(dir: string): string[] {
+  let entries: string[];
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return [];
+  }
+  return entries.flatMap((name) => {
+    if (name === "node_modules" || name === "dist" || name === "e2e") return [];
+    const full = join(dir, name);
+    if (statSync(full).isDirectory()) return walk(full);
+    return CODE_FILE.test(name) && !name.endsWith(".d.ts") ? [full] : [];
+  });
+}
+
+function filesOf(pkg: string, tests: boolean): { rel: string; text: string }[] {
+  return ["src", "test"]
+    .flatMap((dir) => walk(join(PACKAGES, pkg, dir)))
+    .filter((file) => file.includes(".test.") === tests)
+    .map((file) => ({ rel: file.slice(PACKAGES.length), text: readFileSync(file, "utf8") }));
 }
 
 const NETWORK_ALLOWED = new Set([
@@ -309,26 +341,119 @@ const NETWORK_ALLOWED = new Set([
   "cli/src/audit.ts",
 ]);
 
+const NETWORK =
+  /\bfetch(Impl)?\(|\bundici\b|XMLHttpRequest|\bWebSocket\b|(?:from\s*|require\(\s*|import\(\s*)["'](?:node:)?(?:https?|http2|net|tls|dgram)["']/;
+
+const ENGINE_ENTRIES = ["processBatch", "obfuscate", "obfuscateAll"];
+
+function coreBindings(text: string): { names: string[]; namespaces: string[] } {
+  const names: string[] = [];
+  const namespaces: string[] = [];
+  const core = `["']@afterpack/core["']`;
+  for (const m of text.matchAll(new RegExp(`import\\s*\\{([^}]*)\\}\\s*from\\s*${core}`, "g"))) {
+    for (const part of m[1].split(",")) {
+      const [imported, local] = part
+        .replace(/\btype\b/, "")
+        .trim()
+        .split(/\s+as\s+/);
+      if (ENGINE_ENTRIES.includes(imported)) names.push((local ?? imported).trim());
+    }
+  }
+  const destructured = new RegExp(
+    `\\{([^}]*)\\}\\s*=\\s*(?:await\\s+)?(?:import|require)\\(\\s*${core}\\s*\\)`,
+    "g",
+  );
+  for (const m of text.matchAll(destructured)) {
+    for (const part of m[1].split(",")) {
+      const [imported, local] = part.trim().split(/\s*:\s*/);
+      if (ENGINE_ENTRIES.includes(imported)) names.push((local ?? imported).trim());
+    }
+  }
+  const namespace = new RegExp(
+    `(?:import\\s*\\*\\s*as\\s+(\\w+)\\s+from\\s*${core})|(?:(\\w+)\\s*=\\s*(?:await\\s+)?(?:import|require)\\(\\s*${core}\\s*\\))`,
+    "g",
+  );
+  for (const m of text.matchAll(namespace)) namespaces.push(m[1] ?? m[2]);
+  return { names, namespaces };
+}
+
+function callsEngine(text: string): string | null {
+  if (/\.processBatch\s*\(/.test(text)) return ".processBatch(";
+  const { names, namespaces } = coreBindings(text);
+  for (const name of names) {
+    if (new RegExp(`(?<![\\w.$])${name}\\s*\\(`).test(text)) return `${name}(`;
+  }
+  for (const ns of namespaces) {
+    const call = new RegExp(`\\b${ns}\\s*\\.\\s*(?:${ENGINE_ENTRIES.join("|")})\\s*\\(`);
+    if (call.test(text)) return `${ns}.<engine>(`;
+  }
+  return null;
+}
+
+const ENGINE_STUB =
+  /\bprocessBatch\s*(?:\([^)]*\)\s*(?::[^{]*)?\{|:\s*(?:async\s*)?(?:\(|function\b|vi\.fn|[A-Za-z_$][\w$]*\s*=>))/;
+
 describe("every front door reaches the cloud only through the path-safe pass", () => {
   const packages = packageDirs();
+  const sources = packages.flatMap((pkg) => filesOf(pkg, false));
+  const tests = packages.flatMap((pkg) => filesOf(pkg, true));
 
-  it("found the front doors", () => {
+  it("found the front doors and their tests", () => {
     expect(packages.length).toBeGreaterThanOrEqual(10);
+    expect(sources.length).toBeGreaterThanOrEqual(40);
+    expect(tests.length).toBeGreaterThanOrEqual(40);
   });
 
   it.each(
-    packages.flatMap((pkg) => sourceFiles(pkg).map((f) => [f.rel, f.text] as const)),
+    sources.map((f) => [f.rel, f.text] as const),
   )("%s calls the engine and the network only where paths are made relative", (rel, text) => {
     if (rel !== "integration-utils/src/pass.ts") {
-      expect(text, "calls processBatch itself; hand the engine to runObfuscationPass").not.toMatch(
-        /\.processBatch\(/,
-      );
+      expect(
+        callsEngine(text),
+        "calls the engine itself; hand it to runObfuscationPass, which makes every path relative",
+      ).toBeNull();
     }
     if (!NETWORK_ALLOWED.has(rel)) {
-      expect(text, "opens a network call outside the reviewed senders").not.toMatch(
-        /\bfetch(Impl)?\(|node:https?["']|\bundici\b|XMLHttpRequest/,
-      );
+      expect(text, "opens a network call outside the reviewed senders").not.toMatch(NETWORK);
     }
+  });
+
+  it.each(
+    tests.map((f) => [f.rel, f.text] as const),
+  )("%s puts every engine stub it writes behind the same path check", (_rel, text) => {
+    if (!ENGINE_STUB.test(text)) return;
+    expect(
+      text,
+      "defines its own processBatch; wrap the engine in guardedEngine() from test/core-fake.ts",
+    ).toContain("guardedEngine(");
+  });
+
+  it("recognises an engine call and a stub in the forms a front door could write them", () => {
+    const core = '"@afterpack/core"';
+    expect(
+      callsEngine(`import { processBatch } from ${core};\nprocessBatch(f, c);`),
+    ).not.toBeNull();
+    expect(callsEngine(`import { obfuscateAll as go } from ${core};\ngo(files);`)).not.toBeNull();
+    expect(callsEngine(`const core = await import(${core});\ncore.obfuscate(s);`)).not.toBeNull();
+    expect(callsEngine(`const { obfuscate } = require(${core});\nobfuscate(s);`)).not.toBeNull();
+    expect(
+      callsEngine(`import { processBatch } from ${core};\ngo({ engine: { processBatch } });`),
+    ).toBeNull();
+    expect(
+      callsEngine("class P { async obfuscate(c) {}\n go() { this.obfuscate(1); } }"),
+    ).toBeNull();
+    for (const sample of [
+      'import https from "node:https";',
+      'const h = require("http2");',
+      'import { connect } from "tls";',
+      'const n = await import("net");',
+    ]) {
+      expect(sample).toMatch(NETWORK);
+    }
+    expect("const engine = { async processBatch(inputs) { return x; } };").toMatch(ENGINE_STUB);
+    expect("const engine = { processBatch: () => Promise.reject(e) };").toMatch(ENGINE_STUB);
+    expect("const engine = { processBatch: vi.fn() };").toMatch(ENGINE_STUB);
+    expect("go({ engine: { processBatch, version } });").not.toMatch(ENGINE_STUB);
   });
 
   it.each(
@@ -342,6 +467,6 @@ describe("every front door reaches the cloud only through the path-safe pass", (
     const config = join(PACKAGES, pkg, "vitest.config.ts");
     expect(existsSync(config), `${pkg} has no vitest.config.ts`).toBe(true);
     expect(readFileSync(config, "utf8")).toMatch(/"@afterpack\/core":[\s\S]*?test\/core-fake\.ts/);
-    expect(sourceFiles(pkg).some((f) => f.text.includes("runObfuscationPass({"))).toBe(true);
+    expect(filesOf(pkg, false).some((f) => f.text.includes("runObfuscationPass({"))).toBe(true);
   });
 });
