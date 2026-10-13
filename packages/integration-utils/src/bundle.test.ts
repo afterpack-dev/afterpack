@@ -1,8 +1,11 @@
+import { gunzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import {
   type BundleEntryLike,
   type OutputBundleLike,
+  regenerateCompressedSiblings,
   sourceTypeForBundle,
+  sriPluginRefusal,
   stripBundleCssSourceMaps,
 } from "./bundle.js";
 
@@ -58,5 +61,37 @@ describe("sourceTypeForBundle", () => {
     expect(sourceTypeForBundle("system", [chunk])).toBeUndefined();
     expect(sourceTypeForBundle("iife", [chunk])).toBeUndefined();
     expect(sourceTypeForBundle(undefined, [chunk])).toBeUndefined();
+  });
+});
+
+describe("regenerateCompressedSiblings", () => {
+  it("rebuilds a .gz sibling of an obfuscated chunk from the obfuscated bytes", () => {
+    const bundle: OutputBundleLike = {
+      "index.js": { type: "chunk", fileName: "index.js", code: "OBF" },
+      "index.js.gz": { type: "asset", fileName: "index.js.gz", source: Buffer.from("stale") },
+      "vendor.js.gz": { type: "asset", fileName: "vendor.js.gz", source: Buffer.from("left") },
+    };
+    regenerateCompressedSiblings(bundle, new Set(["index.js"]), "test");
+    expect(gunzipSync(bundle["index.js.gz"].source as Uint8Array).toString()).toBe("OBF");
+    expect(Buffer.from(bundle["vendor.js.gz"].source as Uint8Array).toString()).toBe("left");
+  });
+
+  it("fails on a compressed sibling it cannot regenerate", () => {
+    const bundle: OutputBundleLike = {
+      "index.js": { type: "chunk", fileName: "index.js", code: "OBF" },
+      "index.js.zst": { type: "asset", fileName: "index.js.zst", source: Buffer.from("x") },
+    };
+    expect(() => regenerateCompressedSiblings(bundle, new Set(["index.js"]), "test")).toThrow(
+      /zst/,
+    );
+  });
+});
+
+describe("sriPluginRefusal", () => {
+  it("names an SRI plugin and stays silent otherwise", () => {
+    expect(sriPluginRefusal([{ name: "vite-plugin-sri" }], "afterpack-vite")).toMatch(/integrity/i);
+    expect(sriPluginRefusal([{ name: "@foo/subresource-integrity" }], "x")).not.toBeNull();
+    expect(sriPluginRefusal([{ name: "vite-plugin-react" }, { name: "legacy" }], "x")).toBeNull();
+    expect(sriPluginRefusal(undefined, "x")).toBeNull();
   });
 });

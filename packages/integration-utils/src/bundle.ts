@@ -1,4 +1,5 @@
 import { basename, resolve } from "node:path";
+import { brotliCompressSync, gzipSync } from "node:zlib";
 import type { InMemoryInput, InMemoryOutput } from "./pass.js";
 import type { ReportPolicy } from "./policy.js";
 import { type SourceType, sourceTypeForOutputFormat } from "./registry.js";
@@ -55,6 +56,55 @@ export function sourceTypeForBundle(
     if (entry.type !== "chunk") return undefined;
   }
   return sourceTypeForOutputFormat(format);
+}
+
+const COMPRESSED_SIBLING = /\.(gz|br|zst|zz|deflate)$/;
+
+function entryBytes(entry: BundleEntryLike): Buffer | null {
+  if (entry.type === "chunk") return entry.code === undefined ? null : Buffer.from(entry.code);
+  if (typeof entry.source === "string") return Buffer.from(entry.source);
+  if (entry.source !== undefined) return Buffer.from(entry.source);
+  return null;
+}
+
+export function regenerateCompressedSiblings(
+  bundle: OutputBundleLike,
+  obfuscated: ReadonlySet<string>,
+  label: string,
+): void {
+  for (const [name, entry] of Object.entries(bundle)) {
+    const match = COMPRESSED_SIBLING.exec(name);
+    if (match === null) continue;
+    const base = name.slice(0, -match[0].length);
+    if (!obfuscated.has(base)) continue;
+    const bytes = entryBytes(bundle[base]);
+    if (bytes === null) continue;
+    if (match[1] === "gz") entry.source = gzipSync(bytes);
+    else if (match[1] === "br") entry.source = brotliCompressSync(bytes);
+    else {
+      throw new Error(
+        `[${label}] ${name} is a ${match[1]} copy of the obfuscated ${base}, but AfterPack can only ` +
+          "regenerate .gz and .br. The precompressed file would hold the plain bytes. Drop the " +
+          `${match[1]} compressor, or move it after AfterPack.`,
+      );
+    }
+  }
+}
+
+const SRI_PLUGIN_NAME = /subresource|integrity|(?:^|[^a-z])sri(?:[^a-z]|$)/i;
+
+export function sriPluginRefusal(
+  plugins: readonly { name?: string }[] | undefined,
+  label: string,
+): string | null {
+  const found = (plugins ?? []).find((plugin) => SRI_PLUGIN_NAME.test(plugin?.name ?? ""));
+  if (!found) return null;
+  return (
+    `[${label}] the "${found.name}" plugin computes subresource integrity hashes, which AfterPack ` +
+    "cannot support: unless it runs strictly after obfuscation, the integrity attributes pin the " +
+    "plain bytes and the browser blocks every script. AfterPack cannot see plugin ordering, so it " +
+    "refuses. Remove the SRI plugin, or compute integrity from the deployed files after the build."
+  );
 }
 
 export function unsaltedAssetsWarning(
