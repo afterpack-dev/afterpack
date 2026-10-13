@@ -2243,6 +2243,65 @@ describe("runObfuscationPass hashedNames", () => {
   });
 });
 
+describe("runObfuscationPass cloud engine expectation", () => {
+  function cloudEngine(engineVersion: string): ObfuscationEngine {
+    return guardedEngine({
+      async processBatch(inputs) {
+        return {
+          files: inputs.map((i) => ({ path: i.path, code: `OBF:${i.source}`, status: "success" })),
+          totalFiles: inputs.length,
+          successCount: inputs.length,
+          failureCount: 0,
+          source: "cloud",
+          engineVersion,
+        };
+      },
+    });
+  }
+  const expectation = {
+    engineVersion: "0.3.0",
+    nonce: null,
+    cloud: true as const,
+    probedCloudVersion: "0.3.0",
+    probeFailed: false,
+  };
+
+  it("fails the build when the cloud engine differs from the version the names were derived for", async () => {
+    const file = join(outDir, "a.js");
+    writeFileSync(file, "x");
+    await expect(
+      runObfuscationPass({
+        files: [file],
+        inputs: new Map([[file, { source: "x" }]]),
+        emitToCaller: true,
+        engine: cloudEngine("0.3.1"),
+        label: "test",
+        cwd: root,
+        combinedProtectionMap: { buildDir: outDir },
+        cloudEngineExpectation: expectation,
+        logger: silentLogger().logger,
+      }),
+    ).rejects.toThrow(/0\.3\.0.*0\.3\.1|re-run/i);
+  });
+
+  it("accepts the build when the cloud engine matches the probe", async () => {
+    const file = join(outDir, "a.js");
+    writeFileSync(file, "x");
+    const result = await runObfuscationPass({
+      files: [file],
+      inputs: new Map([[file, { source: "x" }]]),
+      emitToCaller: true,
+      engine: cloudEngine("0.3.0"),
+      label: "test",
+      cwd: root,
+      combinedProtectionMap: { buildDir: outDir },
+      cloudEngineExpectation: expectation,
+      logger: silentLogger().logger,
+    });
+    expect(result.outputs?.[0].code).toBe("OBF:x");
+  });
+});
+
 describe("runObfuscationPass resolvedSeed", () => {
   it("uses a seed the caller already resolved instead of drawing another", async () => {
     const file = join(outDir, "a.js");

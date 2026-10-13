@@ -35,8 +35,19 @@ import {
   scanDirectives,
 } from "./directives.js";
 import { detectGitContext } from "./git.js";
-import { afterpackHashSalt, isCloudBuild, readEngineVersion } from "./hash-salt.js";
-import { type HashedNamesOptions, type HashedNamesPlan, planHashedNames } from "./hashed-names.js";
+import {
+  afterpackHashSalt,
+  cloudEngineMismatch,
+  readEngineVersion,
+  resolveSaltEngine,
+  type SaltEngine,
+} from "./hash-salt.js";
+import {
+  type HashedNameInput,
+  type HashedNamesOptions,
+  type HashedNamesPlan,
+  planHashedNames,
+} from "./hashed-names.js";
 import { afterpackHome, describeUnanchoredHome } from "./home.js";
 import { type CapturedModule, colorRegions, type DecodedSourceMap } from "./map-color.js";
 import { type CloudNotice, reportNotices, sanitizeServerText } from "./notices.js";
@@ -177,6 +188,7 @@ export interface ObfuscationPassOptions {
   afterWrite?: (writtenFiles: string[]) => void;
   resolvedSeed?: ResolvedBuildSeed;
   hashedNames?: HashedNamesOptions;
+  cloudEngineExpectation?: SaltEngine;
   sourceMapSweepDir?: string | null;
   outputSweep?: boolean;
   diagnostics?: DiagnosticsVerbosity;
@@ -212,6 +224,7 @@ export interface ObfuscationPassResult {
   diagnostics: DiagnosticsSummary;
   transformedFiles: string[];
   renamed: Map<string, string>;
+  hashSalt: string | null;
   outputs?: InMemoryOutput[];
 }
 
@@ -550,23 +563,31 @@ export async function runObfuscationPass(
     engine: options.engineConfig,
     renameGlobals: capture.renameGlobals,
   });
+  const saltEngine: SaltEngine | null =
+    options.cloudEngineExpectation ??
+    (options.hashedNames ? await resolveSaltEngine(env, localEngineVersion) : null);
   let namesPlan: HashedNamesPlan | null = null;
-  if (options.hashedNames && !options.emitToCaller) {
+  let hashSalt: string | null = null;
+  if (options.hashedNames && saltEngine && !options.emitToCaller) {
     const { seed: _seed, ...configWithoutSeed } = engineConfig;
+    const namedInputs = new Map<string, HashedNameInput>(
+      inputs.map((input) => [input.path, { source: input.source, regions: input.regions }]),
+    );
+    hashSalt = afterpackHashSalt({
+      seed,
+      engine: saltEngine,
+      settings: {
+        engine: configWithoutSeed,
+        sourceMap: policy.sourceMap,
+        emitSourceMappingURL: policy.emitSourceMappingURL,
+      },
+    });
     namesPlan = planHashedNames({
       options: options.hashedNames,
-      inputs: new Map(inputs.map((input) => [input.path, input.source])),
-      salt: afterpackHashSalt({
-        seed,
-        engineVersion: localEngineVersion,
-        settings: {
-          engine: configWithoutSeed,
-          sourceMap: policy.sourceMap,
-          emitSourceMappingURL: policy.emitSourceMappingURL,
-        },
-        cloud: isCloudBuild(env),
-      }),
+      inputs: namedInputs,
+      salt: hashSalt,
     });
+    namesPlan.preflight();
     for (const input of inputs) {
       const path = namesPlan.renamed.get(input.path) ?? input.path;
       const source = namesPlan.rewrite(input.source);
@@ -633,6 +654,13 @@ export async function runObfuscationPass(
   const engineVersion =
     (batch.source === "cloud" ? safeVersionString(batch.engineVersion) : null) ??
     localEngineVersion;
+  if (saltEngine) {
+    const mismatch = cloudEngineMismatch(
+      saltEngine,
+      batch.source === "cloud" ? safeVersionString(batch.engineVersion) : null,
+    );
+    if (mismatch) throw new Error(prefix(mismatch));
+  }
   if (telemetry && telemetryEnabled) {
     const facts: TelemetryFacts = {
       label,
@@ -825,6 +853,7 @@ export async function runObfuscationPass(
     diagnostics: diagnosticsSummary,
     transformedFiles,
     renamed: namesPlan?.renamed ?? new Map(),
+    hashSalt,
     ...(options.emitToCaller ? { outputs } : {}),
   };
 }

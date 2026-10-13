@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -11,7 +12,13 @@ import {
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { afterpackHashSalt, prepareHashSalt, saltSettings } from "./hash-salt.js";
+import {
+  afterpackHashSalt,
+  cloudEngineMismatch,
+  prepareHashSalt,
+  type SaltEngine,
+  saltSettings,
+} from "./hash-salt.js";
 import { deriveHashToken, type HashTokenOf, planHashedNames } from "./hashed-names.js";
 import { resetBuildSessions } from "./seed.js";
 
@@ -74,9 +81,9 @@ describe("planHashedNames", () => {
     const plan = planHashedNames({
       options: { root, tokenOf: DASH_TOKEN, skip: (rel) => rel === "cache" },
       inputs: new Map([
-        [main, 'import("./lazy-fedcba9876543210.js");const m={1:"fedcba9876543210"};'],
-        [lazy, "export const y=1;"],
-        [plain, "export const z=1;"],
+        [main, { source: 'import("./lazy-fedcba9876543210.js");const m={1:"fedcba9876543210"};' }],
+        [lazy, { source: "export const y=1;" }],
+        [plain, { source: "export const z=1;" }],
       ]),
       salt: "s",
     });
@@ -115,7 +122,7 @@ describe("planHashedNames", () => {
 
     const plan = planHashedNames({
       options: { root, tokenOf: DASH_TOKEN },
-      inputs: new Map([[main, "x"]]),
+      inputs: new Map([[main, { source: "x" }]]),
       salt: "s",
     });
     plan.apply();
@@ -138,7 +145,7 @@ describe("planHashedNames", () => {
     write("index.html", '<script src="app.js">');
     const plan = planHashedNames({
       options: { root, tokenOf: DASH_TOKEN },
-      inputs: new Map([[plain, "x"]]),
+      inputs: new Map([[plain, { source: "x" }]]),
       salt: "s",
     });
     expect(plan.renamed.size).toBe(0);
@@ -149,24 +156,87 @@ describe("planHashedNames", () => {
     const main = write("static/chunks/main.js", "x");
     const plan = planHashedNames({
       options: { root, tokenOf: () => "0123456789abcdef" },
-      inputs: new Map([[main, "x"]]),
+      inputs: new Map([[main, { source: "x" }]]),
       salt: "s",
     });
     expect(plan.renamed.size).toBe(0);
     expect(basename(main)).toBe("main.js");
   });
+
+  it("gives an input a different name when its directive regions change", () => {
+    const main = write("static/chunks/main-0123456789abcdef.js", "x");
+    const plan = (regions?: { start: number; end: number }[]) =>
+      planHashedNames({
+        options: { root, tokenOf: DASH_TOKEN },
+        inputs: new Map([[main, { source: "x", regions }]]),
+        salt: "s",
+      }).renamed.get(main);
+    const none = plan();
+    expect(plan()).toBe(none);
+    expect(plan([{ start: 0, end: 4 }])).not.toBe(none);
+    expect(plan([{ start: 0, end: 4 }])).toBe(plan([{ start: 0, end: 4 }]));
+    expect(plan([{ start: 0, end: 9 }])).not.toBe(plan([{ start: 0, end: 4 }]));
+  });
+
+  it("checks writability up front and never leaves a half-applied tree", () => {
+    const main = write("static/chunks/main-0123456789abcdef.js", "x");
+    write("static/chunks/manifest.json", "main-0123456789abcdef.js");
+    const plan = planHashedNames({
+      options: { root, tokenOf: DASH_TOKEN },
+      inputs: new Map([[main, { source: "x" }]]),
+      salt: "s",
+    });
+    chmodSync(join(root, "static/chunks"), 0o555);
+    try {
+      expect(() => plan.preflight()).toThrow(/not writable/);
+      expect(() => plan.apply()).toThrow(/not writable/);
+    } finally {
+      chmodSync(join(root, "static/chunks"), 0o755);
+    }
+    expect(readFileSync(join(root, "static/chunks/manifest.json"), "utf8")).toBe(
+      "main-0123456789abcdef.js",
+    );
+    expect(existsSync(join(root, "static/chunks/main-0123456789abcdef.js"))).toBe(true);
+  });
+
+  it("writes each rewritten reference file through a temp file", () => {
+    const main = write("static/chunks/main-0123456789abcdef.js", "x");
+    write("manifest.json", "main-0123456789abcdef.js");
+    const plan = planHashedNames({
+      options: { root, tokenOf: DASH_TOKEN },
+      inputs: new Map([[main, { source: "x" }]]),
+      salt: "s",
+    });
+    plan.apply();
+    const names = readdirSync(root);
+    expect(names.some((name) => name.endsWith(".afterpack-tmp"))).toBe(false);
+    expect(readFileSync(join(root, "manifest.json"), "utf8")).toBe(
+      `main-${deriveHashToken("0123456789abcdef", "s")}.js`,
+    );
+  });
 });
 
+const LOCAL: SaltEngine = {
+  engineVersion: "0.2.4",
+  nonce: null,
+  cloud: false,
+  probedCloudVersion: null,
+  probeFailed: false,
+};
+
 describe("afterpackHashSalt", () => {
-  const base = { seed: 1, engineVersion: "0.2.4", settings: { preset: "light" }, cloud: false };
+  const base = { seed: 1, engine: LOCAL, settings: { preset: "light" } };
 
   it("changes with every input that changes the obfuscated bytes", () => {
     const salt = afterpackHashSalt(base);
     expect(afterpackHashSalt({ ...base })).toBe(salt);
     expect(afterpackHashSalt({ ...base, seed: 2 })).not.toBe(salt);
-    expect(afterpackHashSalt({ ...base, engineVersion: "0.2.5" })).not.toBe(salt);
+    expect(afterpackHashSalt({ ...base, engine: { ...LOCAL, engineVersion: "0.2.5" } })).not.toBe(
+      salt,
+    );
     expect(afterpackHashSalt({ ...base, settings: { preset: "hard" } })).not.toBe(salt);
-    expect(afterpackHashSalt({ ...base, cloud: true })).not.toBe(salt);
+    expect(afterpackHashSalt({ ...base, engine: { ...LOCAL, cloud: true } })).not.toBe(salt);
+    expect(afterpackHashSalt({ ...base, engine: { ...LOCAL, nonce: "n" } })).not.toBe(salt);
   });
 
   it("ignores the order settings were written in", () => {
@@ -195,57 +265,123 @@ describe("afterpackHashSalt", () => {
   });
 });
 
+function versionFetch(engineVersion: string | null): typeof fetch {
+  return (async () => ({
+    ok: true,
+    json: async () => ({ engineVersion }),
+  })) as unknown as typeof fetch;
+}
+
+const failFetch = (async () => {
+  throw new Error("offline");
+}) as unknown as typeof fetch;
+
 describe("prepareHashSalt", () => {
-  it("resolves one seed per build and salts with it", () => {
+  it("resolves one seed per build and salts with it", async () => {
     const env: Record<string, string | undefined> = {};
-    const first = prepareHashSalt({
+    const first = await prepareHashSalt({
       seed: 7,
       root,
       leg: "dist",
-      engineVersion: "0.2.4",
+      localEngineVersion: "0.2.4",
       settings: {},
       env,
     });
     expect(first.resolvedSeed.seed).toBe(7);
     expect(first.resolvedSeed.origin).toBe("option");
     resetBuildSessions();
-    const again = prepareHashSalt({
+    const again = await prepareHashSalt({
       seed: 7,
       root,
       leg: "dist",
-      engineVersion: "0.2.4",
+      localEngineVersion: "0.2.4",
       settings: {},
       env,
     });
     expect(again.salt).toBe(first.salt);
   });
 
-  it("draws a fresh salt for every unpinned build", () => {
+  it("draws a fresh salt for every unpinned build", async () => {
     const env: Record<string, string | undefined> = {};
-    const input = { seed: undefined, root, leg: "dist", engineVersion: "0.2.4", settings: {}, env };
-    const first = prepareHashSalt(input);
-    const second = prepareHashSalt(input);
+    const input = {
+      seed: undefined,
+      root,
+      leg: "dist",
+      localEngineVersion: "0.2.4",
+      settings: {},
+      env,
+    };
+    const first = await prepareHashSalt(input);
+    const second = await prepareHashSalt(input);
     expect(first.resolvedSeed.origin).toBe("fresh");
     expect(second.salt).not.toBe(first.salt);
   });
 
-  it("marks a build that will run on the cloud engine", () => {
-    const local = prepareHashSalt({
+  it("probes the cloud engine version and folds it into the salt", async () => {
+    const at = async (engineVersion: string) =>
+      (
+        await prepareHashSalt({
+          seed: 7,
+          root,
+          leg: "dist",
+          localEngineVersion: "0.2.4",
+          settings: {},
+          env: { AFTERPACK_KEY: "k" },
+          fetchImpl: versionFetch(engineVersion),
+        })
+      ).salt;
+    const local = await prepareHashSalt({
       seed: 7,
       root,
       leg: "dist",
-      engineVersion: "0.2.4",
+      localEngineVersion: "0.2.4",
       settings: {},
       env: {},
     });
-    const cloud = prepareHashSalt({
+    const cloudA = await at("0.3.0");
+    const cloudB = await at("0.4.0");
+    expect(cloudA).not.toBe(local.salt);
+    expect(cloudB).not.toBe(cloudA);
+  });
+
+  it("warns once and draws a fresh nonce when the probe fails", async () => {
+    const warnings: string[] = [];
+    const input = {
       seed: 7,
       root,
       leg: "dist",
-      engineVersion: "0.2.4",
+      localEngineVersion: "0.2.4",
       settings: {},
       env: { AFTERPACK_KEY: "k" },
-    });
-    expect(cloud.salt).not.toBe(local.salt);
+      warn: (message: string) => warnings.push(message),
+      fetchImpl: failFetch,
+    };
+    const first = await prepareHashSalt(input);
+    const second = await prepareHashSalt(input);
+    expect(first.engine.probeFailed).toBe(true);
+    expect(first.engine.nonce).not.toBeNull();
+    expect(second.salt).not.toBe(first.salt);
+    expect(warnings.filter((message) => message.includes("cloud engine version"))).toHaveLength(2);
+  });
+});
+
+describe("cloudEngineMismatch", () => {
+  const cloud: SaltEngine = {
+    engineVersion: "0.3.0",
+    nonce: null,
+    cloud: true,
+    probedCloudVersion: "0.3.0",
+    probeFailed: false,
+  };
+
+  it("flags a build that ran on a different cloud engine than the probe saw", () => {
+    expect(cloudEngineMismatch(cloud, "0.3.1")).toMatch(/0\.3\.0.*0\.3\.1|rerun|re-run/i);
+  });
+
+  it("stays silent when the versions match, the probe failed, or the build was local", () => {
+    expect(cloudEngineMismatch(cloud, "0.3.0")).toBeNull();
+    expect(cloudEngineMismatch({ ...cloud, probedCloudVersion: null }, "0.3.1")).toBeNull();
+    expect(cloudEngineMismatch(LOCAL, "0.3.1")).toBeNull();
+    expect(cloudEngineMismatch(cloud, null)).toBeNull();
   });
 });

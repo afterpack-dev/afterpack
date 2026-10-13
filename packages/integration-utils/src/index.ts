@@ -11,7 +11,9 @@ export {
   type BundleJs,
   collectBundleJs,
   type OutputBundleLike,
+  regenerateCompressedSiblings,
   sourceTypeForBundle,
+  sriPluginRefusal,
   stripBundleCssSourceMaps,
   unsaltedAssetsWarning,
 } from "./bundle.js";
@@ -62,6 +64,8 @@ export {
   type PrepareHashSaltInput,
   prepareHashSalt,
   readEngineVersion,
+  reportPolicySaltBits,
+  type SaltEngine,
   saltSettings,
 } from "./hash-salt.js";
 export type { HashedNamesOptions, HashTokenOf } from "./hashed-names.js";

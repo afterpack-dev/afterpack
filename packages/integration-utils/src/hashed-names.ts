@@ -1,7 +1,17 @@
 import { createHash } from "node:crypto";
-import { type Dirent, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import {
+  accessSync,
+  constants,
+  type Dirent,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, dirname, join, relative, sep } from "node:path";
 import { AFTERPACK_DIR } from "./home.js";
+import type { RegionConfig } from "./policy.js";
 
 export type HashTokenOf = (relativePath: string) => string | null;
 
@@ -11,10 +21,16 @@ export interface HashedNamesOptions {
   skip?: (relativePath: string) => boolean;
 }
 
+export interface HashedNameInput {
+  source: string;
+  regions?: RegionConfig[];
+}
+
 export interface HashedNamesPlan {
   tokens: Map<string, string>;
   renamed: Map<string, string>;
   rewrite(text: string): string;
+  preflight(): void;
   apply(): void;
 }
 
@@ -61,11 +77,15 @@ function alphabetOf(token: string): string {
   return ALNUM;
 }
 
-export function deriveHashToken(token: string, salt: string): string {
+function regionsKey(regions: RegionConfig[] | undefined): string {
+  return regions && regions.length > 0 ? JSON.stringify(regions) : "";
+}
+
+export function deriveHashToken(token: string, salt: string, regions = ""): string {
   const alphabet = alphabetOf(token);
   let out = "";
   for (let round = 0; out.length < token.length; round++) {
-    const bytes = createHash("sha256").update(`${salt}\0${token}\0${round}`).digest();
+    const bytes = createHash("sha256").update(`${salt}\0${token}\0${regions}\0${round}`).digest();
     for (const byte of bytes) {
       if (out.length === token.length) break;
       out += alphabet[byte % alphabet.length];
@@ -131,9 +151,18 @@ function isCandidate(path: string): boolean {
   return dot < 0 || !BINARY_EXTENSIONS.has(name.slice(dot));
 }
 
+function writableDir(dir: string): boolean {
+  try {
+    accessSync(dir, constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function planHashedNames(input: {
   options: HashedNamesOptions;
-  inputs: ReadonlyMap<string, string>;
+  inputs: ReadonlyMap<string, HashedNameInput>;
   salt: string;
 }): HashedNamesPlan {
   const { root, tokenOf } = input.options;
@@ -146,15 +175,15 @@ export function planHashedNames(input: {
     if (token === null || token.length < MIN_TOKEN_LENGTH) return null;
     return basename(path).includes(token) ? token : null;
   };
-  const addToken = (token: string): boolean => {
+  const addToken = (token: string, regions?: RegionConfig[]): boolean => {
     if (tokens.has(token)) return false;
-    tokens.set(token, deriveHashToken(token, input.salt));
+    tokens.set(token, deriveHashToken(token, input.salt, regionsKey(regions)));
     return true;
   };
 
-  for (const path of input.inputs.keys()) {
+  for (const [path, { regions }] of input.inputs) {
     const token = tokenOfPath(path);
-    if (token !== null) addToken(token);
+    if (token !== null) addToken(token, regions);
   }
 
   const others = new Map<string, string>();
@@ -208,14 +237,35 @@ export function planHashedNames(input: {
     writes.push({ from: path, to, text: rewrite(others.get(path) as string) });
   }
 
+  const preflight = (): void => {
+    const unwritable = new Set<string>();
+    for (const [from, to] of renamed) {
+      if (!writableDir(dirname(from))) unwritable.add(dirname(from));
+      if (!writableDir(dirname(to))) unwritable.add(dirname(to));
+    }
+    for (const write of writes)
+      if (!writableDir(dirname(write.to))) unwritable.add(dirname(write.to));
+    if (unwritable.size > 0) {
+      throw new Error(
+        `cannot rename content-hashed files: these directories are not writable: ${[...unwritable]
+          .sort()
+          .join(", ")}`,
+      );
+    }
+  };
+
   return {
     tokens,
     renamed,
     rewrite,
+    preflight,
     apply() {
+      preflight();
       for (const write of writes) {
-        writeFileSync(write.from, write.text);
-        if (write.to !== write.from) renameSync(write.from, write.to);
+        const tmp = `${write.to}.afterpack-tmp`;
+        writeFileSync(tmp, write.text);
+        renameSync(tmp, write.to);
+        if (write.to !== write.from) rmSync(write.from, { force: true });
       }
     },
   };

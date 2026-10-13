@@ -337,6 +337,7 @@ function filesOf(pkg: string, tests: boolean): { rel: string; text: string }[] {
 
 const NETWORK_ALLOWED = new Set([
   "integration-utils/src/telemetry.ts",
+  "integration-utils/src/hash-salt.ts",
   "cli/src/sse.ts",
   "cli/src/audit.ts",
 ]);
