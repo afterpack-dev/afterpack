@@ -66,7 +66,7 @@ function recomputeNgswHashTable(browserDir: string): void {
           "disable the service worker for this build.",
       );
     }
-    table[url] = digest(readFileSync(file), "sha256", "hex").slice(0, 40);
+    table[url] = createHash("sha1").update(readFileSync(file)).digest("hex");
   }
   writeFileSync(ngsw, `${JSON.stringify(config, null, 2)}\n`);
 }
@@ -90,6 +90,6 @@ function refuseStaleServerManifest(outputRoot: string): void {
 
 export function recomputeAngularIntegrity(outputRoot: string, browserDir: string): void {
   refuseStaleServerManifest(outputRoot);
-  recomputeNgswHashTable(browserDir);
   recomputeHtmlIntegrity(browserDir);
+  recomputeNgswHashTable(browserDir);
 }

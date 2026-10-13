@@ -17,7 +17,7 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-function sha(algo: "sha256" | "sha384", bytes: string, enc: "hex" | "base64"): string {
+function sha(algo: "sha1" | "sha256" | "sha384", bytes: string, enc: "hex" | "base64"): string {
   return createHash(algo).update(bytes).digest(enc);
 }
 
@@ -30,7 +30,24 @@ describe("recomputeAngularIntegrity ngsw.json", () => {
     );
     recomputeAngularIntegrity(root, browserDir);
     const table = JSON.parse(readFileSync(join(browserDir, "ngsw.json"), "utf8")).hashTable;
-    expect(table["/main-ABCD2345.js"]).toBe(sha("sha256", "OBF main", "hex").slice(0, 40));
+    expect(table["/main-ABCD2345.js"]).toBe(sha("sha1", "OBF main", "hex"));
+  });
+
+  it("hashes index.html after its integrity attributes are rewritten", () => {
+    writeFileSync(join(browserDir, "main-ABCD2345.js"), "OBF main");
+    writeFileSync(
+      join(browserDir, "index.html"),
+      '<script src="main-ABCD2345.js" integrity="sha384-stale"></script>',
+    );
+    writeFileSync(
+      join(browserDir, "ngsw.json"),
+      JSON.stringify({ hashTable: { "/index.html": "0".repeat(40) } }),
+    );
+    recomputeAngularIntegrity(root, browserDir);
+    const table = JSON.parse(readFileSync(join(browserDir, "ngsw.json"), "utf8")).hashTable;
+    const html = readFileSync(join(browserDir, "index.html"), "utf8");
+    expect(html).toContain(`integrity="sha384-${sha("sha384", "OBF main", "base64")}"`);
+    expect(table["/index.html"]).toBe(sha("sha1", html, "hex"));
   });
 
   it("refuses when ngsw.json names a file the obfuscated output no longer has", () => {
