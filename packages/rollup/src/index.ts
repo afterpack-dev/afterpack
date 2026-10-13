@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { dirname } from "node:path";
 import { processBatch, version } from "@afterpack/core";
 import {
@@ -12,6 +13,8 @@ import {
   passSettings,
   prepareHashSalt,
   readEngineVersion,
+  regenerateCompressedSiblings,
+  reportPolicySaltBits,
   resolveClientIdentity,
   resolvePluginConfig,
   runObfuscationPass,
@@ -56,6 +59,19 @@ export function afterpackRollup(options: AfterpackRollupOptions = {}): Plugin {
   const hashSaltByOutDir = new Map<string, PreparedHashSalt>();
   let latestSalt: string | undefined;
 
+  const directiveSalt = (moduleIds: readonly string[] | undefined): string => {
+    if (!moduleIds || preMinifyCapturedModulesById.size === 0) return "";
+    const parts: string[] = [];
+    for (const id of moduleIds) {
+      const cap = preMinifyCapturedModulesById.get(id);
+      if (cap && (cap.directives.length > 0 || cap.renameGlobals)) {
+        parts.push(JSON.stringify({ id, d: cap.directives, g: cap.renameGlobals }));
+      }
+    }
+    if (parts.length === 0) return "";
+    return createHash("sha256").update(parts.sort().join("\0")).digest("hex").slice(0, 16);
+  };
+
   return {
     name: "afterpack-rollup",
 
@@ -68,20 +84,27 @@ export function afterpackRollup(options: AfterpackRollupOptions = {}): Plugin {
       if (!autorun) return;
       const outDir = outputDir(outputOptions);
       if (!outDir) return;
-      const prepared = prepareHashSalt({
+      const prepared = await prepareHashSalt({
         seed: settings.seed,
         root: process.cwd(),
         leg: outDir,
-        engineVersion: await readEngineVersion({ version }),
-        settings: saltSettings(passSettings(resolved)),
+        localEngineVersion: await readEngineVersion({ version }),
+        settings: saltSettings(passSettings(resolved), {
+          ...reportPolicySaltBits(
+            process.env,
+            settings.artifactOptions,
+            Boolean(outputOptions.sourcemap),
+          ),
+        }),
         warn: (message) => console.warn(message),
       });
       hashSaltByOutDir.set(outDir, prepared);
       latestSalt = prepared.salt;
     },
 
-    augmentChunkHash() {
-      return latestSalt;
+    augmentChunkHash(chunk?: { moduleIds?: readonly string[] }) {
+      if (latestSalt === undefined) return undefined;
+      return latestSalt + directiveSalt(chunk?.moduleIds);
     },
 
     transform: {
@@ -157,6 +180,7 @@ export function afterpackRollup(options: AfterpackRollupOptions = {}): Plugin {
           label: "afterpack-rollup",
           cwd,
           resolvedSeed: hashSaltByOutDir.get(outDir)?.resolvedSeed,
+          cloudEngineExpectation: hashSaltByOutDir.get(outDir)?.engine,
           startedAt: startedBeforeBundleWalk,
           capturedByFile: capturedByFile.size > 0 ? capturedByFile : undefined,
           combinedProtectionMap: { buildDir: outDir },
@@ -170,15 +194,22 @@ export function afterpackRollup(options: AfterpackRollupOptions = {}): Plugin {
           },
         });
 
+        const obfuscated = new Set<string>();
         for (const out of result.outputs ?? []) {
           const entry = entries.get(out.path);
           if (entry) {
             applyBundleOutput(bundle as unknown as OutputBundleLike, entry, out, result.policy);
+            obfuscated.add(entry.fileName);
           }
         }
         if (!result.policy.sourceMap) {
           stripBundleCssSourceMaps(bundle as unknown as OutputBundleLike);
         }
+        regenerateCompressedSiblings(
+          bundle as unknown as OutputBundleLike,
+          obfuscated,
+          "afterpack-rollup",
+        );
         if (result.deferredReceipt) deferredReceiptByOutDir.set(outDir, result.deferredReceipt);
       },
     },
