@@ -97,6 +97,7 @@ export {
   afterpackHome,
   DIAG_AFTERPACK_DIR_IN_OUTPUT,
   DIAG_RECEIPT_UNWRITABLE,
+  isWithinDir,
 } from "./home.js";
 export type { CapturedModule } from "./map-color.js";
 export {

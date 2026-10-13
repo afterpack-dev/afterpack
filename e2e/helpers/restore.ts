@@ -86,10 +86,11 @@ export function expectKilledRunRestores(
   fixture: Fixture,
   cliTarget: string,
   treeDir: string = cliTarget,
-  writes = 2,
+  kill: { writes?: number; removes?: number } = { writes: 2 },
 ): void {
   const seed = String(readExpectations(fixture).seed);
-  const log = (step: string) => `${fixture.buildLog}.kill-${step}`;
+  const point = kill.removes ? `remove-${kill.removes}` : `write-${kill.writes ?? 0}`;
+  const log = (step: string) => `${fixture.buildLog}.kill-${point}-${step}`;
   const tree = join(fixture.dir, treeDir);
   withFixtureDirLock(fixture.dir, () => {
     try {
@@ -106,7 +107,8 @@ export function expectKilledRunRestores(
             ...process.env,
             ...fixture.env,
             AFTERPACK_telemetry_enabled: "false",
-            AFTERPACK_E2E_KILL_AFTER_WRITES: String(writes),
+            AFTERPACK_E2E_KILL_AFTER_WRITES: String(kill.writes ?? 0),
+            AFTERPACK_E2E_KILL_AFTER_REMOVES: String(kill.removes ?? 0),
             AFTERPACK_E2E_KILL_UNDER: realpathSync(tree),
           },
         },

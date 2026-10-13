@@ -94,8 +94,13 @@ write a receipt.
 Puts back the original files from `.afterpack/backups/`, under their original names, and undoes a
 run that stopped partway. A run that stopped partway is undone only while every file still holds
 its original bytes or the bytes the run was about to write; once the output is rebuilt, the next
-`afterpack` run discards that backup and says so. A file that changed since the run is skipped and named, and the command exits
-`1`.
+`afterpack` run discards that backup and says so. When only part of the output was rebuilt,
+nothing is discarded or restored, and the run names the rebuilt files. A file that changed since
+the run is skipped and named, and the command exits `1`. Point restore at one build directory to
+undo only the run over it.
+
+Limits: AfterPack does not fsync what it writes, so a power loss during a run or a restore can
+leave files that neither the backup nor `afterpack verify` can vouch for; rebuild after one.
 
 ## `afterpack audit <url>`
 

@@ -49,6 +49,14 @@ test.describe("`afterpack restore` undoes the renames", () => {
       expectKilledRunRestores(app, ".next/static/chunks", ".next");
     },
   );
+
+  test(
+    "restore gives back the plain .next tree after a run killed while removing an old name",
+    { tag: "@node" },
+    () => {
+      expectKilledRunRestores(app, ".next/static/chunks", ".next", { removes: 1 });
+    },
+  );
 });
 
 hashedNamesTest();

@@ -1,12 +1,6 @@
-import {
-  existsSync,
-  lstatSync,
-  readFileSync,
-  realpathSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, lstatSync, readFileSync, realpathSync, unlinkSync } from "node:fs";
 import { dirname, isAbsolute, resolve, sep } from "node:path";
+import { writeFileAtomic } from "./atomic-write.js";
 
 const SOURCE_MAPPING_URL_RE = /\/\/[#@]\s*sourceMappingURL=(\S+)\s*$/gm;
 
@@ -169,7 +163,7 @@ export function stripCssSourceMappingURLs(paths: Iterable<string>): number {
     }
     const without = withoutCssSourceMappingURL(css);
     if (without === css) continue;
-    writeFileSync(path, without);
+    writeFileAtomic(path, without);
     stripped++;
   }
   return stripped;

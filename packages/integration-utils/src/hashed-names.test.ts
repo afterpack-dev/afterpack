@@ -295,6 +295,29 @@ describe("findHashTokenReference", () => {
     });
   });
 
+  it("looks inside server dot-folders, never inside .git or node_modules", () => {
+    const main = write("build/assets/main-0123456789abcdef.js", "x");
+    const options = { root: join(root, "build"), tokenOf: DASH_TOKEN };
+    write(".git/objects/main-0123456789abcdef", "main-0123456789abcdef.js");
+    write("node_modules/x/index.js", "main-0123456789abcdef.js");
+    expect(
+      findHashTokenReference(
+        [join(root, ".git"), join(root, "node_modules")],
+        options,
+        [main],
+        LIMITS,
+      ),
+    ).toEqual({ found: null, truncated: false });
+    const server = write(
+      ".svelte-kit/output/server/index.js",
+      '"/assets/main-0123456789abcdef.js"',
+    );
+    expect(findHashTokenReference([join(root, ".svelte-kit")], options, [main], LIMITS)).toEqual({
+      found: server,
+      truncated: false,
+    });
+  });
+
   it("reports a scan it had to cut short", () => {
     const main = write("build/client/main-0123456789abcdef.js", "x");
     for (let i = 0; i < 5; i++) write(`build/server/chunk-${i}.js`, "nothing");

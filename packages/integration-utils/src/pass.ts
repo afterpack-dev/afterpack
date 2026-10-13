@@ -764,7 +764,9 @@ export async function runObfuscationPass(
         const rewritten = namesPlan?.rewrites.get(css);
         const text = rewritten?.text ?? readFileSync(css, "utf8");
         const stripped = withoutCssSourceMappingURL(text);
-        if (stripped !== text) expectState(rewritten?.to ?? css, sha256Hex(stripped));
+        if (stripped === text) continue;
+        expectState(rewritten?.to ?? css, sha256Hex(stripped));
+        expectState(stagedPath(rewritten?.to ?? css), null);
       }
     }
     options.beforeWrite({ renamed: namesPlan?.renamed ?? new Map(), planned });

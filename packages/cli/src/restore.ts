@@ -3,23 +3,29 @@ import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 import {
   afterpackHome,
   buildDirKey,
+  isWithinDir,
   PROTECTION_RECEIPTS_DIR,
+  stagedPath,
   writeFileAtomic,
 } from "@afterpack/integration-utils";
 import { CONTACT_FOOTER } from "./args.js";
 import {
   absoluteFilePath,
+  addScratch,
   type BackupManifest,
   type BackupManifestFile,
   type BackupSlot,
   backupSlot,
+  copiesDir,
   copyPath,
   currentSha256,
   discardSlot,
   entryStatus,
   findBackupProjectRoot,
   hasBackup,
+  journalCondition,
   legacySlot,
+  mixedJournalFix,
   readBackupManifest,
   recoverSlot,
   slotsUnder,
@@ -102,7 +108,15 @@ function isRecordedReceipt(projectRoot: string, receiptPath: string): boolean {
 const NOTHING_TO_RESTORE_FIX =
   "Run `afterpack <path>` first — restore reads the backup manifest that run writes.";
 
-function selectSlots(dir: string): BackupSlot[] {
+type Selection = { slots: BackupSlot[] } | { elsewhere: string[] };
+
+function protectedRootOf(slot: BackupSlot): string | null {
+  recoverSlot(slot);
+  const result = readBackupManifest(slot);
+  return result.status === "ok" ? result.manifest.protectedRoot : null;
+}
+
+function selectSlots(dir: string): Selection {
   const own: BackupSlot[] = [];
   for (const fileTarget of [false, true]) {
     let home: ReturnType<typeof afterpackHome>;
@@ -123,9 +137,23 @@ function selectSlots(dir: string): BackupSlot[] {
       own.push(legacy);
     }
   }
-  if (own.length > 0) return own;
+  if (own.length > 0) return { slots: own };
   const projectRoot = findBackupProjectRoot(dir);
-  return projectRoot === null ? [] : slotsUnder(projectRoot);
+  if (projectRoot === null) return { slots: [] };
+  const all = slotsUnder(projectRoot);
+  const covering = all.filter((slot) => {
+    const root = protectedRootOf(slot);
+    if (root === null) return true;
+    const real = realDir(root);
+    return isWithinDir(dir, real) || isWithinDir(real, dir);
+  });
+  if (covering.length > 0) return { slots: covering };
+  return {
+    elsewhere: all
+      .map(protectedRootOf)
+      .filter((root): root is string => root !== null)
+      .sort(),
+  };
 }
 
 interface LoadedSlot {
@@ -157,7 +185,18 @@ export function restore(deps: RestoreDeps): ExitCode {
     );
   }
 
-  const slots = selectSlots(realDir(requestedPath));
+  const selection = selectSlots(realDir(requestedPath));
+  if ("elsewhere" in selection) {
+    return fail(
+      deps,
+      EXIT.failure,
+      "NOTHING_TO_RESTORE",
+      `No backup covers ${requested}`,
+      "Point restore at one of the directories below, or at the project root to restore them all.",
+      selection.elsewhere.map((root) => `backed up: ${displayDir(cwd, root)}`),
+    );
+  }
+  const slots = selection.slots;
   if (slots.length === 0) {
     return fail(
       deps,
@@ -218,7 +257,14 @@ function restoreSlots(deps: RestoreDeps, slots: BackupSlot[]): ExitCode {
 
   const mismatched: string[] = [];
   let staleInterrupted = false;
+  let mixed: BackupSlot | null = null;
   for (const item of loaded) {
+    if (
+      item.manifest.state === "applying" &&
+      journalCondition(item.slot.projectRoot, item.manifest) === "mixed"
+    ) {
+      mixed ??= item.slot;
+    }
     for (const entry of item.manifest.files) {
       const status = entryStatus(item.slot.projectRoot, item.manifest, entry);
       if (status === "unexpected") {
@@ -238,10 +284,12 @@ function restoreSlots(deps: RestoreDeps, slots: BackupSlot[]): ExitCode {
       staleInterrupted
         ? `${mismatched.length} ${noun} changed since an afterpack run stopped partway — restoring nothing`
         : `${mismatched.length} ${noun} changed since obfuscation — restoring nothing`,
-      staleInterrupted
-        ? "The build output was rebuilt since that run, so there is nothing to undo. Run " +
+      mixed !== null
+        ? mixedJournalFix(documentPath(cwd, copiesDir(mixed)))
+        : staleInterrupted
+          ? "The build output was rebuilt since that run, so there is nothing to undo. Run " +
             "`afterpack <path>` on it: that discards the stale backup."
-        : `Rebuild ${noun === "file" ? "the file below" : "the files below"} from source, then run ` +
+          : `Rebuild ${noun === "file" ? "the file below" : "the files below"} from source, then run ` +
             "`afterpack <path>` again before retrying restore.",
       mismatched,
     );
@@ -270,6 +318,15 @@ function restoreSlots(deps: RestoreDeps, slots: BackupSlot[]): ExitCode {
     );
   }
 
+  for (const item of loaded) {
+    addScratch(
+      item.slot,
+      item.manifest,
+      item.restore
+        .filter((entry) => entry.originalSha256 !== null)
+        .map((entry) => stagedPath(absoluteFilePath(item.slot.projectRoot, entry.path))),
+    );
+  }
   for (const item of loaded) {
     for (const entry of item.restore) {
       const currentPath = absoluteFilePath(item.slot.projectRoot, entry.path);

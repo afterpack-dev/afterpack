@@ -203,6 +203,15 @@ describe("detectHashedLayout — names referenced from outside the output", () =
     expect(detect("build/client").status).toBe("rename");
   });
 
+  it("looks inside known server dot-folders beside a project-root output", () => {
+    viteTree();
+    write("package.json", "{}");
+    write(".git/HEAD", "assets/index-Ab3dE9fG.js");
+    expect(detect("dist").status).toBe("rename");
+    const server = write(".svelte-kit/output/server/index.js", '"/assets/lazy-Q1w2E3r4.js"');
+    expect(detect("dist")).toMatchObject({ status: "keep", reason: { path: server } });
+  });
+
   it("checks only build-output folders beside a project-root output, never the source", () => {
     viteTree();
     write("package.json", "{}");

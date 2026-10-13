@@ -54,6 +54,19 @@ export function keptNamesNotice(
 const OUTSIDE_SCAN_LIMITS = { maxDepth: 6, maxFiles: 5000, maxBytes: 128 * 1024 * 1024 };
 const OUTPUT_SIBLING_RE =
   /^(?:build|dist|out|output|server|ssr|functions|lambda|edge|workers?)(?:[-_.].*)?$|server|ssr/i;
+const NEVER_SCANNED = new Set(["node_modules", ".git", ".afterpack"]);
+const SERVER_DOT_DIRS = new Set([
+  ".svelte-kit",
+  ".output",
+  ".nuxt",
+  ".netlify",
+  ".vercel",
+  ".wrangler",
+  ".open-next",
+  ".amplify-hosting",
+  ".react-router",
+  ".server",
+]);
 const PRECACHE_RE =
   /["']?url["']?\s*:\s*["'][^"']+["']\s*,\s*["']?revision["']?\s*:|["']?revision["']?\s*:\s*(?:null|["'][^"']*["'])\s*,\s*["']?url["']?\s*:/;
 const PRECACHE_SCAN_LIMIT = 5000;
@@ -235,11 +248,12 @@ function outsideRoots(target: string): string[] {
   const parent = dirname(target);
   const projectRoot = existsSync(join(parent, "package.json"));
   return namesIn(parent)
-    .filter((name) => name !== "node_modules" && !name.startsWith("."))
+    .filter((name) => !NEVER_SCANNED.has(name))
+    .filter((name) => !name.startsWith(".") || SERVER_DOT_DIRS.has(name))
     .map((name) => join(parent, name))
     .filter((path) => path !== target)
     .filter((path) => {
-      if (!projectRoot) return true;
+      if (!projectRoot || SERVER_DOT_DIRS.has(basename(path))) return true;
       return isDir(path) ? OUTPUT_SIBLING_RE.test(basename(path)) : /\.[cm]?js$/.test(path);
     })
     .sort();

@@ -2295,6 +2295,7 @@ describe("runObfuscationPass hashedNames", () => {
     }
     expect(seen[0].planned.get(main)).toEqual([null]);
     expect(seen[0].planned.get(map)).toEqual([null]);
+    expect(seen[0].planned.get(`${css}.afterpack-tmp`)).toEqual([null]);
   });
 });
 

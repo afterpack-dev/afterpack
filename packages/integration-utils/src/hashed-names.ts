@@ -193,6 +193,8 @@ export function unreferencedHashedFiles(
     .sort();
 }
 
+const SCAN_SKIPPED_DIRS = new Set(["node_modules", ".git", AFTERPACK_DIR, ".cache", "cache"]);
+
 export interface TokenScanLimits {
   maxDepth: number;
   maxFiles: number;
@@ -227,8 +229,7 @@ export function findHashTokenReference(
       return;
     }
     if (stats.isDirectory()) {
-      const name = basename(path);
-      if (name === "node_modules" || name.startsWith(".")) return;
+      if (SCAN_SKIPPED_DIRS.has(basename(path))) return;
       if (depth > limits.maxDepth) {
         result.truncated = true;
         return;

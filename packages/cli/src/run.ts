@@ -49,14 +49,19 @@ import {
   backupSlot,
   beginJournal,
   captureOriginals,
+  changedEntries,
+  copiesDir,
+  discardInterrupted,
   discardSlot,
   type Journal,
   journalCondition,
   legacySlot,
   matchAlreadyObfuscated,
+  mixedJournalFix,
   type PendingBackup,
   readBackupManifest,
   recoverSlot,
+  removeScratch,
   type WriteBackupsResult,
 } from "./backup.js";
 import { frameworkDocsUrl } from "./detect.js";
@@ -975,8 +980,21 @@ async function runHolding(deps: CliDeps, locks: HeldLock[]): Promise<number> {
     );
   }
 
+  const layoutDecision = detectHashedLayout(target, isDirectory, files);
+  if (layoutDecision.status === "refuse") {
+    return refuseHere(
+      EXIT.failure,
+      "UNSUPPORTED_LAYOUT",
+      layoutDecision.message,
+      "Obfuscate only the browser output of a build without SSR. Your build output was left " +
+        "exactly as your bundler wrote it.",
+    );
+  }
+
   const projectRoot = home.projectRoot;
-  const slot = backupSlot(projectRoot, buildDirKey(home));
+  const renameRoot =
+    layoutDecision.status === "rename" ? layoutDecision.layout.hashedNames.root : buildDir;
+  const slot = backupSlot(projectRoot, buildDirKey({ ...home, buildDir: renameRoot }));
   try {
     locks.push(acquireLock(slot.lockPath, (m) => notice.warn(`${yellow("⚠")} ${m}`)));
   } catch (error) {
@@ -999,8 +1017,19 @@ async function runHolding(deps: CliDeps, locks: HeldLock[]): Promise<number> {
     );
   }
   let backupManifest = backupManifestResult.status === "ok" ? backupManifestResult.manifest : null;
+  if (backupManifest?.state === "complete") removeScratch(projectRoot, backupManifest);
   if (backupManifest?.state === "applying") {
     const condition = journalCondition(projectRoot, backupManifest);
+    if (condition === "mixed") {
+      return refuseHere(
+        EXIT.failure,
+        "INTERRUPTED_RUN_REBUILT",
+        "A previous afterpack run over this directory stopped partway, and part of the output " +
+          "was rebuilt since",
+        mixedJournalFix(documentPath(cwd, copiesDir(slot))),
+        changedEntries(projectRoot, backupManifest),
+      );
+    }
     if (condition === "restorable") {
       return refuseHere(
         EXIT.failure,
@@ -1012,14 +1041,15 @@ async function runHolding(deps: CliDeps, locks: HeldLock[]): Promise<number> {
           "clears it too.",
       );
     }
-    discardSlot(slot);
+    discardInterrupted(slot, backupManifest);
     notice.warn(
       `${yellow("⚠")} Discarded the backup of an afterpack run that stopped partway: ` +
         (condition === "pristine"
           ? "the build output already matches what your bundler wrote."
           : "the build output was rebuilt since."),
     );
-    backupManifest = null;
+    const kept = readBackupManifest(slot);
+    backupManifest = kept.status === "ok" ? kept.manifest : null;
   }
   const pendingBackups: PendingBackup[] = backupManifest
     ? captureOriginals(projectRoot, files)
@@ -1042,16 +1072,6 @@ async function runHolding(deps: CliDeps, locks: HeldLock[]): Promise<number> {
     }
   }
 
-  const layoutDecision = detectHashedLayout(target, isDirectory, files);
-  if (layoutDecision.status === "refuse") {
-    return refuseHere(
-      EXIT.failure,
-      "UNSUPPORTED_LAYOUT",
-      layoutDecision.message,
-      "Obfuscate only the browser output of a build without SSR. Your build output was left " +
-        "exactly as your bundler wrote it.",
-    );
-  }
   if (layoutDecision.status === "keep") {
     notice.warn(
       `${yellow("⚠")} ${keptNamesNotice(layoutDecision.reason, (path) => documentPath(cwd, path))}`,

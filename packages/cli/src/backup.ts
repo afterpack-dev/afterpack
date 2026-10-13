@@ -273,21 +273,86 @@ export function entryStatus(
 ): EntryStatus {
   const current = currentSha256(absoluteFilePath(projectRoot, entry.path));
   if (current === entry.originalSha256) return "original";
-  if (manifest.state === "complete") {
-    return entry.obfuscatedSha256 !== undefined && current === entry.obfuscatedSha256
-      ? "expected"
-      : "unexpected";
-  }
-  if (scratch(entry) || entry.plannedSha256?.includes(current)) return "expected";
+  if (scratch(entry)) return "expected";
+  if (entry.obfuscatedSha256 !== undefined && current === entry.obfuscatedSha256) return "expected";
+  if (manifest.state === "applying" && entry.plannedSha256?.includes(current)) return "expected";
   return "unexpected";
 }
 
-export type JournalCondition = "pristine" | "restorable" | "stale";
+export type JournalCondition = "pristine" | "restorable" | "stale" | "mixed";
 
 export function journalCondition(projectRoot: string, manifest: BackupManifest): JournalCondition {
-  const statuses = manifest.files.map((entry) => entryStatus(projectRoot, manifest, entry));
-  if (statuses.includes("unexpected")) return "stale";
-  return statuses.every((status) => status === "original") ? "pristine" : "restorable";
+  let pending = 0;
+  let changed = 0;
+  for (const entry of manifest.files) {
+    if (scratch(entry)) continue;
+    const status = entryStatus(projectRoot, manifest, entry);
+    if (status === "unexpected") changed += 1;
+    else if (status === "expected" && entry.plannedSha256 !== undefined) pending += 1;
+  }
+  if (changed > 0) return pending > 0 ? "mixed" : "stale";
+  return pending > 0 ? "restorable" : "pristine";
+}
+
+export function changedEntries(projectRoot: string, manifest: BackupManifest): string[] {
+  return manifest.files
+    .filter((entry) => entryStatus(projectRoot, manifest, entry) === "unexpected")
+    .map((entry) => entry.path);
+}
+
+export function mixedJournalFix(copies: string): string {
+  return (
+    "Some files still hold that run's output and others were rebuilt since, so neither " +
+    "restoring nor discarding its backup is safe. Rebuild the whole output from source, then run " +
+    "afterpack again: it discards the backup once nothing of that run is left. To keep the " +
+    `rebuilt files instead, copy the originals of the other files back from ${copies}.`
+  );
+}
+
+export function discardInterrupted(slot: BackupSlot, manifest: BackupManifest): void {
+  removeScratch(slot.projectRoot, manifest);
+  const kept = manifest.files.filter(
+    (entry) =>
+      entry.plannedSha256 === undefined &&
+      entryStatus(slot.projectRoot, manifest, entry) === "expected",
+  );
+  if (kept.length === 0) {
+    discardSlot(slot);
+    return;
+  }
+  const keptPaths = new Set(kept.map((entry) => entry.path));
+  for (const entry of manifest.files) {
+    if (!keptPaths.has(entry.path)) rmSync(copyPath(slot, entry.path), { force: true });
+  }
+  writeManifestAt(slot.manifestPath, {
+    ...manifest,
+    state: "complete",
+    files: kept,
+    renames: manifest.renames.filter((r) => keptPaths.has(r.from) || keptPaths.has(r.to)),
+  });
+}
+
+export function removeScratch(projectRoot: string, manifest: BackupManifest): void {
+  for (const entry of manifest.files) {
+    if (scratch(entry)) rmSync(absoluteFilePath(projectRoot, entry.path), { force: true });
+  }
+}
+
+export function copiesDir(slot: BackupSlot): string {
+  return slot.legacy ? slot.current : join(slot.current, "files");
+}
+
+export function addScratch(slot: BackupSlot, manifest: BackupManifest, paths: string[]): void {
+  const known = new Set(manifest.files.map((entry) => entry.path));
+  const scratchEntries = paths
+    .map((path) => relPathFor(slot.projectRoot, path))
+    .filter((relPath) => !known.has(relPath))
+    .map((relPath) => ({ path: relPath, originalSha256: null, plannedSha256: [null] }));
+  if (scratchEntries.length === 0) return;
+  writeManifestAt(slot.manifestPath, {
+    ...manifest,
+    files: [...manifest.files, ...scratchEntries].sort(byPath),
+  });
 }
 
 export interface WriteBackupsResult {

@@ -11,6 +11,7 @@ import {
   statSync,
   writeSync,
 } from "node:fs";
+import { hostname } from "node:os";
 import { dirname } from "node:path";
 
 export const LOCK_MAX_AGE_MS = 2 * 60 * 60 * 1000;
@@ -18,6 +19,7 @@ const UNREADABLE_GRACE_MS = 60 * 1000;
 
 interface LockOwner {
   pid: number;
+  host?: string;
   startedAt: string;
   token: string;
 }
@@ -72,12 +74,24 @@ function staleReason(path: string, owner: LockOwner | null, now: number): string
     }
     return age > UNREADABLE_GRACE_MS ? "an unreadable lock" : null;
   }
-  if (!alive(owner.pid)) return `a lock left by process ${owner.pid}, which is no longer running`;
   const started = Date.parse(owner.startedAt);
   if (Number.isFinite(started) && now - started > LOCK_MAX_AGE_MS) {
     return `a lock taken by process ${owner.pid} more than two hours ago`;
   }
+  const local = owner.host === undefined || owner.host === hostname();
+  if (local && !alive(owner.pid)) {
+    return `a lock left by process ${owner.pid}, which is no longer running`;
+  }
   return null;
+}
+
+function identityOf(path: string): string | null {
+  try {
+    const stats = statSync(path);
+    return `${stats.dev}:${stats.ino}:${stats.mtimeMs}`;
+  } catch {
+    return null;
+  }
 }
 
 function tryCreate(path: string, owner: LockOwner): boolean {
@@ -100,26 +114,30 @@ export function acquireLock(path: string, notice: (message: string) => void): He
   mkdirSync(dirname(path), { recursive: true });
   const owner: LockOwner = {
     pid: process.pid,
+    host: hostname(),
     startedAt: new Date().toISOString(),
     token: randomUUID(),
   };
   if (!tryCreate(path, owner)) {
+    const judged = identityOf(path);
     const current = readOwner(path);
     const reason = staleReason(path, current, Date.now());
-    if (reason === null) throw new LockHeldError(path, current);
+    if (reason === null || judged === null) throw new LockHeldError(path, current);
     const evicted = `${path}.stale-${owner.token}`;
     try {
       renameSync(path, evicted);
     } catch {
       throw new LockHeldError(path, readOwner(path));
     }
-    const moved = readOwner(evicted);
-    if (current !== null && moved?.token !== current.token) {
+    if (identityOf(evicted) !== judged) {
+      const moved = readOwner(evicted);
       if (!existsSync(path)) renameSync(evicted, path);
       throw new LockHeldError(path, moved);
     }
     rmSync(evicted, { force: true });
-    if (!tryCreate(path, owner)) throw new LockHeldError(path, readOwner(path));
+    if (!tryCreate(path, owner) || readOwner(path)?.token !== owner.token) {
+      throw new LockHeldError(path, readOwner(path));
+    }
     notice(`Took over ${reason}.`);
   }
   return {

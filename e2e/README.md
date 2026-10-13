@@ -117,8 +117,9 @@ that fixture's other browsers. To repeat one Firefox test, select only that brow
    that at least one file left its plain name, runs `afterpack verify` on the tree and on a deploy
    copy of it, then runs `afterpack restore`, which must give back the plain build byte for byte.
    `expectKilledRunRestores` then runs the CLI under `e2e/helpers/kill-after-writes.cjs`, a
-   `--require` hook that SIGKILLs the process right after its second write into the output, and
-   checks that `afterpack restore` undoes the half-finished run byte for byte. Both tests rebuild
+   `--require` hook that SIGKILLs the process right after its second write into the output (and,
+   in a second test, right after it removes the first old file name), and checks that
+   `afterpack restore` undoes the half-finished run byte for byte. Both tests rebuild
    the fixture last, so the tests after them see the protected build.
 
 ## Writing a scenario

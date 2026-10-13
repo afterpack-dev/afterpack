@@ -69,6 +69,7 @@ const SURFACE = [
   "planAngularIntegrity",
   "sha256Hex",
   "buildDirKey",
+  "isWithinDir",
   "stagedPath",
   "findHashTokenReference",
   "TokenScanLimits",

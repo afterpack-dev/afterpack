@@ -49,6 +49,14 @@ test.describe("`afterpack restore` undoes the renames", () => {
       expectKilledRunRestores(app, "dist");
     },
   );
+
+  test(
+    "restore gives back the plain build after a run killed while removing an old name",
+    { tag: "@node" },
+    () => {
+      expectKilledRunRestores(app, "dist", "dist", { removes: 1 });
+    },
+  );
 });
 
 hashedNamesTest();
