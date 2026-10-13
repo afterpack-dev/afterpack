@@ -15,6 +15,7 @@
     "minFiles": 4,
     "passes": 1
   },
+  "hashedNames": null,
   "smoke": {
     "routes": [
       {

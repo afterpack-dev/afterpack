@@ -15,6 +15,7 @@
     "minFiles": 1,
     "passes": 1
   },
+  "hashedNames": null,
   "cli": {
     "entry": "dist/cli.js",
     "cases": [

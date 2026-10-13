@@ -9,7 +9,10 @@ const expectations = JSON.parse(
 // The fixture pins a seed so the harness can assert byte-for-byte determinism.
 // `AFTERPACK_FI_FREE_SEED=1` un-pins it, which is how the smoke test proves the
 // thing this package exists for: three legs, one FRESHLY DRAWN seed.
-const seed = process.env.AFTERPACK_FI_FREE_SEED === "1" ? undefined : expectations.seed;
+const seed =
+  process.env.AFTERPACK_FI_FREE_SEED === "1"
+    ? undefined
+    : Number(process.env.AFTERPACK_E2E_SEED || expectations.seed);
 
 export default withAfterpack(
   defineConfig({

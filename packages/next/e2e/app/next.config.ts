@@ -23,4 +23,4 @@ const nextConfig: NextConfig = {
 // obfuscated, and the build writes .afterpack/receipts/.next.json recording
 // what it protected. This fixture's package.json deliberately has no
 // "postbuild" -- e2e/helpers/receipt.ts fails if one comes back.
-export default withAfterpack(nextConfig, { seed: expectations.seed });
+export default withAfterpack(nextConfig, { seed: Number(process.env.AFTERPACK_E2E_SEED || expectations.seed) });

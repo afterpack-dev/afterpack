@@ -15,4 +15,4 @@ const nextConfig: NextConfig = {
 
 // Same wiring as ../next-16/: the obfuscation runs inside `next build` via
 // Next's `compiler.runAfterProductionCompile` hook, with no postbuild script.
-export default withAfterpack(nextConfig, { seed: expectations.seed });
+export default withAfterpack(nextConfig, { seed: Number(process.env.AFTERPACK_E2E_SEED || expectations.seed) });

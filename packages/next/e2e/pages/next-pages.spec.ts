@@ -8,6 +8,7 @@ import { expectNoPostbuildScript, expectProtectionReceipt } from "@e2e/helpers/r
 import { baseURLOf, type Fixture } from "@e2e/helpers/registry.js";
 import { expectObfuscationSignatures } from "@e2e/helpers/signatures.js";
 import { runSmoke } from "@e2e/helpers/smoke.js";
+import { hashedNamesTest } from "@e2e/helpers/hashed-names.js";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 const expectations = readExpectations(HERE);
@@ -66,3 +67,5 @@ test.describe("Next.js 16 with a Pages-only app, full suite", () => {
     },
   );
 });
+
+hashedNamesTest();

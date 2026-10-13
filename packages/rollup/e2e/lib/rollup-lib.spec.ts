@@ -1,16 +1,19 @@
 import { createRequire } from "node:module";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { expect, test } from "@playwright/test";
 import { expectObfuscationPass, readBuildLog } from "@e2e/helpers/build-log.js";
 import { readExpectations, smokeOf } from "@e2e/helpers/expectations.js";
 import { baseURLOf, fixture } from "@e2e/helpers/registry.js";
 import { expectObfuscationSignatures } from "@e2e/helpers/signatures.js";
 import { runSmoke } from "@e2e/helpers/smoke.js";
+import { hashedNamesTest } from "@e2e/helpers/hashed-names.js";
 
 interface ObfuscatedLibrary {
   greet: (name: string) => string;
   add: (a: number, b: number) => number;
   Counter: new () => { increment: () => number; value: number };
+  describeCount: (n: number) => Promise<string>;
 }
 
 const app = fixture("rollup-lib");
@@ -43,7 +46,23 @@ test.describe("Rollup emits an ESM and a CJS library", { tag: "@quick" }, () => 
     },
   );
 
+  test(
+    "both builds load their obfuscated lazy chunk under its content-hashed name",
+    { tag: "@node" },
+    async () => {
+      const require = createRequire(import.meta.url);
+      const cjs = require(join(app.dir, "dist", "cjs", "lib.cjs")) as ObfuscatedLibrary;
+      await expect(cjs.describeCount(3)).resolves.toBe("count is 3 (odd)");
+      const esm = (await import(
+        pathToFileURL(join(app.dir, "dist", "esm", "lib.js")).href
+      )) as ObfuscatedLibrary;
+      await expect(esm.describeCount(4)).resolves.toBe("count is 4 (even)");
+    },
+  );
+
   test("a browser importing the obfuscated ESM build gets the same results", async ({ page }) => {
     await runSmoke(page, baseURLOf(app), smokeOf(expectations));
   });
 });
+
+hashedNamesTest();

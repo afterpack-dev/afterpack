@@ -17,7 +17,7 @@ if (process.env.AFTERPACK_build_autorun !== "false") {
   const cli = createRequire(import.meta.url).resolve("afterpack");
   execFileSync(
     process.execPath,
-    [cli, dist, `--seed=${expectations.seed}`, "--build.backup=false"],
+    [cli, dist, `--seed=${process.env.AFTERPACK_E2E_SEED || expectations.seed}`, "--build.backup=false"],
     { cwd: HERE, stdio: "inherit" },
   );
 }

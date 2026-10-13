@@ -4,6 +4,7 @@ import { readExpectations, smokeOf } from "@e2e/helpers/expectations.js";
 import { baseURLOf, fixture } from "@e2e/helpers/registry.js";
 import { expectObfuscationSignatures } from "@e2e/helpers/signatures.js";
 import { runSmoke } from "@e2e/helpers/smoke.js";
+import { hashedNamesTest } from "@e2e/helpers/hashed-names.js";
 
 const app = fixture("astro-islands");
 const expectations = readExpectations(app);
@@ -25,3 +26,5 @@ test.describe("Astro builds a static site with a React island", { tag: "@quick" 
     await runSmoke(page, baseURLOf(app), smokeOf(expectations));
   });
 });
+
+hashedNamesTest();

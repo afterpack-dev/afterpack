@@ -13,6 +13,10 @@
     "minFiles": 7,
     "passes": 1
   },
+  "hashedNames": {
+    "pattern": "^out:_next/static/chunks/(?:turbopack-)?[0-9a-z~._-]{13}\\.js$",
+    "minRenamed": 5
+  },
   "smoke": {
     "routes": [
       {

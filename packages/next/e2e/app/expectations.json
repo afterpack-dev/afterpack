@@ -17,6 +17,16 @@
     "minFiles": 25,
     "passes": 1
   },
+  "hashedNames": {
+    "next-app-turbopack": {
+      "pattern": "^client:(?:turbopack-)?[0-9a-z~._-]{13}\\.js$",
+      "minRenamed": 10
+    },
+    "next-app-webpack": {
+      "pattern": "^client:.+[-.][0-9a-f]{16}\\.js$",
+      "minRenamed": 10
+    }
+  },
   "smoke": {
     "routes": [
       {

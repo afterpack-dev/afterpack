@@ -8,8 +8,8 @@ const expectations = JSON.parse(
 export default {
   input: "src/index.js",
   output: [
-    { dir: "dist/esm", format: "es", entryFileNames: "lib.js" },
-    { dir: "dist/cjs", format: "cjs", entryFileNames: "lib.cjs" },
+    { dir: "dist/esm", format: "es", entryFileNames: "lib.js", chunkFileNames: "[name]-[hash].js" },
+    { dir: "dist/cjs", format: "cjs", entryFileNames: "lib.cjs", chunkFileNames: "[name]-[hash].cjs" },
   ],
-  plugins: [afterpackRollup({ seed: expectations.seed, build: { backup: false } })],
+  plugins: [afterpackRollup({ seed: Number(process.env.AFTERPACK_E2E_SEED || expectations.seed), build: { backup: false } })],
 };

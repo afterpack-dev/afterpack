@@ -15,6 +15,10 @@
     "minFiles": 1,
     "passes": 1
   },
+  "hashedNames": {
+    "pattern": "-[A-Za-z0-9_-]{8}\\.js$",
+    "minRenamed": 1
+  },
   "smoke": {
     "routes": [
       {

@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const SEED = "641928375";
+const SEED = process.env.AFTERPACK_E2E_SEED || "641928375";
 const src = join(HERE, "src");
 const dist = join(HERE, "dist");
 

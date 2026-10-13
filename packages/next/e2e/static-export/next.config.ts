@@ -23,4 +23,4 @@ const nextConfig: NextConfig = {
   generateBuildId: async () => "afterpack-fixture-build",
 };
 
-export default withAfterpack(nextConfig, { seed: expectations.seed });
+export default withAfterpack(nextConfig, { seed: Number(process.env.AFTERPACK_E2E_SEED || expectations.seed) });

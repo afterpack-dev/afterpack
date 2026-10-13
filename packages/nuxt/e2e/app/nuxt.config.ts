@@ -10,7 +10,7 @@ const expectations = JSON.parse(
 // pinned for deterministic output across repeated builds.
 export default defineNuxtConfig({
   modules: ["@afterpack/nuxt"],
-  afterpack: { seed: expectations.seed },
+  afterpack: { seed: Number(process.env.AFTERPACK_E2E_SEED || expectations.seed) },
   ssr: true,
   buildId: "afterpack-fixture",
   compatibilityDate: "2024-11-01",

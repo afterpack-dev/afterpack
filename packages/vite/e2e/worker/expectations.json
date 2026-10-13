@@ -1,0 +1,48 @@
+{
+  "framework": "vite-worker",
+  "frameworkClass": "spa",
+  "description": "Vite 8 page that hands work to a module Web Worker (new Worker(new URL(...))) and registers a service worker that precaches every hashed asset by URL alone. Vite builds the worker in its own sub-build and emits it under a content-hashed name, so the fixture proves the worker's name follows its obfuscated bytes and that the precache manifest only ever names files the build wrote.",
+  "seed": 739104265,
+  "deterministicOutput": true,
+  "build": {
+    "outputDir": "dist",
+    "bundles": [
+      "client"
+    ],
+    "note": "vite build: @afterpack/vite obfuscates the entry chunk and the worker asset; the fixture's own closeBundle plugin then writes dist/sw.js and dist/precache-manifest.json from the files on disk"
+  },
+  "obfuscation": {
+    "minFiles": 2,
+    "passes": 1
+  },
+  "hashedNames": {
+    "pattern": "^root:assets/.+-[A-Za-z0-9_-]{8}\\.js$",
+    "minRenamed": 2
+  },
+  "smoke": {
+    "routes": [
+      {
+        "path": "/",
+        "status": 200,
+        "textContains": [
+          "Vite worker fixture"
+        ],
+        "selectors": {
+          "[data-testid=\"title\"]": "Vite worker fixture",
+          "[data-testid=\"intro\"]": "AfterPack framework-integration smoke fixture."
+        }
+      }
+    ],
+    "interactions": [
+      {
+        "route": "/",
+        "description": "The obfuscated module worker solves the puzzle and posts the answer back.",
+        "click": "[data-testid=\"solve\"]",
+        "expectTextContains": [
+          "1716 paths through a 6x7 grid"
+        ]
+      }
+    ],
+    "consoleErrors": "none"
+  }
+}

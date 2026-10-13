@@ -5,6 +5,7 @@ import { expectVerifyPasses } from "@e2e/helpers/receipt.js";
 import { baseURLOf, fixture } from "@e2e/helpers/registry.js";
 import { expectObfuscationSignatures } from "@e2e/helpers/signatures.js";
 import { runSmoke } from "@e2e/helpers/smoke.js";
+import { hashedNamesTest } from "@e2e/helpers/hashed-names.js";
 
 const app = fixture("sveltekit-app");
 const expectations = readExpectations(app);
@@ -30,3 +31,5 @@ test.describe("SvelteKit prerenders with the static adapter", { tag: "@quick" },
     await runSmoke(page, baseURLOf(app), smokeOf(expectations));
   });
 });
+
+hashedNamesTest();

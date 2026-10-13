@@ -11,5 +11,5 @@ const expectations = JSON.parse(
 // on closeBundle, so the emitted client bundle is obfuscated before the static
 // adapter copies it into build/. Place it AFTER sveltekit().
 export default defineConfig({
-  plugins: [sveltekit(), afterpackSveltekit({ seed: expectations.seed })],
+  plugins: [sveltekit(), afterpackSveltekit({ seed: Number(process.env.AFTERPACK_E2E_SEED || expectations.seed) })],
 });

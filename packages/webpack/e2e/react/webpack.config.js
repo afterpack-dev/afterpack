@@ -19,6 +19,7 @@ export default {
   output: {
     path: resolve(HERE, "dist"),
     filename: "[name].[contenthash].js",
+    chunkFilename: "[name].[contenthash].js",
     clean: true,
   },
   resolve: { extensions: [".js", ".jsx"] },
@@ -41,6 +42,6 @@ export default {
   },
   plugins: [
     new HtmlWebpackPlugin({ template: resolve(HERE, "src/index.html") }),
-    new AfterpackWebpackPlugin({ seed: expectations.seed, sourceMap: { enabled: true } }),
+    new AfterpackWebpackPlugin({ seed: Number(process.env.AFTERPACK_E2E_SEED || expectations.seed), sourceMap: { enabled: true } }),
   ],
 };

@@ -10,5 +10,5 @@ const expectations = JSON.parse(
 // https://vite.dev/config/ -- Vue 3 SPA, obfuscated automatically via
 // @afterpack/vue (the thin wrapper over @afterpack/vite's closeBundle hook).
 export default defineConfig({
-  plugins: [vue(), afterpackVue({ seed: expectations.seed })],
+  plugins: [vue(), afterpackVue({ seed: Number(process.env.AFTERPACK_E2E_SEED || expectations.seed) })],
 });

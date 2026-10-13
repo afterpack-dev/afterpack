@@ -10,6 +10,7 @@ import {
 import { baseURLOf, fixture } from "@e2e/helpers/registry.js";
 import { expectObfuscationSignatures } from "@e2e/helpers/signatures.js";
 import { runSmoke } from "@e2e/helpers/smoke.js";
+import { hashedNamesTest } from "@e2e/helpers/hashed-names.js";
 
 const app = fixture("next-static-export");
 const expectations = readExpectations(app);
@@ -44,3 +45,5 @@ test.describe("Next.js 16 exports a fully static site", { tag: "@quick" }, () =>
     await runSmoke(page, baseURLOf(app), smokeOf(expectations));
   });
 });
+
+hashedNamesTest();

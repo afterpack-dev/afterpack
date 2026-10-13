@@ -15,6 +15,7 @@
     "minFiles": 3,
     "passes": 1
   },
+  "hashedNames": null,
   "smoke": {
     "readySelector": "body[data-app-ready]",
     "routes": [

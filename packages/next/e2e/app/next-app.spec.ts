@@ -21,6 +21,7 @@ import {
   servedSourceMapProblems,
   sourceMapsUnder,
 } from "@e2e/helpers/source-map.js";
+import { hashedNamesTest } from "@e2e/helpers/hashed-names.js";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 const expectations = readExpectations(HERE);
@@ -258,3 +259,5 @@ test.describe("Next.js 16 App Router serves a dual bundle, full suite", () => {
     expectDeterministic(app);
   });
 });
+
+hashedNamesTest();

@@ -22,3 +22,8 @@ export class Counter {
     return this.#count;
   }
 }
+
+export async function describeCount(n) {
+  const { formatCount } = await import("./format.js");
+  return formatCount(n);
+}

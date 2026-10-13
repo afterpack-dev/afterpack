@@ -7,9 +7,11 @@ const expectations = JSON.parse(
 );
 
 await build({
-  entryPoints: ["src/main.js"],
+  entryPoints: { app: "src/main.js" },
   bundle: true,
   format: "esm",
-  outfile: "dist/app.js",
-  plugins: [afterpackEsbuild({ seed: expectations.seed, build: { backup: false } })],
+  splitting: true,
+  outdir: "dist",
+  chunkNames: "chunks/[name]-[hash]",
+  plugins: [afterpackEsbuild({ seed: Number(process.env.AFTERPACK_E2E_SEED || expectations.seed), build: { backup: false } })],
 });

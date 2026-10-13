@@ -6,6 +6,7 @@ import { readExpectations, smokeOf } from "@e2e/helpers/expectations.js";
 import { baseURLOf, fixture } from "@e2e/helpers/registry.js";
 import { expectObfuscationSignatures } from "@e2e/helpers/signatures.js";
 import { runSmoke } from "@e2e/helpers/smoke.js";
+import { hashedNamesTest } from "@e2e/helpers/hashed-names.js";
 
 const app = fixture("angular-app");
 const expectations = readExpectations(app);
@@ -34,3 +35,5 @@ test.describe("the Angular application builder emits a browser bundle", { tag: "
     await runSmoke(page, baseURLOf(app), smokeOf(expectations));
   });
 });
+
+hashedNamesTest();

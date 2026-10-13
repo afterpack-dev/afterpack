@@ -7,6 +7,7 @@ import { readExpectations, smokeOf } from "@e2e/helpers/expectations.js";
 import { baseURLOf, fixture, REPO_ROOT } from "@e2e/helpers/registry.js";
 import { expectObfuscationSignatures } from "@e2e/helpers/signatures.js";
 import { runSmoke } from "@e2e/helpers/smoke.js";
+import { hashedNamesTest } from "@e2e/helpers/hashed-names.js";
 
 const app = fixture("parcel-app");
 const expectations = readExpectations(app);
@@ -73,3 +74,5 @@ test.describe("Parcel 2 packages a code-split app, full suite", () => {
     },
   );
 });
+
+hashedNamesTest();

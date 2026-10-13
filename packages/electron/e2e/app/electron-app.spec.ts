@@ -11,6 +11,7 @@ import { readExpectations } from "@e2e/helpers/expectations.js";
 import { baseURLOf, fixture } from "@e2e/helpers/registry.js";
 import { expectObfuscationSignatures } from "@e2e/helpers/signatures.js";
 import { collectConsoleErrors, expectNoConsoleErrors } from "@e2e/helpers/smoke.js";
+import { hashedNamesTest } from "@e2e/helpers/hashed-names.js";
 
 const app = fixture("electron-app");
 const expectations = readExpectations(app);
@@ -108,3 +109,5 @@ test.describe("electron-vite emits main, preload and renderer, full suite", () =
     },
   );
 });
+
+hashedNamesTest();

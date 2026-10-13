@@ -1,4 +1,4 @@
-import { Component, computed, signal } from "@angular/core";
+import { Component, computed, type OnInit, signal } from "@angular/core";
 
 @Component({
   selector: "app-root",
@@ -9,11 +9,17 @@ import { Component, computed, signal } from "@angular/core";
     <button type="button" data-testid="counter" (click)="increment()">
       count is {{ count() }} ({{ parity() }})
     </button>
+    <p data-testid="lazy">{{ lazy() }}</p>
   `,
 })
-export class AppComponent {
+export class AppComponent implements OnInit {
   readonly count = signal(0);
+  readonly lazy = signal("loading");
   readonly parity = computed(() => (this.count() % 2 === 0 ? "even" : "odd"));
+
+  ngOnInit(): void {
+    import("./lazy").then((m) => this.lazy.set(m.describeLazyChunk()));
+  }
 
   increment(): void {
     this.count.update((c) => c + 1);

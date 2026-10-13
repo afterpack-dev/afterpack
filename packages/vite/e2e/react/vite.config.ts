@@ -18,7 +18,7 @@ export default defineConfig({
   plugins: [
     react(),
     afterpackVite({
-      seed: expectations.seed,
+      seed: Number(process.env.AFTERPACK_E2E_SEED || expectations.seed),
       protectionMap: reviewProtectionMap,
       sourceMap: { enabled: true },
       directives: { enabled: Boolean(process.env.AFTERPACK_KEY) },

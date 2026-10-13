@@ -8,5 +8,5 @@ const expectations = JSON.parse(
 );
 
 export default defineConfig({
-  integrations: [react(), afterpack({ seed: expectations.seed })],
+  integrations: [react(), afterpack({ seed: Number(process.env.AFTERPACK_E2E_SEED || expectations.seed) })],
 });

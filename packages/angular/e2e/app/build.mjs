@@ -15,5 +15,5 @@ execFileSync(process.execPath, [ng, "build", "--configuration", "production"], {
 });
 
 if (process.env.AFTERPACK_build_autorun !== "false") {
-  await afterpackAngular({ cwd: HERE, seed: expectations.seed, protectionMap: true });
+  await afterpackAngular({ cwd: HERE, seed: Number(process.env.AFTERPACK_E2E_SEED || expectations.seed), protectionMap: true });
 }

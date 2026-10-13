@@ -15,6 +15,10 @@
     "minFiles": 2,
     "passes": 1
   },
+  "hashedNames": {
+    "pattern": "-[A-Z2-7]{8}\\.js$",
+    "minRenamed": 3
+  },
   "smoke": {
     "routes": [
       {
@@ -26,7 +30,8 @@
         "selectors": {
           "[data-testid=\"title\"]": "Angular fixture",
           "[data-testid=\"intro\"]": "AfterPack framework-integration smoke fixture.",
-          "[data-testid=\"counter\"]": "count is 0 (even)"
+          "[data-testid=\"counter\"]": "count is 0 (even)",
+          "[data-testid=\"lazy\"]": "lazy chunk loaded"
         }
       }
     ],

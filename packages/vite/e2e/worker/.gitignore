@@ -1,0 +1,8 @@
+node_modules
+dist
+
+# AfterPack artifacts (auto-added)
+.afterpack/
+*.protectionMap.html
+protectionMap.html
+*.backup.*

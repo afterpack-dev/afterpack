@@ -11,5 +11,5 @@ const expectations = JSON.parse(
 // automatically via @afterpack/svelte, the thin wrapper over @afterpack/vite's
 // closeBundle hook.
 export default defineConfig({
-  plugins: [svelte(), afterpackSvelte({ seed: expectations.seed })],
+  plugins: [svelte(), afterpackSvelte({ seed: Number(process.env.AFTERPACK_E2E_SEED || expectations.seed) })],
 });

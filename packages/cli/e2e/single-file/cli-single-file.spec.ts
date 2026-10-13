@@ -7,6 +7,7 @@ import { expectObfuscationPass, readBuildLog } from "@e2e/helpers/build-log.js";
 import { readExpectations } from "@e2e/helpers/expectations.js";
 import { fixture } from "@e2e/helpers/registry.js";
 import { expectObfuscationSignatures } from "@e2e/helpers/signatures.js";
+import { hashedNamesTest } from "@e2e/helpers/hashed-names.js";
 
 const app = fixture("cli-single-file");
 const expectations = readExpectations(app);
@@ -85,3 +86,5 @@ test.describe("the CLI's own protection receipt gates a deploy", { tag: "@quick"
     },
   );
 });
+
+hashedNamesTest();

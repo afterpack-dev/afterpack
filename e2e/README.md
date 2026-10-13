@@ -52,7 +52,7 @@ Run the full lane as CI does with `AFTERPACK_E2E_BROWSERS=chromium,firefox,webki
   variable; an untagged `@node` test shows both checks rejecting the keyless default build.
 
 Tests that rebuild a fixture in place, such as the determinism rebuild on `next-app-webpack` and
-`electron-app`, are `@node`. A fixture's Firefox and WebKit projects depend on its Chromium project
+`electron-app` and every fixture's content-hashed name check, are `@node`. A fixture's Firefox and WebKit projects depend on its Chromium project
 (or on the first browser listed, when Chromium is not), which alone runs the `@node` tests, so a
 rebuild never replaces files that another browser is still loading. Playwright runs a dependency
 project whole: `--grep`, `--repeat-each` and `--project` do not narrow it, and a failure there skips
@@ -98,6 +98,17 @@ that fixture's other browsers. To repeat one Firefox test, select only that brow
    attached. After every navigation the smoke check waits for that selector before it checks or
    clicks anything, and fails if the served HTML already matches it.
 4. For a fixture with a baseline build, its scenarios behave the same in both builds.
+5. A content-hashed file name always names the same bytes (`hashedNamesTest`, the last test in
+   every spec). The check rebuilds the fixture in place with a second seed
+   (`AFTERPACK_E2E_SEED`, which every fixture's config reads before its pinned seed, and
+   `AFTERPACK_seed` for afterpack.json), then with `AFTERPACK_build_autorun=false`, then with its
+   own seed again. No name that matches the fixture's `hashedNames.pattern` may map to different
+   bytes across the plain build and the two seeds, at least `hashedNames.minRenamed` obfuscated
+   files must leave the plain build's names behind, and the last rebuild must restore the first
+   byte for byte. The pattern runs against `<target label>:<path under the target>`; a directory
+   with several fixtures keys `hashedNames` by fixture name, and `null` declares a fixture with no
+   content-hashed output. `vite-worker` adds a module Web Worker, which Vite builds in its own
+   sub-build, and a service worker that precaches every hashed asset by URL alone.
 
 ## Writing a scenario
 

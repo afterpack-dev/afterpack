@@ -1,7 +1,7 @@
 {
   "framework": "esbuild-app",
   "frameworkClass": "spa",
-  "description": "A minimal app bundled with esbuild + @afterpack/esbuild (single ESM outfile). Proves the esbuild bundle survives obfuscation: the page renders and the counter interaction (obfuscated #private-field class) still works in chromium.",
+  "description": "A minimal app bundled with esbuild + @afterpack/esbuild (an ESM entry plus a split chunk with a content-hashed name). Proves the esbuild bundle survives obfuscation: the page renders and the counter interaction (obfuscated #private-field class) still works in chromium.",
   "seed": 284619375,
   "deterministicOutput": true,
   "build": {
@@ -9,11 +9,15 @@
     "bundles": [
       "client"
     ],
-    "note": "node build.mjs bundles src/main.js -> dist/app.js, obfuscated by @afterpack/esbuild's onEnd hook (build.backup:false)"
+    "note": "node build.mjs bundles src/main.js -> dist/app.js + dist/chunks/counter-<hash>.js, obfuscated by @afterpack/esbuild's onEnd hook (build.backup:false)"
   },
   "obfuscation": {
-    "minFiles": 1,
+    "minFiles": 2,
     "passes": 1
+  },
+  "hashedNames": {
+    "pattern": "-[A-Z2-7]{8}\\.js$",
+    "minRenamed": 1
   },
   "smoke": {
     "routes": [

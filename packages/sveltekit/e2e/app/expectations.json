@@ -15,6 +15,10 @@
     "minFiles": 27,
     "passes": 2
   },
+  "hashedNames": {
+    "pattern": "^root:_app/immutable/(?:.+[/.])?[A-Za-z0-9_-]{8}\\.js$",
+    "minRenamed": 10
+  },
   "smoke": {
     "routes": [
       {

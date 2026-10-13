@@ -4,6 +4,7 @@ import { readExpectations, smokeOf } from "@e2e/helpers/expectations.js";
 import { baseURLOf, fixture } from "@e2e/helpers/registry.js";
 import { expectObfuscationSignatures } from "@e2e/helpers/signatures.js";
 import { runSmoke } from "@e2e/helpers/smoke.js";
+import { hashedNamesTest } from "@e2e/helpers/hashed-names.js";
 
 const app = fixture("cli-requirejs-amd");
 const expectations = readExpectations(app);
@@ -56,3 +57,5 @@ test.describe("the CLI obfuscates AMD modules require.js loads at runtime, full 
     );
   });
 });
+
+hashedNamesTest();

@@ -17,6 +17,7 @@ import {
 } from "@e2e/helpers/signatures.js";
 import { collectConsoleErrors, expectNoConsoleErrors, runSmoke } from "@e2e/helpers/smoke.js";
 import { expectSourceMap } from "@e2e/helpers/source-map.js";
+import { hashedNamesTest } from "@e2e/helpers/hashed-names.js";
 
 const app = fixture("vite-react");
 const expectations = readExpectations(app);
@@ -191,3 +192,5 @@ test.describe("Vite 8 builds a React 19 SPA, full suite", () => {
     expectNoConsoleErrors(errors);
   });
 });
+
+hashedNamesTest();

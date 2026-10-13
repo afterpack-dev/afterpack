@@ -1,7 +1,7 @@
-// The app entry: renders the UI and wires the counter interaction. Imports a
-// sibling module so esbuild produces a real bundle for @afterpack/esbuild to
-// obfuscate.
-import { Counter } from "./counter.js";
+// The app entry: renders the UI and wires the counter interaction. Loads the
+// counter module with a dynamic import, so esbuild splits it into a chunk with
+// a content-hashed name that the entry imports.
+const { Counter } = await import("./counter.js");
 
 function render() {
   const app = document.querySelector("#app");

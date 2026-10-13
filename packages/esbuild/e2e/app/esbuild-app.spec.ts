@@ -4,11 +4,12 @@ import { readExpectations, smokeOf } from "@e2e/helpers/expectations.js";
 import { baseURLOf, fixture } from "@e2e/helpers/registry.js";
 import { expectObfuscationSignatures } from "@e2e/helpers/signatures.js";
 import { runSmoke } from "@e2e/helpers/smoke.js";
+import { hashedNamesTest } from "@e2e/helpers/hashed-names.js";
 
 const app = fixture("esbuild-app");
 const expectations = readExpectations(app);
 
-test.describe("esbuild bundles a single ESM outfile", { tag: "@quick" }, () => {
+test.describe("esbuild splits an ESM bundle into an entry and a chunk", { tag: "@quick" }, () => {
   test("the build ran a real obfuscation pass over the shipped files", { tag: "@node" }, () => {
     expectObfuscationPass(readBuildLog(app), app.name, expectations.obfuscation);
   });
@@ -25,3 +26,5 @@ test.describe("esbuild bundles a single ESM outfile", { tag: "@quick" }, () => {
     await runSmoke(page, baseURLOf(app), smokeOf(expectations));
   });
 });
+
+hashedNamesTest();
