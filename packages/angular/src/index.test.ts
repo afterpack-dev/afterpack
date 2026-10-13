@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __reset, __setProcessResult, __setVersion, engineCalls } from "../../../test/core-fake.js";
 import { findAngularBrowserDir } from "./browser-dir.js";
-import { afterpackAngular } from "./index.js";
+import { afterpackAngular, angularHashToken } from "./index.js";
 import { angularSourceType, classifyAngularScripts } from "./source-type.js";
 
 let root: string;
@@ -394,5 +394,74 @@ describe("afterpackAngular sourceType", () => {
     writeAngularOutput(browserDir);
     await afterpackAngular({ cwd: root });
     expect(engineCalls[0].config.sourceType).toBeUndefined();
+  });
+});
+
+describe("angularHashToken", () => {
+  it.each([
+    ["browser/main-M4BIKID7.js", "M4BIKID7"],
+    ["browser/chunk-2VMXMS7J.js", "2VMXMS7J"],
+    ["browser/styles-5INURTSO.css", "5INURTSO"],
+    ["server/chunk-ABCD2345.mjs", "ABCD2345"],
+    ["browser/main.js", null],
+    ["browser/media/logo-ABCD2345.png", null],
+  ])("reads esbuild's content hash from %s", (path, token) => {
+    expect(angularHashToken(path)).toBe(token);
+  });
+});
+
+describe("afterpackAngular content-hashed names", () => {
+  function hashedOutput(): void {
+    writeFileSync(
+      join(browserDir, "index.html"),
+      '<script src="polyfills-POLYAAAA.js" type="module"></script>' +
+        '<script src="main-MAINAAAA.js" type="module"></script>',
+    );
+    writeFileSync(join(browserDir, "polyfills-POLYAAAA.js"), "var zone=1;");
+    writeFileSync(join(browserDir, "main-MAINAAAA.js"), 'import("./chunk-LAZYAAAA.js");');
+    writeFileSync(join(browserDir, "chunk-LAZYAAAA.js"), "export const lazy=1;");
+    writeFileSync(join(browserDir, "styles-STYLAAAA.css"), "a{}");
+    const serverDir = join(browserDir, "..", "server");
+    mkdirSync(serverDir, { recursive: true });
+    writeFileSync(
+      join(serverDir, "angular-app-manifest.mjs"),
+      'export default {"index.csr.html":"<script src=\\"main-MAINAAAA.js\\"></script>"};',
+    );
+  }
+
+  it("renames every hashed browser chunk and rewrites the HTML, imports and server manifest", async () => {
+    hashedOutput();
+    await afterpackAngular({ cwd: root, seed: 3 });
+    const names = readdirSync(browserDir).sort();
+    const main = names.find((name) => name.startsWith("main-")) as string;
+    const lazy = names.find((name) => name.startsWith("chunk-")) as string;
+    const polyfills = names.find((name) => name.startsWith("polyfills-")) as string;
+    expect(main).toMatch(/^main-[A-Z2-7]{8}\.js$/);
+    expect(main).not.toBe("main-MAINAAAA.js");
+    expect(lazy).not.toBe("chunk-LAZYAAAA.js");
+    expect(polyfills).not.toBe("polyfills-POLYAAAA.js");
+    expect(names).toContain("styles-STYLAAAA.css");
+    expect(readFileSync(join(browserDir, "index.html"), "utf8")).toBe(
+      `<script src="${polyfills}" type="module"></script><script src="${main}" type="module"></script>`,
+    );
+    expect(readFileSync(join(browserDir, main), "utf8")).toBe(`OBF:import("./${lazy}");`);
+    expect(
+      readFileSync(join(browserDir, "..", "server", "angular-app-manifest.mjs"), "utf8"),
+    ).toContain(`<script src=\\"${main}\\">`);
+  });
+
+  it("gives the same name to the same bytes, and new names to a new seed", async () => {
+    const namesFor = async (seed: number): Promise<string[]> => {
+      rmSync(join(root, "dist"), { recursive: true, force: true });
+      rmSync(join(root, ".afterpack"), { recursive: true, force: true });
+      mkdirSync(browserDir, { recursive: true });
+      hashedOutput();
+      await afterpackAngular({ cwd: root, seed });
+      return readdirSync(browserDir).sort();
+    };
+    const first = await namesFor(3);
+    expect(await namesFor(3)).toEqual(first);
+    const other = await namesFor(4);
+    expect(other.filter((name) => name.endsWith(".js") && first.includes(name))).toEqual([]);
   });
 });

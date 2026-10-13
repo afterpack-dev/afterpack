@@ -1,9 +1,10 @@
-import { resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import { processBatch, version } from "@afterpack/core";
 import {
   type AfterpackPluginOptions,
   collectJsFiles,
   createTelemetryReporter,
+  type HashTokenOf,
   passSettings,
   resolveClientIdentity,
   resolvePluginConfig,
@@ -27,6 +28,15 @@ const DIRECTIVES_UNSUPPORTED =
   "hook (@afterpack/vite, @afterpack/webpack, @afterpack/esbuild).";
 
 const DIRECTIVES_ALWAYS_DISABLED = false;
+
+const ESBUILD_HASHED_NAME_RE = /-([A-Z0-9]{8})\.(?:js|mjs|css)$/;
+
+export const angularHashToken: HashTokenOf = (relativePath) =>
+  ESBUILD_HASHED_NAME_RE.exec(basename(relativePath))?.[1] ?? null;
+
+function applicationOutputRoot(browserDir: string): string {
+  return basename(browserDir) === "browser" ? dirname(browserDir) : browserDir;
+}
 
 export async function afterpackAngular(options: AfterpackAngularOptions = {}): Promise<void> {
   const startedBeforeDirDiscovery = Date.now();
@@ -61,6 +71,7 @@ export async function afterpackAngular(options: AfterpackAngularOptions = {}): P
     startedAt: startedBeforeDirDiscovery,
     combinedProtectionMap: { buildDir: browserDir },
     sourceMapSweepDir: browserDir,
+    hashedNames: { root: applicationOutputRoot(browserDir), tokenOf: angularHashToken },
     ...passSettings(resolved),
     sourceType: angularSourceType(classifyAngularScripts(browserDir, files)),
     directivesEnabled: DIRECTIVES_ALWAYS_DISABLED,
