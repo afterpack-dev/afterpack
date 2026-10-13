@@ -10,9 +10,10 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { __reset, __setProcessResult, engineCalls } from "../../../test/core-fake.js";
+import { __reset, __setProcessResult, __setVersion, engineCalls } from "../../../test/core-fake.js";
 import { findAngularBrowserDir } from "./browser-dir.js";
 import { afterpackAngular } from "./index.js";
+import { angularSourceType, classifyAngularScripts } from "./source-type.js";
 
 let root: string;
 let browserDir: string;
@@ -275,5 +276,123 @@ describe("afterpackAngular never ships the Angular builder's own source map", ()
       expect(readFileSync(join(browserDir, map), "utf8")).toBe(ENGINE_MAP);
     }
     expect(bundlerSourceLeftIn(browserDir)).toEqual([]);
+  });
+});
+
+function writeAngularOutput(dir: string, extraBody = ""): void {
+  writeFileSync(
+    join(dir, "index.html"),
+    `<!doctype html><html><body><app-root></app-root><link rel="modulepreload" href="chunk-SHARED01.js">` +
+      `<script src="polyfills-POLY0001.js" type="module"></script>${extraBody}` +
+      `<script src="main-MAIN0001.js" type="module"></script></body></html>`,
+  );
+  writeFileSync(join(dir, "polyfills-POLY0001.js"), "var ce=globalThis;ce.zone=1;");
+  writeFileSync(
+    join(dir, "main-MAIN0001.js"),
+    'import{a as s}from"./chunk-SHARED01.js";' +
+      'let w=new Worker(new URL("worker-WORK0001.js",import.meta.url),{type:"module"});' +
+      'import("./chunk-LAZY0001.js").then(m=>m.run(s,w));',
+  );
+  writeFileSync(join(dir, "chunk-SHARED01.js"), "var a=1;export{a};");
+  writeFileSync(
+    join(dir, "chunk-LAZY0001.js"),
+    'import"./chunk-DEEP0001.js";export function run(){}',
+  );
+  writeFileSync(join(dir, "chunk-DEEP0001.js"), "globalThis.deep=1;");
+  writeFileSync(join(dir, "worker-WORK0001.js"), "addEventListener('message',()=>postMessage(1));");
+}
+
+function namesOf(paths: string[]): string[] {
+  return paths.map((path) => path.slice(browserDir.length + 1));
+}
+
+function classify(): ReturnType<typeof classifyAngularScripts> {
+  const files = readdirSync(browserDir, { recursive: true, encoding: "utf8" })
+    .filter((name) => name.endsWith(".js"))
+    .map((name) => join(browserDir, name));
+  return classifyAngularScripts(browserDir, files);
+}
+
+describe("classifyAngularScripts", () => {
+  it("follows the module graph from module scripts, modulepreload links, imports and module workers", () => {
+    writeAngularOutput(browserDir);
+    const kinds = classify();
+    expect(namesOf(kinds.module)).toEqual([
+      "chunk-DEEP0001.js",
+      "chunk-LAZY0001.js",
+      "chunk-SHARED01.js",
+      "main-MAIN0001.js",
+      "polyfills-POLY0001.js",
+      "worker-WORK0001.js",
+    ]);
+    expect(kinds.classic).toEqual([]);
+    expect(kinds.unclaimed).toEqual([]);
+    expect(angularSourceType(kinds)).toBe("module");
+  });
+
+  it("names the global scripts bundle a classic script and withholds module from the mixed build", () => {
+    writeAngularOutput(browserDir, '<script src="scripts-GLOB0001.js" defer></script>');
+    writeFileSync(join(browserDir, "scripts-GLOB0001.js"), "var legacyGlobal=1;");
+    const kinds = classify();
+    expect(namesOf(kinds.classic)).toEqual(["scripts-GLOB0001.js"]);
+    expect(kinds.module).toHaveLength(6);
+    expect(angularSourceType(kinds)).toBeUndefined();
+  });
+
+  it("withholds module when a copied asset is loaded by nothing it can follow", () => {
+    writeAngularOutput(browserDir);
+    mkdirSync(join(browserDir, "vendor"));
+    writeFileSync(join(browserDir, "vendor", "copied.js"), "var copied=1;");
+    const kinds = classify();
+    expect(namesOf(kinds.unclaimed)).toEqual([join("vendor", "copied.js")]);
+    expect(angularSourceType(kinds)).toBeUndefined();
+  });
+
+  it("never counts a worker started without type module as a module", () => {
+    writeAngularOutput(browserDir);
+    writeFileSync(
+      join(browserDir, "main-MAIN0001.js"),
+      'import"./chunk-SHARED01.js";new Worker(new URL("worker-WORK0001.js",import.meta.url));',
+    );
+    rmSync(join(browserDir, "chunk-LAZY0001.js"));
+    rmSync(join(browserDir, "chunk-DEEP0001.js"));
+    const kinds = classify();
+    expect(namesOf(kinds.unclaimed)).toEqual(["worker-WORK0001.js"]);
+    expect(angularSourceType(kinds)).toBeUndefined();
+  });
+
+  it("withholds module from output no HTML loads as a module", () => {
+    writeFileSync(join(browserDir, "index.html"), '<script src="main.js"></script>');
+    writeFileSync(join(browserDir, "main.js"), "var a=1;");
+    const kinds = classify();
+    expect(namesOf(kinds.classic)).toEqual(["main.js"]);
+    expect(angularSourceType(kinds)).toBeUndefined();
+  });
+});
+
+describe("afterpackAngular sourceType", () => {
+  beforeEach(() => {
+    __setVersion("0.2.3");
+  });
+
+  it("sends module for the application builder's ES module output", async () => {
+    writeAngularOutput(browserDir);
+    await afterpackAngular({ cwd: root });
+    expect(engineCalls).toHaveLength(6);
+    expect(engineCalls[0].config.sourceType).toBe("module");
+  });
+
+  it("withholds it when the build also ships a classic global scripts bundle", async () => {
+    writeAngularOutput(browserDir, '<script src="scripts-GLOB0001.js" defer></script>');
+    writeFileSync(join(browserDir, "scripts-GLOB0001.js"), "var legacyGlobal=1;");
+    await afterpackAngular({ cwd: root });
+    expect(engineCalls[0].config.sourceType).toBeUndefined();
+  });
+
+  it("withholds it on an engine too old to take the key", async () => {
+    __setVersion("0.2.2");
+    writeAngularOutput(browserDir);
+    await afterpackAngular({ cwd: root });
+    expect(engineCalls[0].config.sourceType).toBeUndefined();
   });
 });

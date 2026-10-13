@@ -10,6 +10,7 @@ import {
   runObfuscationPass,
 } from "@afterpack/integration-utils";
 import { findAngularBrowserDir } from "./browser-dir.js";
+import { angularSourceType, classifyAngularScripts } from "./source-type.js";
 
 export type AfterpackAngularOptions = Omit<AfterpackPluginOptions, "directives"> & {
   cwd?: string;
@@ -61,6 +62,7 @@ export async function afterpackAngular(options: AfterpackAngularOptions = {}): P
     combinedProtectionMap: { buildDir: browserDir },
     sourceMapSweepDir: browserDir,
     ...passSettings(resolved),
+    sourceType: angularSourceType(classifyAngularScripts(browserDir, files)),
     directivesEnabled: DIRECTIVES_ALWAYS_DISABLED,
   });
 }
