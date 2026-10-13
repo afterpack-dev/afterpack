@@ -66,7 +66,7 @@ async function runPlugin(
   const plugin = afterpackVite(options);
   // biome-ignore lint/suspicious/noExplicitAny: exercising Vite hooks directly in a test.
   const p = plugin as any;
-  p.configResolved({ root, build: { outDir } });
+  p.configResolved({ root, command: "build", build: { outDir } });
   await p.buildStart.call({});
   await p.generateBundle.handler.call({}, { dir: outDir, ...outputOptions }, bundle);
   return bundle;
@@ -348,7 +348,7 @@ describe("afterpackVite writeBundle (protection receipt)", () => {
     const plugin = afterpackVite({});
     // biome-ignore lint/suspicious/noExplicitAny: exercising Vite hooks directly in a test.
     const p = plugin as any;
-    p.configResolved({ root, build: { outDir } });
+    p.configResolved({ root, command: "build", build: { outDir } });
     const bundle = bundleOf(chunk("a.js", "export const a = 1;"));
     await p.generateBundle.handler.call({}, { dir: outDir }, bundle);
     const emitted = bundle["a.js"].code;
@@ -368,7 +368,7 @@ describe("afterpackVite writeBundle (protection receipt)", () => {
     const plugin = afterpackVite({});
     // biome-ignore lint/suspicious/noExplicitAny: exercising Vite hooks directly in a test.
     const p = plugin as any;
-    p.configResolved({ root, build: { outDir } });
+    p.configResolved({ root, command: "build", build: { outDir } });
     const bundle = bundleOf(chunk("a.js", "export const a = 1;"));
     await p.generateBundle.handler.call({}, { dir: outDir }, bundle);
 
@@ -420,7 +420,7 @@ describe("afterpackVite writeBundle (protection receipt)", () => {
       const plugin = afterpackVite({ diagnostics: { level: "none" } });
       // biome-ignore lint/suspicious/noExplicitAny: exercising Vite hooks directly in a test.
       const p = plugin as any;
-      p.configResolved({ root, build: { outDir } });
+      p.configResolved({ root, command: "build", build: { outDir } });
       const bundle = bundleOf(chunk("a.js", "export const a = 1;"));
       await p.generateBundle.handler.call({}, { dir: outDir }, bundle);
       const emitted = bundle["a.js"].code;
@@ -439,7 +439,7 @@ describe("afterpackVite writeBundle (protection receipt)", () => {
     const plugin = afterpackVite({});
     // biome-ignore lint/suspicious/noExplicitAny: exercising Vite hooks directly in a test.
     const p = plugin as any;
-    p.configResolved({ root, build: { outDir } });
+    p.configResolved({ root, command: "build", build: { outDir } });
     const bundle = bundleOf(chunk("a.js", "export const a = 1;"));
     await p.generateBundle.handler.call({}, { dir: outDir }, bundle);
     await p.writeBundle();
@@ -522,7 +522,7 @@ describe("afterpackVite leg (multi-config builds)", () => {
     const plugin = afterpackVite({ leg: "shared" });
     // biome-ignore lint/suspicious/noExplicitAny: exercising Vite hooks directly in a test.
     const p = plugin as any;
-    p.configResolved({ root, build: { outDir } });
+    p.configResolved({ root, command: "build", build: { outDir } });
     await p.generateBundle.handler.call(
       {},
       { dir: outDir },
@@ -627,7 +627,7 @@ describe("afterpackVite content-hashed names", () => {
   async function startedPlugin(options: AfterpackViteOptions): Promise<any> {
     // biome-ignore lint/suspicious/noExplicitAny: exercising Vite hooks directly in a test.
     const plugin = afterpackVite(options) as any;
-    plugin.configResolved({ root, build: { outDir } });
+    plugin.configResolved({ root, command: "build", build: { outDir } });
     await plugin.buildStart.call({});
     return plugin;
   }
@@ -668,6 +668,14 @@ describe("afterpackVite content-hashed names", () => {
     expect(await saltOf({ seed: 1, build: { autorun: false } })).toBeUndefined();
   });
 
+  it("resolves nothing while Vite serves in dev", async () => {
+    // biome-ignore lint/suspicious/noExplicitAny: exercising Vite hooks directly in a test.
+    const plugin = afterpackVite({ seed: 1 }) as any;
+    plugin.configResolved({ root, command: "serve", build: { outDir } });
+    await plugin.buildStart.call({});
+    expect(plugin.augmentChunkHash()).toBeUndefined();
+  });
+
   it("salts Web Worker sub-builds through worker.plugins, keeping the user's worker plugins", async () => {
     const userWorkerPlugin = { name: "user-worker" };
     const plugin = afterpackVite({ seed: 1 });
@@ -677,7 +685,7 @@ describe("afterpackVite content-hashed names", () => {
     expect(workerPlugins[0]).toBe(userWorkerPlugin);
     // biome-ignore lint/suspicious/noExplicitAny: exercising Vite hooks directly in a test.
     const p = plugin as any;
-    p.configResolved({ root, build: { outDir } });
+    p.configResolved({ root, command: "build", build: { outDir } });
     await p.buildStart.call({});
     expect(workerPlugins[1].augmentChunkHash()).toBe(p.augmentChunkHash());
   });
@@ -689,7 +697,7 @@ describe("afterpackVite content-hashed names", () => {
     const workerPlugin = (plugin.config as any)({}).worker.plugins()[0];
     // biome-ignore lint/suspicious/noExplicitAny: exercising Vite hooks directly in a test.
     const p = plugin as any;
-    p.configResolved({ root, build: { outDir } });
+    p.configResolved({ root, command: "build", build: { outDir } });
     await p.buildStart.call({});
     workerPlugin.generateBundle({}, { "assets/worker-AAAA.js": {} });
     const bundle = bundleOf(

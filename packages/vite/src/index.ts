@@ -51,6 +51,7 @@ export function afterpackVite(options: AfterpackViteOptions = {}): Plugin {
   let outDir = "";
   let root = "";
   let buildSourcemap = false;
+  let building = false;
   const preMinifyCaptureByModuleId = new Map<
     string,
     { source: string; directives: CapturedDirective[]; renameGlobals: boolean }
@@ -98,12 +99,13 @@ export function afterpackVite(options: AfterpackViteOptions = {}): Plugin {
       root = config.root;
       outDir = resolve(config.root, config.build.outDir);
       buildSourcemap = Boolean(config.build.sourcemap);
+      building = config.command === "build";
     },
 
     async buildStart() {
       hashSalt = null;
       workerOutputs.clear();
-      if (!autorun || !outDir) return;
+      if (!autorun || !building || !outDir) return;
       hashSalt = prepareHashSalt({
         seed: settings.seed,
         root: options.projectRoot ?? root ?? outDir,
