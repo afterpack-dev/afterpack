@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -149,6 +150,34 @@ describe("afterpack restore", () => {
 
     expect(await invoke(["restore"])).toBe(0);
     expect(readFileSync(file, "utf8")).toBe("var a = 1;");
+  });
+
+  it("restores a backup an earlier afterpack wrote in the first manifest schema", async () => {
+    writeFileSync(join(buildDir, "app.js"), "OBF:export const a = 1;");
+    const backup = join(root, ".afterpack", "backup");
+    mkdirSync(join(backup, "dist"), { recursive: true });
+    writeFileSync(join(backup, "dist", "app.js"), "export const a = 1;");
+    const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+    writeFileSync(
+      backupManifestPath(root),
+      JSON.stringify({
+        schema: 1,
+        timestamp: "2026-01-01T00:00:00.000Z",
+        protectedRoot: buildDir,
+        cliVersion: "0.2.0",
+        receiptPath: null,
+        files: [
+          {
+            path: "dist/app.js",
+            originalSha256: sha("export const a = 1;"),
+            obfuscatedSha256: sha("OBF:export const a = 1;"),
+          },
+        ],
+      }),
+    );
+
+    expect(await invoke(["restore"])).toBe(0);
+    expect(readFileSync(join(buildDir, "app.js"), "utf8")).toBe("export const a = 1;");
   });
 
   it("refuses with `Nothing to restore` and the contact line when there is no manifest", async () => {

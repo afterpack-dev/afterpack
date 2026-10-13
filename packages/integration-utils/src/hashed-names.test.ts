@@ -19,7 +19,13 @@ import {
   type SaltEngine,
   saltSettings,
 } from "./hash-salt.js";
-import { deriveHashToken, type HashTokenOf, planHashedNames } from "./hashed-names.js";
+import {
+  deriveHashToken,
+  type HashTokenOf,
+  planHashedNames,
+  stagedPath,
+  unreferencedHashedFiles,
+} from "./hashed-names.js";
 import { resetBuildSessions } from "./seed.js";
 
 let root: string;
@@ -223,6 +229,66 @@ const LOCAL: SaltEngine = {
   probedCloudVersion: null,
   probeFailed: false,
 };
+
+describe("planHashedNames staging", () => {
+  it("lists every reference file it rewrites, renamed or not", () => {
+    const main = write("static/chunks/main-0123456789abcdef.js", "x");
+    const manifest = write("manifest.json", "main-0123456789abcdef.js");
+    const css = write("static/chunks/app-fedcba9876543210.css", "url(main-0123456789abcdef.js)");
+    write("unrelated.txt", "nothing to see");
+    const plan = planHashedNames({
+      options: { root, tokenOf: DASH_TOKEN },
+      inputs: new Map([[main, { source: "x" }]]),
+      salt: "s",
+    });
+    expect(plan.rewrites).toEqual(
+      new Map([
+        [manifest, manifest],
+        [css, join(root, `static/chunks/app-${deriveHashToken("fedcba9876543210", "s")}.css`)],
+      ]),
+    );
+  });
+
+  it("stages every rewrite before it replaces any, so a failed stage changes nothing", () => {
+    const main = write("static/chunks/main-0123456789abcdef.js", "x");
+    write("a.json", "main-0123456789abcdef.js");
+    write("b.json", "main-0123456789abcdef.js");
+    mkdirSync(stagedPath(join(root, "b.json")));
+    const plan = planHashedNames({
+      options: { root, tokenOf: DASH_TOKEN },
+      inputs: new Map([[main, { source: "x" }]]),
+      salt: "s",
+    });
+    expect(() => plan.apply()).toThrow();
+    expect(readFileSync(join(root, "a.json"), "utf8")).toBe("main-0123456789abcdef.js");
+    expect(readFileSync(join(root, "b.json"), "utf8")).toBe("main-0123456789abcdef.js");
+    expect(existsSync(stagedPath(join(root, "a.json")))).toBe(false);
+  });
+});
+
+describe("unreferencedHashedFiles", () => {
+  it("names a hashed file that nothing else in the tree refers to", () => {
+    const main = write(
+      "static/chunks/main-0123456789abcdef.js",
+      "import './lazy-1111111111111111.js'",
+    );
+    const lazy = write("static/chunks/lazy-1111111111111111.js", "x");
+    const orphan = write(
+      "static/chunks/orphan-2222222222222222.js",
+      "//# sourceMappingURL=orphan-2222222222222222.js.map",
+    );
+    write("index.html", '<script src="/static/chunks/main-0123456789abcdef.js"></script>');
+    expect(unreferencedHashedFiles({ root, tokenOf: DASH_TOKEN }, [main, lazy, orphan])).toEqual([
+      orphan,
+    ]);
+  });
+
+  it("is empty when every hashed file is referenced", () => {
+    const main = write("static/chunks/main-0123456789abcdef.js", "x");
+    write("index.html", "main-0123456789abcdef.js");
+    expect(unreferencedHashedFiles({ root, tokenOf: DASH_TOKEN }, [main])).toEqual([]);
+  });
+});
 
 describe("afterpackHashSalt", () => {
   const base = { seed: 1, engine: LOCAL, settings: { preset: "light" } };

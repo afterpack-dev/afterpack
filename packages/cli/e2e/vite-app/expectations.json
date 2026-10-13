@@ -1,0 +1,49 @@
+{
+  "framework": "vite",
+  "frameworkClass": "vanilla",
+  "description": "A plain Vite build with a lazy chunk, an index.html and a .vite/manifest.json, obfuscated afterwards by the `afterpack` CLI with no plugin. Proves the CLI renames every content-hashed chunk after its obfuscated bytes and rewrites the HTML, the manifest and the chunks that load it, and that `afterpack restore` undoes the renames byte for byte.",
+  "seed": 730155921,
+  "deterministicOutput": true,
+  "build": {
+    "outputDir": "dist",
+    "bundles": [
+      "client"
+    ],
+    "note": "build.mjs runs `vite build`, then `afterpack dist` -- a plain `npm run build` already emits obfuscated, renamed output"
+  },
+  "obfuscation": {
+    "minFiles": 4,
+    "passes": 1
+  },
+  "hashedNames": {
+    "pattern": "^root:assets/.+-[A-Za-z0-9_-]{8}\\.js$",
+    "minRenamed": 4
+  },
+  "smoke": {
+    "routes": [
+      {
+        "path": "/",
+        "status": 200,
+        "textContains": [
+          "CLI Vite fixture"
+        ],
+        "selectors": {
+          "[data-testid=\"title\"]": "CLI Vite fixture",
+          "[data-testid=\"intro\"]": "AfterPack framework-integration smoke fixture.",
+          "[data-testid=\"counter\"]": "count is 0"
+        }
+      }
+    ],
+    "interactions": [
+      {
+        "route": "/",
+        "description": "Clicking the counter loads the renamed lazy chunk through its rewritten import and re-renders.",
+        "click": "[data-testid=\"counter\"]",
+        "expectTextContains": [
+          "count is 1 (odd)"
+        ]
+      }
+    ],
+    "consoleErrors": "none"
+  }
+}

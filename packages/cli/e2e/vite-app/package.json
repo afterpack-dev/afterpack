@@ -1,0 +1,13 @@
+{
+  "name": "cli-vite-app",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "afterpack": "file:../../",
+    "vite": "^8.0.12"
+  }
+}

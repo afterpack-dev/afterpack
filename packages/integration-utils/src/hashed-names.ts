@@ -29,6 +29,7 @@ export interface HashedNameInput {
 export interface HashedNamesPlan {
   tokens: Map<string, string>;
   renamed: Map<string, string>;
+  rewrites: Map<string, string>;
   rewrite(text: string): string;
   preflight(): void;
   apply(): void;
@@ -40,6 +41,11 @@ const UPPER_ALNUM = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const LOWER_ALNUM = "0123456789abcdefghijklmnopqrstuvwxyz";
 const ALNUM = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 const MIN_TOKEN_LENGTH = 6;
+const STAGED_SUFFIX = ".afterpack-tmp";
+
+export function stagedPath(path: string): string {
+  return `${path}${STAGED_SUFFIX}`;
+}
 
 const BINARY_EXTENSIONS = new Set([
   ".png",
@@ -151,6 +157,40 @@ function isCandidate(path: string): boolean {
   return dot < 0 || !BINARY_EXTENSIONS.has(name.slice(dot));
 }
 
+function tokenAt(root: string, tokenOf: HashTokenOf, path: string): string | null {
+  const rel = toPosix(relative(root, path));
+  if (rel.startsWith("..")) return null;
+  const token = tokenOf(rel);
+  if (token === null || token.length < MIN_TOKEN_LENGTH) return null;
+  return basename(path).includes(token) ? token : null;
+}
+
+export function unreferencedHashedFiles(
+  options: HashedNamesOptions,
+  files: readonly string[],
+): string[] {
+  const owners = new Map<string, Set<string>>();
+  for (const file of files) {
+    const token = tokenAt(options.root, options.tokenOf, file);
+    if (token !== null) owners.set(token, (owners.get(token) ?? new Set()).add(file));
+  }
+  const pattern = tokenPattern(owners.keys());
+  if (pattern === null) return [];
+  const referenced = new Set<string>();
+  for (const path of listFiles(options.root, options.skip ?? (() => false))) {
+    if (!isCandidate(path)) continue;
+    const text = readText(path);
+    if (text === null) continue;
+    for (const [token] of text.matchAll(pattern)) {
+      for (const owner of owners.get(token) ?? []) if (owner !== path) referenced.add(owner);
+    }
+  }
+  return [...owners.values()]
+    .flatMap((set) => [...set])
+    .filter((file) => !referenced.has(file))
+    .sort();
+}
+
 function writableDir(dir: string): boolean {
   try {
     accessSync(dir, constants.W_OK);
@@ -168,13 +208,7 @@ export function planHashedNames(input: {
   const { root, tokenOf } = input.options;
   const skip = input.options.skip ?? (() => false);
   const tokens = new Map<string, string>();
-  const tokenOfPath = (path: string): string | null => {
-    const rel = toPosix(relative(root, path));
-    if (rel.startsWith("..")) return null;
-    const token = tokenOf(rel);
-    if (token === null || token.length < MIN_TOKEN_LENGTH) return null;
-    return basename(path).includes(token) ? token : null;
-  };
+  const tokenOfPath = (path: string): string | null => tokenAt(root, tokenOf, path);
   const addToken = (token: string, regions?: RegionConfig[]): boolean => {
     if (tokens.has(token)) return false;
     tokens.set(token, deriveHashToken(token, input.salt, regionsKey(regions)));
@@ -231,9 +265,11 @@ export function planHashedNames(input: {
     if (next !== path) renamed.set(path, next);
   }
   const writes: { from: string; to: string; text: string }[] = [];
+  const rewrites = new Map<string, string>();
   for (const path of changed) {
     const to = renamedPath(path);
     if (to !== path) renamed.set(path, to);
+    rewrites.set(path, to);
     writes.push({ from: path, to, text: rewrite(others.get(path) as string) });
   }
 
@@ -257,14 +293,23 @@ export function planHashedNames(input: {
   return {
     tokens,
     renamed,
+    rewrites,
     rewrite,
     preflight,
     apply() {
       preflight();
+      const staged: string[] = [];
+      try {
+        for (const write of writes) {
+          writeFileSync(stagedPath(write.to), write.text);
+          staged.push(stagedPath(write.to));
+        }
+      } catch (error) {
+        for (const path of staged) rmSync(path, { force: true });
+        throw error;
+      }
       for (const write of writes) {
-        const tmp = `${write.to}.afterpack-tmp`;
-        writeFileSync(tmp, write.text);
-        renameSync(tmp, write.to);
+        renameSync(stagedPath(write.to), write.to);
         if (write.to !== write.from) rmSync(write.from, { force: true });
       }
     },

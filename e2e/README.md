@@ -109,6 +109,14 @@ that fixture's other browsers. To repeat one Firefox test, select only that brow
    with several fixtures keys `hashedNames` by fixture name, and `null` declares a fixture with no
    content-hashed output. `vite-worker` adds a module Web Worker, which Vite builds in its own
    sub-build, and a service worker that precaches every hashed asset by URL alone.
+   `cli-vite-app` and `cli-next-app` run the same check over the CLI's renames: each builds with
+   its bundler alone, then runs `afterpack dist` or `afterpack .next/static/chunks`. The other CLI
+   fixtures ship no content-hashed names and declare `null`.
+6. A CLI run's renames can be undone (`expectRestoreUndoesRenames`, in `cli-vite-app` and
+   `cli-next-app`). The test makes a plain build, runs the CLI over it with its backup on, checks
+   that at least one file left its plain name, runs `afterpack verify` on the tree and on a deploy
+   copy of it, then runs `afterpack restore`, which must give back the plain build byte for byte.
+   It rebuilds the fixture last, so the tests after it see the protected build.
 
 ## Writing a scenario
 

@@ -51,7 +51,9 @@ function htmlFilesUnder(dir: string): string[] {
   return out;
 }
 
-function recomputeNgswHashTable(browserDir: string): void {
+const PLUGIN_LABEL = "@afterpack/angular";
+
+function recomputeNgswHashTable(browserDir: string, label: string): void {
   const ngsw = join(browserDir, "ngsw.json");
   if (!existsSync(ngsw)) return;
   const config = JSON.parse(readFileSync(ngsw, "utf8")) as { hashTable?: Record<string, string> };
@@ -61,7 +63,7 @@ function recomputeNgswHashTable(browserDir: string): void {
     const file = join(browserDir, url.replace(/^\//, ""));
     if (!existsSync(file) || !statSync(file).isFile()) {
       throw new Error(
-        `@afterpack/angular: ngsw.json names ${url}, which is not in the browser output after ` +
+        `${label}: ngsw.json names ${url}, which is not in the browser output after ` +
           "obfuscation. AfterPack cannot recompute the service worker hash table. Rebuild, or " +
           "disable the service worker for this build.",
       );
@@ -71,25 +73,35 @@ function recomputeNgswHashTable(browserDir: string): void {
   writeFileSync(ngsw, `${JSON.stringify(config, null, 2)}\n`);
 }
 
-function refuseStaleServerManifest(outputRoot: string): void {
+export function angularServerManifestRefusal(outputRoot: string): string | null {
   const serverDir = join(outputRoot, "server");
-  if (!existsSync(serverDir)) return;
+  if (!existsSync(serverDir)) return null;
   for (const entry of readdirSync(serverDir)) {
     if (!/angular-app-(?:engine-)?manifest\.mjs$/.test(entry)) continue;
     const text = readFileSync(join(serverDir, entry), "utf8");
     if (/\bhash\s*:\s*['"`]/.test(text) || /\bintegrity\s*:/.test(text)) {
-      throw new Error(
-        `@afterpack/angular: ${entry} embeds asset hashes that AfterPack cannot recompute after ` +
-          "renaming and obfuscating the browser output, so the SSR ETags would be stale. This " +
-          "Angular server build is not supported — obfuscate only the browser output, or remove " +
-          "@afterpack/angular from the SSR build.",
+      return (
+        `${entry} embeds asset hashes that AfterPack cannot recompute after renaming and ` +
+        "obfuscating the browser output, so the SSR ETags would be stale. This Angular server " +
+        "build is not supported"
       );
     }
   }
+  return null;
 }
 
-export function recomputeAngularIntegrity(outputRoot: string, browserDir: string): void {
-  refuseStaleServerManifest(outputRoot);
+export function recomputeAngularIntegrity(
+  outputRoot: string,
+  browserDir: string,
+  label = PLUGIN_LABEL,
+): void {
+  const refusal = angularServerManifestRefusal(outputRoot);
+  if (refusal !== null) {
+    throw new Error(
+      `${label}: ${refusal} — obfuscate only the browser output, or remove ` +
+        "@afterpack/angular from the SSR build.",
+    );
+  }
   recomputeHtmlIntegrity(browserDir);
-  recomputeNgswHashTable(browserDir);
+  recomputeNgswHashTable(browserDir, label);
 }

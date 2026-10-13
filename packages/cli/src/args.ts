@@ -186,7 +186,9 @@ export const HELP_ALL = `${USAGE}
 
 AfterPack protects the JavaScript your build ships. Point it at your output
 directory (dist/, build/, out/, ...) or at ONE .js/.mjs/.cjs file, and
-it processes every emitted file in place.
+it processes every emitted file in place. On a Next.js, Angular, Vite or
+webpack build it also renames each content-hashed file to match its
+obfuscated bytes, and rewrites every reference to it.
 
 Every option below is written the same way in all four places: as
 \`--key=value\` here, as AFTERPACK_<key with dots replaced by underscores> in

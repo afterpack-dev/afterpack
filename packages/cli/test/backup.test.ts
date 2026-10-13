@@ -15,11 +15,11 @@ import {
   type BackupManifest,
   backupDir,
   backupManifestPath,
+  beginJournal,
   captureOriginals,
   findBackupProjectRoot,
   matchAlreadyObfuscated,
   readBackupManifest,
-  writeBackups,
 } from "../src/backup.js";
 
 let root: string;
@@ -39,25 +39,35 @@ function distApp(): string {
   return file;
 }
 
+function protect(
+  file: string,
+  obfuscated: string,
+  receiptPath: string | null = null,
+): { manifestPath: string; count: number } {
+  const journal = beginJournal({
+    projectRoot: root,
+    protectedRoot: join(root, "dist"),
+    cliVersion: "9.9.9",
+    touched: [file],
+    renamed: new Map(),
+    persist: true,
+  });
+  writeFileSync(file, obfuscated);
+  const written = journal.commit(receiptPath);
+  if (written === null) throw new Error("a persisted journal must commit a manifest");
+  return written;
+}
+
 function okManifest(projectRoot: string): BackupManifest {
   const result = readBackupManifest(projectRoot);
   if (result.status !== "ok") throw new Error(`expected an ok manifest, got ${result.status}`);
   return result.manifest;
 }
 
-describe("writeBackups", () => {
+describe("the backup journal", () => {
   it("writes the manifest and mirrors every file under .afterpack/backup/, never beside it", () => {
     const file = distApp();
-    const pending = captureOriginals(root, [file]);
-    writeFileSync(file, "OBF:export const a = 1;");
-
-    const { manifestPath, count } = writeBackups({
-      projectRoot: root,
-      protectedRoot: join(root, "dist"),
-      cliVersion: "9.9.9",
-      pending,
-      receiptPath: null,
-    });
+    const { manifestPath, count } = protect(file, "OBF:export const a = 1;");
 
     expect(count).toBe(1);
     expect(manifestPath).toBe(backupManifestPath(root));
@@ -70,20 +80,13 @@ describe("writeBackups", () => {
 
   it("writes a manifest with the documented shape", () => {
     const file = distApp();
-    const pending = captureOriginals(root, [file]);
-    writeFileSync(file, "OBF:export const a = 1;");
-
-    writeBackups({
-      projectRoot: root,
-      protectedRoot: join(root, "dist"),
-      cliVersion: "9.9.9",
-      pending,
-      receiptPath: join(root, ".afterpack", "receipts", "dist.json"),
-    });
+    protect(file, "OBF:export const a = 1;", join(root, ".afterpack", "receipts", "dist.json"));
 
     const manifest = okManifest(root);
     expect(manifest).toMatchObject({
-      schema: 1,
+      schema: 2,
+      state: "complete",
+      renames: [],
       protectedRoot: join(root, "dist"),
       cliVersion: "9.9.9",
       receiptPath: join(root, ".afterpack", "receipts", "dist.json"),
@@ -101,27 +104,11 @@ describe("writeBackups", () => {
 
   it("keeps only the most recent run — clears the previous backup", () => {
     const file = distApp();
-    let pending = captureOriginals(root, [file]);
-    writeFileSync(file, "OBF:export const a = 1;");
-    writeBackups({
-      projectRoot: root,
-      protectedRoot: join(root, "dist"),
-      cliVersion: "9.9.9",
-      pending,
-      receiptPath: null,
-    });
+    protect(file, "OBF:export const a = 1;");
 
     const other = join(root, "dist", "b.js");
     writeFileSync(other, "export const b = 2;");
-    pending = captureOriginals(root, [other]);
-    writeFileSync(other, "OBF:export const b = 2;");
-    writeBackups({
-      projectRoot: root,
-      protectedRoot: join(root, "dist"),
-      cliVersion: "9.9.9",
-      pending,
-      receiptPath: null,
-    });
+    protect(other, "OBF:export const b = 2;");
 
     expect(existsSync(join(backupDir(root), "dist", "app.js"))).toBe(false);
     expect(existsSync(join(backupDir(root), "dist", "b.js"))).toBe(true);
@@ -156,28 +143,14 @@ describe("readBackupManifest", () => {
 describe("findBackupProjectRoot", () => {
   it("finds the project root directly", () => {
     const file = distApp();
-    const pending = captureOriginals(root, [file]);
-    writeBackups({
-      projectRoot: root,
-      protectedRoot: join(root, "dist"),
-      cliVersion: "9.9.9",
-      pending,
-      receiptPath: null,
-    });
+    protect(file, "OBF:export const a = 1;");
 
     expect(findBackupProjectRoot(root)).toBe(root);
   });
 
   it("searches upward from a directory beneath the project root", () => {
     const file = distApp();
-    const pending = captureOriginals(root, [file]);
-    writeBackups({
-      projectRoot: root,
-      protectedRoot: join(root, "dist"),
-      cliVersion: "9.9.9",
-      pending,
-      receiptPath: null,
-    });
+    protect(file, "OBF:export const a = 1;");
 
     expect(findBackupProjectRoot(join(root, "dist"))).toBe(root);
   });
@@ -197,15 +170,7 @@ describe("findBackupProjectRoot", () => {
 describe("matchAlreadyObfuscated", () => {
   it("matches a file whose current bytes equal the manifest's recorded obfuscated hash", () => {
     const file = distApp();
-    const pending = captureOriginals(root, [file]);
-    writeFileSync(file, "OBF:export const a = 1;");
-    writeBackups({
-      projectRoot: root,
-      protectedRoot: join(root, "dist"),
-      cliVersion: "9.9.9",
-      pending,
-      receiptPath: null,
-    });
+    protect(file, "OBF:export const a = 1;");
 
     const current = captureOriginals(root, [file]);
     expect(matchAlreadyObfuscated(okManifest(root), current)).toEqual([file]);
@@ -213,15 +178,7 @@ describe("matchAlreadyObfuscated", () => {
 
   it("does not match once the file changes again (a fresh rebuild)", () => {
     const file = distApp();
-    const pending = captureOriginals(root, [file]);
-    writeFileSync(file, "OBF:export const a = 1;");
-    writeBackups({
-      projectRoot: root,
-      protectedRoot: join(root, "dist"),
-      cliVersion: "9.9.9",
-      pending,
-      receiptPath: null,
-    });
+    protect(file, "OBF:export const a = 1;");
 
     writeFileSync(file, "export const a = 1;");
     const current = captureOriginals(root, [file]);

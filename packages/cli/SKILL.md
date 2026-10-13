@@ -60,6 +60,10 @@ Rules:
 - Point it at build output, never at `src/`.
 - Run it once per build. Files are rewritten in place, and a second run over the same output is
   refused (exit `1`). Rebuild first.
+- On a Next.js, Angular, Vite or webpack build, each content-hashed file is renamed to match its
+  obfuscated bytes, and every reference to it is rewritten. On other output, hashed names stay as
+  the bundler wrote them, and the run says so once; use the framework plugin, or pin a constant
+  `seed`, for long-lived caching.
 - A path argument always obfuscates. With no path, the CLI checks the project for a framework
   first; if it finds none, it picks the newest of `dist/`, `build/`, `out/`, `.output/`, `.next/`.
   It never prompts.
@@ -227,8 +231,9 @@ or a file changed after it was obfuscated. A missing receipt is a failure. `veri
 
 ## `afterpack restore [dir]`
 
-Puts the originals from `.afterpack/backup/` back. It checks each file still matches what the run
-wrote and skips (and names) any that changed since, exiting `1` if any were skipped. With no backup
+Puts the originals from `.afterpack/backup/` back, under their original names, and undoes a run
+that stopped partway. It checks each file still matches what the run wrote and skips (and names)
+any that changed since, exiting `1` if any were skipped. With no backup
 there is nothing to restore, and it exits `1`.
 
 ```bash

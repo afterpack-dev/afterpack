@@ -1,4 +1,4 @@
-import { existsSync, statSync } from "node:fs";
+import { existsSync, rmSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import {
   AfterpackFilesError,
@@ -22,6 +22,7 @@ import {
   type ObfuscationEngine,
   type ObfuscationPassResult,
   type ResolvedPluginConfig,
+  recomputeAngularIntegrity,
   resolvePluginConfig,
   runObfuscationPass,
   type SourceType,
@@ -39,14 +40,16 @@ import {
 } from "./args.js";
 import { AUDIT_HELP, audit } from "./audit.js";
 import {
+  BackupOutsideProjectError,
   backupDir,
   backupManifestPath,
+  beginJournal,
   captureOriginals,
+  type Journal,
   matchAlreadyObfuscated,
   type PendingBackup,
   readBackupManifest,
   type WriteBackupsResult,
-  writeBackups,
 } from "./backup.js";
 import { frameworkDocsUrl } from "./detect.js";
 import { commandLine, commandRow, planBareRun } from "./dispatch.js";
@@ -60,6 +63,12 @@ import {
 } from "./exit.js";
 import { colorSupported, dim, green, isCiTruthy, red, setColorEnabled, yellow } from "./format.js";
 import { printHeader } from "./header.js";
+import {
+  angularIntegrityTargets,
+  detectHashedLayout,
+  type HashedLayout,
+  KEPT_NAMES_NOTICE,
+} from "./layout.js";
 import {
   type CommandName,
   displayDir,
@@ -477,7 +486,7 @@ async function runObfuscationAndBackup(input: {
   label: string;
   backupEnabled: boolean;
   projectRoot: string;
-  pendingBackups: readonly PendingBackup[];
+  layout: HashedLayout | null;
   client: ClientIdentity | null;
 }): Promise<{
   captured: CapturedFile[];
@@ -485,11 +494,15 @@ async function runObfuscationAndBackup(input: {
   failure: string | null;
   failureError: unknown;
   backupWritten: WriteBackupsResult | null;
+  undoFailure: string | null;
 }> {
   const captured: CapturedFile[] = [];
   let result: ObfuscationPassResult | null = null;
   let failure: string | null = null;
   let failureError: unknown = null;
+  let journal: Journal | null = null;
+  let undoFailure: string | null = null;
+  const angular = input.layout?.angular;
   try {
     result = await withProgress({
       stdout: input.stdout,
@@ -520,30 +533,45 @@ async function runObfuscationAndBackup(input: {
           engineConfig: input.parsed.engineConfig,
           sourceType: input.sourceType,
           directivesEnabled: false,
+          hashedNames: input.layout?.hashedNames,
+          beforeWrite: (plan) => {
+            journal = beginJournal({
+              projectRoot: input.projectRoot,
+              protectedRoot: input.buildDir,
+              cliVersion: input.version,
+              touched: [
+                ...plan.touched,
+                ...(angular ? angularIntegrityTargets(angular.browserDir) : []),
+              ],
+              renamed: plan.renamed,
+              persist: input.backupEnabled,
+              merge: input.fileTarget,
+            });
+          },
           receipt: { buildId: readBuildId(input.buildDir) },
           logger: input.report,
           summaryStyle: "cli",
           colorGlyph: green,
         }),
     });
+    if (angular) recomputeAngularIntegrity(angular.outputRoot, angular.browserDir, "afterpack");
   } catch (error) {
     failureError = error;
     failure = error instanceof Error ? error.message : String(error);
+    try {
+      (journal as Journal | null)?.rollback();
+      if (result?.receiptPath) rmSync(result.receiptPath, { force: true });
+    } catch (undo) {
+      undoFailure = undo instanceof Error ? undo.message : String(undo);
+    }
   }
 
   let backupWritten: WriteBackupsResult | null = null;
-  if (failureError === null && failure === null && input.backupEnabled) {
-    backupWritten = writeBackups({
-      projectRoot: input.projectRoot,
-      protectedRoot: input.buildDir,
-      cliVersion: input.version,
-      pending: input.pendingBackups,
-      receiptPath: result?.receiptPath ?? null,
-      merge: input.fileTarget,
-    });
+  if (failureError === null && failure === null) {
+    backupWritten = (journal as Journal | null)?.commit(result?.receiptPath ?? null) ?? null;
   }
 
-  return { captured, result, failure, failureError, backupWritten };
+  return { captured, result, failure, failureError, backupWritten, undoFailure };
 }
 
 function renderNextSteps(input: {
@@ -631,6 +659,16 @@ function refusalFor(
       code: error.code,
       message: error.summary,
       fix: error.fix,
+    };
+  }
+  if (error instanceof BackupOutsideProjectError) {
+    return {
+      exitCode: EXIT.failure,
+      code: error.code,
+      message: error.message,
+      fix:
+        "Nothing was written. Add a package.json or afterpack.json at your project root, or " +
+        "pass --build.backup=false to run without an undo.",
     };
   }
   if (error instanceof UnreadableReceiptError) {
@@ -931,8 +969,18 @@ export async function run(deps: CliDeps): Promise<number> {
   }
   const backupManifest =
     backupManifestResult.status === "ok" ? backupManifestResult.manifest : null;
-  const pendingBackups: PendingBackup[] =
-    backupEnabled || backupManifest ? captureOriginals(projectRoot, files) : [];
+  if (backupManifest?.state === "applying") {
+    return refuseHere(
+      EXIT.failure,
+      "INTERRUPTED_RUN",
+      "A previous afterpack run stopped before it finished",
+      "Run `afterpack restore` to put the build output back as your bundler wrote it, then " +
+        "run afterpack again.",
+    );
+  }
+  const pendingBackups: PendingBackup[] = backupManifest
+    ? captureOriginals(projectRoot, files)
+    : [];
   if (backupManifest) {
     const matched = matchAlreadyObfuscated(backupManifest, pendingBackups);
     if (matched.length > 0) {
@@ -951,30 +999,56 @@ export async function run(deps: CliDeps): Promise<number> {
     }
   }
 
+  const layoutDecision = detectHashedLayout(target, isDirectory, files);
+  if (layoutDecision.status === "refuse") {
+    return refuseHere(
+      EXIT.failure,
+      "UNSUPPORTED_LAYOUT",
+      layoutDecision.message,
+      "Obfuscate only the browser output of a build without SSR. Your build output was left " +
+        "exactly as your bundler wrote it.",
+    );
+  }
+  if (layoutDecision.status === "keep") notice.warn(`${yellow("⚠")} ${KEPT_NAMES_NOTICE}`);
+
   const progressLabel = `Protecting ${isDirectory ? displayDir(cwd, target) : documentPath(cwd, target)}…`;
 
-  const { captured, result, failure, failureError, backupWritten } = await runObfuscationAndBackup({
-    files,
-    engine,
-    cwd,
-    buildDir,
-    fileTarget: !isDirectory,
-    sweepSourceMaps: isDirectory,
-    sourceType: detectCliSourceType({ files, buildDir }),
-    startedAt,
-    version,
-    parsed,
-    notice,
-    report,
-    stdout,
-    mode,
-    label: progressLabel,
-    backupEnabled,
-    projectRoot,
-    pendingBackups,
-    client: deps.client ?? null,
-  });
+  const { captured, result, failure, failureError, backupWritten, undoFailure } =
+    await runObfuscationAndBackup({
+      files,
+      engine,
+      cwd,
+      buildDir,
+      fileTarget: !isDirectory,
+      sweepSourceMaps: isDirectory,
+      sourceType: detectCliSourceType({ files, buildDir }),
+      startedAt,
+      version,
+      parsed,
+      notice,
+      report,
+      stdout,
+      mode,
+      label: progressLabel,
+      backupEnabled,
+      projectRoot,
+      layout: layoutDecision.status === "rename" ? layoutDecision.layout : null,
+      client: deps.client ?? null,
+    });
 
+  if (failure !== null && undoFailure !== null) {
+    return refuseHere(
+      EXIT.failure,
+      "UNDO_FAILED",
+      failure,
+      backupEnabled
+        ? "AfterPack could not undo its partial writes. Run `afterpack restore` to put the build " +
+            "output back as your bundler wrote it."
+        : "AfterPack could not undo its partial writes. Rebuild from source before running " +
+            "afterpack again.",
+      [undoFailure],
+    );
+  }
   if (failureError instanceof AlreadyObfuscatedError) {
     return refuseAlreadyObfuscated(logger, cwd, mode, version, failureError);
   }

@@ -1,4 +1,8 @@
 export {
+  angularServerManifestRefusal,
+  recomputeAngularIntegrity,
+} from "./angular-integrity.js";
+export {
   ensureAfterpackGitignore,
   type Logger,
   type WriteArtifactsInput,
@@ -68,7 +72,18 @@ export {
   type SaltEngine,
   saltSettings,
 } from "./hash-salt.js";
-export type { HashedNamesOptions, HashTokenOf } from "./hashed-names.js";
+export {
+  angularHashToken,
+  detectNextBundler,
+  NEXT_CHUNKS_PREFIX,
+  nextChunkToken,
+  skipNextInternals,
+} from "./hash-tokens.js";
+export {
+  type HashedNamesOptions,
+  type HashTokenOf,
+  unreferencedHashedFiles,
+} from "./hashed-names.js";
 export {
   AFTERPACK_DIR,
   AfterpackFilesError,
@@ -99,6 +114,7 @@ export {
   type PassMessages,
   type PassReceiptIdentity,
   type PassTiming,
+  type PassWritePlan,
   runObfuscationPass,
 } from "./pass.js";
 export { type ArtifactMode, findUpward } from "./paths.js";

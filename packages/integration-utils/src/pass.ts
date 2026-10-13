@@ -47,10 +47,12 @@ import {
   type HashedNamesOptions,
   type HashedNamesPlan,
   planHashedNames,
+  stagedPath,
 } from "./hashed-names.js";
 import { afterpackHome, describeUnanchoredHome } from "./home.js";
 import { type CapturedModule, colorRegions, type DecodedSourceMap } from "./map-color.js";
 import { type CloudNotice, reportNotices, sanitizeServerText } from "./notices.js";
+import { resolveArtifactPaths, shortHash } from "./paths.js";
 import {
   type AfterpackArtifactOptions,
   type BuildContext,
@@ -161,6 +163,11 @@ export interface PassReceiptIdentity {
   buildId?: string | null;
 }
 
+export interface PassWritePlan {
+  renamed: ReadonlyMap<string, string>;
+  touched: string[];
+}
+
 export interface ObfuscationPassOptions {
   files: string[];
   inputs?: Map<string, InMemoryInput>;
@@ -186,6 +193,7 @@ export interface ObfuscationPassOptions {
   messages?: PassMessages;
   receipt?: PassReceiptIdentity;
   afterWrite?: (writtenFiles: string[]) => void;
+  beforeWrite?: (plan: PassWritePlan) => void;
   resolvedSeed?: ResolvedBuildSeed;
   hashedNames?: HashedNamesOptions;
   cloudEngineExpectation?: SaltEngine;
@@ -703,6 +711,33 @@ export async function runObfuscationPass(
       protectionMapDocs.push(f.protectionMap);
     }
     verified.push({ result: f, source });
+  }
+
+  if (!options.emitToCaller && options.beforeWrite) {
+    const touched = new Set<string>();
+    for (const { result: f, source } of verified) {
+      const paths = resolveArtifactPaths(
+        f.path,
+        "framework",
+        policy.backup ? shortHash(source) : undefined,
+      );
+      touched.add(f.path);
+      if (policy.sourceMap && f.sourceMap != null) touched.add(paths.mapPath);
+      if (paths.backupPath) touched.add(paths.backupPath);
+    }
+    for (const [from, to] of namesPlan?.rewrites ?? []) {
+      touched.add(from).add(to).add(stagedPath(to));
+    }
+    for (const from of namesPlan?.renamed.keys() ?? []) touched.add(from);
+    for (const maps of bundlerMapsByPath.values()) for (const map of maps) touched.add(map);
+    if (sweepDir != null) {
+      for (const map of collectSourceMaps(sweepDir)) touched.add(resolve(map));
+      if (!policy.sourceMap) for (const css of collectStylesheets(sweepDir)) touched.add(css);
+    }
+    options.beforeWrite({
+      renamed: namesPlan?.renamed ?? new Map(),
+      touched: [...touched].sort(),
+    });
   }
 
   const writtenFiles: string[] = [];

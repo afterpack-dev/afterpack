@@ -1,0 +1,59 @@
+{
+  "framework": "next-16",
+  "frameworkClass": "ssr",
+  "description": "A Next.js 16 App Router build with no AfterPack plugin, obfuscated afterwards by `afterpack .next/static/chunks`. Proves the CLI recognises the Next.js layout, renames every Turbopack chunk after its obfuscated bytes, rewrites the manifests, prerendered HTML and RSC payloads under .next/ that name them, and that `next start` still serves and hydrates the result.",
+  "seed": 402918377,
+  "deterministicOutput": true,
+  "build": {
+    "outputDir": ".next",
+    "bundles": [
+      "client"
+    ],
+    "note": "build.mjs runs `next build`, then `afterpack .next/static/chunks` -- a plain `npm run build` already emits obfuscated, renamed chunks"
+  },
+  "obfuscation": {
+    "minFiles": 5,
+    "passes": 1
+  },
+  "hashedNames": {
+    "pattern": "^client:(?:turbopack-)?[0-9a-z~._-]{13}\\.js$",
+    "minRenamed": 5
+  },
+  "smoke": {
+    "routes": [
+      {
+        "path": "/",
+        "status": 200,
+        "textContains": [
+          "CLI Next.js fixture"
+        ],
+        "selectors": {
+          "[data-testid=\"title\"]": "CLI Next.js fixture",
+          "[data-testid=\"intro\"]": "AfterPack framework-integration smoke fixture."
+        }
+      },
+      {
+        "path": "/about",
+        "status": 200,
+        "textContains": [
+          "About the CLI Next.js fixture"
+        ]
+      }
+    ],
+    "interactions": [
+      {
+        "route": "/",
+        "description": "The client island hydrates from the renamed chunks; the counter increments on click.",
+        "click": "[data-testid=\"counter\"]",
+        "expectTextContains": [
+          "clicked 1 times (odd)"
+        ]
+      }
+    ],
+    "hydration": {
+      "assertNoMismatch": true,
+      "note": "server-rendered HTML must agree with the client-hydrated DOM, so every rewritten chunk reference must resolve."
+    },
+    "consoleErrors": "none"
+  }
+}

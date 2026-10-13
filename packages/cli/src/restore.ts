@@ -1,11 +1,13 @@
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
-import { PROTECTION_RECEIPTS_DIR, sha256Of } from "@afterpack/integration-utils";
+import { PROTECTION_RECEIPTS_DIR } from "@afterpack/integration-utils";
 import { CONTACT_FOOTER } from "./args.js";
 import {
   absoluteFilePath,
+  type BackupManifest,
   type BackupManifestFile,
   backupDir,
+  currentSha256,
   findBackupProjectRoot,
   readBackupManifest,
 } from "./backup.js";
@@ -32,6 +34,10 @@ Finds .afterpack/backup/ where the \`afterpack\` run kept it: next to the neares
 afterpack.json or .git above the build directory (failing those the nearest package.json,
 otherwise beside the build directory). Point it at that project root or at the build directory
 itself.
+
+Undoes every rename the run made, too: a file the run renamed is put back under its original
+name, and every file whose references the run rewrote gets its original bytes back. A run that
+stopped partway is undone the same way, from the copies it saved before it wrote anything.
 
 Verifies every recorded file against the hash it was obfuscated to BEFORE touching anything: if
 any file no longer matches, or the manifest itself is unreadable, restore changes nothing and
@@ -138,13 +144,7 @@ export function restore(deps: RestoreDeps): ExitCode {
   }
   const manifest = manifestResult.manifest;
 
-  const mismatched: BackupManifestFile[] = [];
-  for (const entry of manifest.files) {
-    const currentPath = absoluteFilePath(projectRoot, entry.path);
-    const matches = existsSync(currentPath) && sha256Of(currentPath) === entry.obfuscatedSha256;
-    if (!matches) mismatched.push(entry);
-  }
-
+  const mismatched = manifest.files.filter((entry) => !restorable(projectRoot, manifest, entry));
   if (mismatched.length > 0) {
     const noun = mismatched.length === 1 ? "file" : "files";
     return fail(
@@ -159,10 +159,35 @@ export function restore(deps: RestoreDeps): ExitCode {
   }
 
   const dir = backupDir(projectRoot);
-  for (const entry of manifest.files) {
+  const restored = manifest.files.filter(
+    (entry) => currentSha256(absoluteFilePath(projectRoot, entry.path)) !== entry.originalSha256,
+  );
+  const missing = restored.filter(
+    (entry) =>
+      entry.originalSha256 !== null &&
+      currentSha256(absoluteFilePath(dir, entry.path)) !== entry.originalSha256,
+  );
+  if (missing.length > 0) {
+    return fail(
+      deps,
+      EXIT.failure,
+      "BACKUP_INCOMPLETE",
+      `The backup is missing the original of ${missing.length} ${missing.length === 1 ? "file" : "files"} — restoring nothing`,
+      "Rebuild from source instead; this backup cannot undo the run.",
+      missing.map((f) => f.path),
+    );
+  }
+
+  for (const entry of restored) {
     const currentPath = absoluteFilePath(projectRoot, entry.path);
-    const backupPath = absoluteFilePath(dir, entry.path);
-    writeFileSync(currentPath, readFileSync(backupPath));
+    if (entry.originalSha256 === null) {
+      rmSync(currentPath, { force: true });
+      continue;
+    }
+    mkdirSync(dirname(currentPath), { recursive: true });
+    const staged = `${currentPath}.afterpack-restore`;
+    writeFileSync(staged, readFileSync(absoluteFilePath(dir, entry.path)));
+    renameSync(staged, currentPath);
   }
 
   if (manifest.receiptPath && isRecordedReceipt(projectRoot, manifest.receiptPath)) {
@@ -170,7 +195,6 @@ export function restore(deps: RestoreDeps): ExitCode {
   }
   rmSync(dir, { recursive: true, force: true });
 
-  const restored = manifest.files;
   if (deps.mode.format === "json") {
     emitJson(deps.logger, {
       afterpack: deps.version,
@@ -194,8 +218,26 @@ export function restore(deps: RestoreDeps): ExitCode {
   }
 
   const noun = restored.length === 1 ? "file" : "files";
+  const renames = manifest.renames.length;
+  const undone =
+    renames > 0 ? dim(` · ${renames} ${renames === 1 ? "rename" : "renames"} undone`) : "";
+  const interrupted =
+    manifest.state === "applying" ? dim(" · undid a run that stopped partway") : "";
   deps.report.log(
-    `${green("✓")} Restored ${restored.length} ${noun} · ${displayDir(cwd, manifest.protectedRoot)}`,
+    `${green("✓")} Restored ${restored.length} ${noun} · ${displayDir(cwd, manifest.protectedRoot)}` +
+      undone +
+      interrupted,
   );
   return EXIT.ok;
+}
+
+function restorable(
+  projectRoot: string,
+  manifest: BackupManifest,
+  entry: BackupManifestFile,
+): boolean {
+  const current = currentSha256(absoluteFilePath(projectRoot, entry.path));
+  if (entry.obfuscatedSha256 !== undefined && current === entry.obfuscatedSha256) return true;
+  if (manifest.state !== "applying") return false;
+  return entry.obfuscatedSha256 === undefined || current === entry.originalSha256;
 }

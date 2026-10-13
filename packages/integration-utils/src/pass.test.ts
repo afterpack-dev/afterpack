@@ -2241,6 +2241,48 @@ describe("runObfuscationPass hashedNames", () => {
     expect(readdirSync(outDir).sort()).toEqual(["index.html", "main-0123456789abcdef.js"]);
     expect(readFileSync(join(outDir, "index.html"), "utf8")).toBe("main-0123456789abcdef.js");
   });
+
+  it("announces every path it will write, rename or remove before it writes any", async () => {
+    const main = join(outDir, "main-0123456789abcdef.js");
+    const map = join(outDir, "main-0123456789abcdef.js.map");
+    const css = join(outDir, "site.css");
+    writeFileSync(main, "x\n//# sourceMappingURL=main-0123456789abcdef.js.map");
+    writeFileSync(map, BUNDLER_MAP);
+    writeFileSync(css, "body{}\n/*# sourceMappingURL=site.css.map */");
+    writeFileSync(join(outDir, "index.html"), "main-0123456789abcdef.js");
+    const { engine } = makeEngine((source) => ({ code: `OBF:${source}` }));
+    const seen: { touched: string[]; renamed: Map<string, string>; tree: string[] }[] = [];
+    const result = await runObfuscationPass({
+      files: [main],
+      engine,
+      label: "test",
+      cwd: root,
+      seed: 1,
+      env: {},
+      combinedProtectionMap: { buildDir: outDir },
+      sourceMapSweepDir: outDir,
+      hashedNames: { root: outDir, tokenOf },
+      beforeWrite: (plan) =>
+        seen.push({
+          touched: plan.touched,
+          renamed: new Map(plan.renamed),
+          tree: readdirSync(outDir).sort(),
+        }),
+      logger: silentLogger().logger,
+    });
+    const renamedMain = result.renamed.get(main) as string;
+    expect(seen).toHaveLength(1);
+    expect(seen[0].tree).toEqual([
+      "index.html",
+      "main-0123456789abcdef.js",
+      "main-0123456789abcdef.js.map",
+      "site.css",
+    ]);
+    expect(seen[0].renamed).toEqual(new Map([[main, renamedMain]]));
+    for (const path of [main, renamedMain, map, css, join(outDir, "index.html")]) {
+      expect(seen[0].touched).toContain(path);
+    }
+  });
 });
 
 describe("runObfuscationPass cloud engine expectation", () => {

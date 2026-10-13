@@ -1,18 +1,20 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import {
   type AfterpackPluginOptions,
   collectJsFiles,
   collectSourceMaps,
   collectStylesheets,
   createTelemetryReporter,
-  type HashTokenOf,
+  detectNextBundler,
+  nextChunkToken,
   type ObfuscationEngine,
   passSettings,
   removeSourceMaps,
   resolveClientIdentity,
   resolvePluginConfig,
   runObfuscationPass,
+  skipNextInternals,
   stripCssSourceMappingURLs,
   withSourceMappingURL,
 } from "@afterpack/integration-utils";
@@ -54,27 +56,7 @@ function readBuildIdFromManifest(distDir: string): string | null {
   }
 }
 
-function detectBundler(distDir: string): string {
-  if (existsSync(join(distDir, "turbopack"))) return "turbopack";
-  if (existsSync(join(distDir, "server", "webpack-runtime.js"))) return "webpack";
-  return "unknown";
-}
-
-const TURBOPACK_CHUNK_RE = /^(?:turbopack-)?([0-9a-z~._-]{13})\.(?:js|css)$/;
-const WEBPACK_CHUNK_RE = /[-.]([0-9a-f]{16})\.js$/;
-
-export function nextChunkToken(bundler: string): HashTokenOf {
-  const pattern =
-    bundler === "turbopack" ? TURBOPACK_CHUNK_RE : bundler === "webpack" ? WEBPACK_CHUNK_RE : null;
-  return (relativePath) => {
-    if (pattern === null || !relativePath.startsWith("static/chunks/")) return null;
-    return pattern.exec(basename(relativePath))?.[1] ?? null;
-  };
-}
-
-function skipNextInternals(relativePath: string): boolean {
-  return relativePath === "cache" || relativePath.startsWith("trace");
-}
+export { nextChunkToken };
 
 function stripTrailer(path: string): boolean {
   const code = readFileSync(path, "utf8");
@@ -139,7 +121,7 @@ export async function runAfterpackHook(input: AfterpackHookInput): Promise<void>
   }
 
   const engine = input.engine ?? (await loadEngineOnDemand());
-  const bundler = detectBundler(distDir);
+  const bundler = detectNextBundler(distDir);
   if (bundler === "unknown") {
     console.warn(
       `[${LABEL}] could not tell whether this build used Turbopack or webpack, so no content-hashed ` +

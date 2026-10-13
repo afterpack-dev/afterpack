@@ -2,16 +2,16 @@ import { basename, dirname, resolve } from "node:path";
 import { processBatch, version } from "@afterpack/core";
 import {
   type AfterpackPluginOptions,
+  angularHashToken,
   collectJsFiles,
   createTelemetryReporter,
-  type HashTokenOf,
   passSettings,
+  recomputeAngularIntegrity,
   resolveClientIdentity,
   resolvePluginConfig,
   runObfuscationPass,
 } from "@afterpack/integration-utils";
 import { findAngularBrowserDir } from "./browser-dir.js";
-import { recomputeAngularIntegrity } from "./integrity.js";
 import { angularSourceType, classifyAngularScripts } from "./source-type.js";
 
 export type AfterpackAngularOptions = Omit<AfterpackPluginOptions, "directives"> & {
@@ -30,10 +30,7 @@ const DIRECTIVES_UNSUPPORTED =
 
 const DIRECTIVES_ALWAYS_DISABLED = false;
 
-const ESBUILD_HASHED_NAME_RE = /-([A-Z0-9]{8})\.(?:js|mjs|css)$/;
-
-export const angularHashToken: HashTokenOf = (relativePath) =>
-  ESBUILD_HASHED_NAME_RE.exec(basename(relativePath))?.[1] ?? null;
+export { angularHashToken };
 
 function applicationOutputRoot(browserDir: string): string {
   return basename(browserDir) === "browser" ? dirname(browserDir) : browserDir;

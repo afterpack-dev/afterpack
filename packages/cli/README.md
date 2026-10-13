@@ -26,6 +26,12 @@ writes its output. Run `afterpack` with no path and it tells you which plugin to
 Files are obfuscated in place. Build first, then run AfterPack once. A second run over the same
 output is refused, because AfterPack recognises its own output.
 
+On a Next.js, Angular, Vite or webpack build, AfterPack also renames each content-hashed file to
+match its obfuscated bytes, and rewrites every reference to it in the HTML, manifests and other
+chunks. A name never points at different bytes, so a cache can't serve a stale copy. On other output
+with content-hashed names, the names stay as your bundler wrote them; for long-lived caching, use
+your framework's plugin, or pin a constant [`--seed`][seed].
+
 Nested `node_modules/` folders are skipped. Pass [`--paths.include`][paths.include]`='**/node_modules/**'`
 (quoted) to include them.
 
@@ -81,8 +87,9 @@ write a receipt.
 
 ## `afterpack restore [dir]`
 
-Puts back the original files from `.afterpack/backup/`. A file that changed since the run is
-skipped and named, and the command exits `1`.
+Puts back the original files from `.afterpack/backup/`, under their original names, and undoes a run
+that stopped partway. A file that changed since the run is skipped and named, and the command exits
+`1`.
 
 ## `afterpack audit <url>`
 
