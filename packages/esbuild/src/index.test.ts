@@ -270,6 +270,22 @@ describe("afterpackEsbuild content-hashed names", () => {
     expect(await bannerOf({ seed: 1 }, { format: "cjs" })).not.toBe(banner);
   });
 
+  it("folds the env-derived report policy and paths.include into the salt", async () => {
+    const original = process.env.NODE_ENV;
+    try {
+      process.env.NODE_ENV = "production";
+      const prod = await bannerOf({ seed: 1 });
+      process.env.NODE_ENV = "development";
+      const dev = await bannerOf({ seed: 1 });
+      expect(dev).not.toBe(prod);
+      process.env.NODE_ENV = "production";
+      const included = await bannerOf({ seed: 1, paths: { include: ["vendor/**"] } });
+      expect(included).not.toBe(prod);
+    } finally {
+      process.env.NODE_ENV = original;
+    }
+  });
+
   it("keeps the user's own banner first, so a shebang stays on line one", async () => {
     const banner = await bannerOf({ seed: 1 }, { banner: { js: "#!/usr/bin/env node" } });
     expect(banner?.split("\n")[0]).toBe("#!/usr/bin/env node");

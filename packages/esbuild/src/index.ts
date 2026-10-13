@@ -9,6 +9,7 @@ import {
   prepareHashSalt,
   readEngineVersion,
   removeSourceMaps,
+  reportPolicySaltBits,
   resolveClientIdentity,
   resolvePluginConfig,
   runObfuscationPass,
@@ -54,14 +55,20 @@ export function afterpackEsbuild(options: AfterpackEsbuildOptions = {}): Plugin 
       const initial = build.initialOptions;
       if (!autorun || initial.write === false) return;
       const initialCwd = initial.absWorkingDir ?? process.cwd();
-      const hashSalt = prepareHashSalt({
+      const hashSalt = await prepareHashSalt({
         seed: settings.seed,
         root: initialCwd,
         leg: outputBuildDir(initial, initialCwd),
-        engineVersion: await readEngineVersion({ version }),
+        localEngineVersion: await readEngineVersion({ version }),
         settings: saltSettings(passSettings(resolved), {
           format: initial.format ?? null,
           sourcemap: initial.sourcemap ?? null,
+          pathsInclude: settings.paths?.include ?? null,
+          ...reportPolicySaltBits(
+            process.env,
+            settings.artifactOptions,
+            Boolean(initial.sourcemap),
+          ),
         }),
         warn: (message) => console.warn(message),
       });
@@ -87,6 +94,7 @@ export function afterpackEsbuild(options: AfterpackEsbuildOptions = {}): Plugin 
           label: "afterpack-esbuild",
           cwd,
           resolvedSeed: hashSalt.resolvedSeed,
+          cloudEngineExpectation: hashSalt.engine,
           startedAt: startedBeforeOutputWalk,
           combinedProtectionMap: { buildDir },
           sourceMapSweepDir: sweepDir,
