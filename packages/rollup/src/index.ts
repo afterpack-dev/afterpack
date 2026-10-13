@@ -8,13 +8,18 @@ import {
   collectBundleJs,
   createTelemetryReporter,
   type OutputBundleLike,
+  type PreparedHashSalt,
   passSettings,
+  prepareHashSalt,
+  readEngineVersion,
   resolveClientIdentity,
   resolvePluginConfig,
   runObfuscationPass,
+  saltSettings,
   scanDirectives,
   sourceTypeForBundle,
   stripBundleCssSourceMaps,
+  unsaltedAssetsWarning,
   type WriteProtectionReceiptInput,
   writeDeferredProtectionReceipt,
 } from "@afterpack/integration-utils";
@@ -48,9 +53,36 @@ export function afterpackRollup(options: AfterpackRollupOptions = {}): Plugin {
   >();
   const captureDiagnostics: string[] = [];
   const deferredReceiptByOutDir = new Map<string, WriteProtectionReceiptInput>();
+  const hashSaltByOutDir = new Map<string, PreparedHashSalt>();
+  let latestSalt: string | undefined;
 
   return {
     name: "afterpack-rollup",
+
+    buildStart() {
+      hashSaltByOutDir.clear();
+      latestSalt = undefined;
+    },
+
+    async renderStart(outputOptions: NormalizedOutputOptions) {
+      if (!autorun) return;
+      const outDir = outputDir(outputOptions);
+      if (!outDir) return;
+      const prepared = prepareHashSalt({
+        seed: settings.seed,
+        root: process.cwd(),
+        leg: outDir,
+        engineVersion: await readEngineVersion({ version }),
+        settings: saltSettings(passSettings(resolved)),
+        warn: (message) => console.warn(message),
+      });
+      hashSaltByOutDir.set(outDir, prepared);
+      latestSalt = prepared.salt;
+    },
+
+    augmentChunkHash() {
+      return latestSalt;
+    },
 
     transform: {
       order: "pre",
@@ -87,6 +119,8 @@ export function afterpackRollup(options: AfterpackRollupOptions = {}): Plugin {
           outDir,
         );
         if (files.length === 0) return;
+        const unsalted = unsaltedAssetsWarning(entries, new Set());
+        if (unsalted) console.warn(`[afterpack-rollup] ${unsalted}`);
 
         const capturedByFile = new Map<string, CapturedModule[]>();
         if (preMinifyCapturedModulesById.size > 0) {
@@ -122,6 +156,7 @@ export function afterpackRollup(options: AfterpackRollupOptions = {}): Plugin {
           telemetry: createTelemetryReporter(),
           label: "afterpack-rollup",
           cwd,
+          resolvedSeed: hashSaltByOutDir.get(outDir)?.resolvedSeed,
           startedAt: startedBeforeBundleWalk,
           capturedByFile: capturedByFile.size > 0 ? capturedByFile : undefined,
           combinedProtectionMap: { buildDir: outDir },

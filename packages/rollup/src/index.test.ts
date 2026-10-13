@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __reset, __setProcessResult, __setVersion, engineCalls } from "../../../test/core-fake.js";
+import { resetBuildSessions } from "../../integration-utils/src/seed.js";
 import { type AfterpackRollupOptions, afterpackRollup } from "./index.js";
 
 let root: string;
@@ -59,9 +60,11 @@ async function runPlugin(
   outputOptions: Record<string, unknown>,
   bundle: Record<string, BundleEntry> = {},
 ): Promise<Record<string, BundleEntry>> {
-  const plugin = afterpackRollup(options);
-  // biome-ignore lint/suspicious/noExplicitAny: exercising the Rollup hook directly in a test.
-  await (plugin.generateBundle as any).handler.call({}, outputOptions, bundle);
+  // biome-ignore lint/suspicious/noExplicitAny: exercising the Rollup hooks directly in a test.
+  const plugin = afterpackRollup(options) as any;
+  plugin.buildStart.call({});
+  await plugin.renderStart.call({}, outputOptions);
+  await plugin.generateBundle.handler.call({}, outputOptions, bundle);
   return bundle;
 }
 
@@ -417,5 +420,66 @@ describe("afterpackRollup sourceType", () => {
   it.each(["system", "iife", "cjs", "umd", "amd"])("withholds it for format %s", async (format) => {
     await runPlugin({}, { dir: outDir, format }, bundleOf(chunk("index.js", "const a = 1;")));
     expect(engineCalls[0].config.sourceType).toBeUndefined();
+  });
+});
+
+describe("afterpackRollup content-hashed names", () => {
+  // biome-ignore lint/suspicious/noExplicitAny: exercising the Rollup hooks directly in a test.
+  async function rendered(options: AfterpackRollupOptions, dir = outDir): Promise<any> {
+    // biome-ignore lint/suspicious/noExplicitAny: exercising the Rollup hooks directly in a test.
+    const plugin = afterpackRollup(options) as any;
+    plugin.buildStart.call({});
+    await plugin.renderStart.call({}, { dir });
+    return plugin;
+  }
+
+  async function saltOf(options: AfterpackRollupOptions): Promise<string | undefined> {
+    resetBuildSessions();
+    return (await rendered(options)).augmentChunkHash();
+  }
+
+  it("salts every chunk hash with the seed, the engine and the settings", async () => {
+    const salt = await saltOf({ seed: 1 });
+    expect(salt).toMatch(/^[0-9a-f]{32}$/);
+    expect(await saltOf({ seed: 1 })).toBe(salt);
+    expect(await saltOf({ seed: 2 })).not.toBe(salt);
+    expect(await saltOf({ seed: 1, preset: "hard" })).not.toBe(salt);
+  });
+
+  it("gives every output of one unpinned build the same salt and seed", async () => {
+    resetBuildSessions();
+    // biome-ignore lint/suspicious/noExplicitAny: exercising the Rollup hooks directly in a test.
+    const plugin = afterpackRollup({}) as any;
+    plugin.buildStart.call({});
+    await plugin.renderStart.call({}, { dir: join(outDir, "esm") });
+    const esm = plugin.augmentChunkHash();
+    await plugin.renderStart.call({}, { dir: join(outDir, "cjs") });
+    expect(plugin.augmentChunkHash()).toBe(esm);
+    const esmBundle = bundleOf(chunk("index.js", "const a = 1;"));
+    await plugin.generateBundle.handler.call({}, { dir: join(outDir, "esm") }, esmBundle);
+    const cjsBundle = bundleOf(chunk("index.cjs", "const a = 1;"));
+    await plugin.generateBundle.handler.call({}, { dir: join(outDir, "cjs") }, cjsBundle);
+    expect(engineCalls.map((call) => call.config.seed)).toEqual([
+      engineCalls[0].config.seed,
+      engineCalls[0].config.seed,
+    ]);
+  });
+
+  it("leaves chunk hashes alone when autorun is off", async () => {
+    expect(await saltOf({ seed: 1, build: { autorun: false } })).toBeUndefined();
+  });
+
+  it("warns about a JS asset whose hashed name the salt could not reach", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await runPlugin(
+      { seed: 1 },
+      { dir: outDir },
+      bundleOf(chunk("index.js", "const a = 1;"), asset("raw-AAAA.js", "var raw = 1;")),
+    );
+    const unsalted = warn.mock.calls
+      .map(([message]) => String(message))
+      .filter((m) => m.includes("plain assets"));
+    expect(unsalted).toHaveLength(1);
+    expect(unsalted[0]).toContain("raw-AAAA.js");
   });
 });
