@@ -8,13 +8,18 @@ import {
   collectBundleJs,
   createTelemetryReporter,
   type OutputBundleLike,
+  type PreparedHashSalt,
   passSettings,
+  prepareHashSalt,
+  readEngineVersion,
   resolveClientIdentity,
   resolvePluginConfig,
   runObfuscationPass,
+  saltSettings,
   scanDirectives,
   sourceTypeForBundle,
   stripBundleCssSourceMaps,
+  unsaltedAssetsWarning,
   type WriteProtectionReceiptInput,
   writeDeferredProtectionReceipt,
 } from "@afterpack/integration-utils";
@@ -52,28 +57,65 @@ export function afterpackVite(options: AfterpackViteOptions = {}): Plugin {
   >();
   const captureDiagnostics: string[] = [];
   const deferredReceiptByOutDir = new Map<string, WriteProtectionReceiptInput>();
+  const workerOutputs = new Set<string>();
+  let hashSalt: PreparedHashSalt | null = null;
 
   const leg = options.leg;
   const label = leg ? `afterpack-vite:${leg}` : "afterpack-vite";
+
+  const workerNamesPlugin: Plugin = {
+    name: `${label}:worker-names`,
+    augmentChunkHash() {
+      return hashSalt?.salt;
+    },
+    generateBundle(_outputOptions, bundle) {
+      for (const fileName of Object.keys(bundle)) workerOutputs.add(fileName);
+    },
+  };
 
   return {
     name: label,
     enforce: "pre",
 
     config(config: UserConfig) {
+      const overrides: UserConfig = {};
       if (
         artifactOptions.protectionMap?.enabled === true &&
         config.build?.sourcemap === undefined
       ) {
-        return { build: { sourcemap: true } };
+        overrides.build = { sourcemap: true };
       }
-      return undefined;
+      if (autorun) {
+        const userWorkerPlugins = config.worker?.plugins;
+        overrides.worker = {
+          plugins: () => [...(userWorkerPlugins?.() ?? []), workerNamesPlugin],
+        };
+      }
+      return overrides;
     },
 
     configResolved(config: ResolvedConfig) {
       root = config.root;
       outDir = resolve(config.root, config.build.outDir);
       buildSourcemap = Boolean(config.build.sourcemap);
+    },
+
+    async buildStart() {
+      hashSalt = null;
+      workerOutputs.clear();
+      if (!autorun || !outDir) return;
+      hashSalt = prepareHashSalt({
+        seed: settings.seed,
+        root: options.projectRoot ?? root ?? outDir,
+        leg: leg ?? outDir,
+        engineVersion: await readEngineVersion({ version }),
+        settings: saltSettings(passSettings(resolved)),
+        warn: (message) => console.warn(message),
+      });
+    },
+
+    augmentChunkHash() {
+      return hashSalt?.salt;
     },
 
     transform(code: string, id: string) {
@@ -108,6 +150,8 @@ export function afterpackVite(options: AfterpackViteOptions = {}): Plugin {
           outDir,
         );
         if (files.length === 0) return;
+        const unsalted = unsaltedAssetsWarning(entries, workerOutputs);
+        if (unsalted) console.warn(`[${label}] ${unsalted}`);
 
         const capturedByFile = new Map<string, CapturedModule[]>();
         if (preMinifyCaptureByModuleId.size > 0) {
@@ -142,6 +186,7 @@ export function afterpackVite(options: AfterpackViteOptions = {}): Plugin {
           label,
           cwd: projectRoot,
           buildLeg: leg,
+          resolvedSeed: hashSalt?.resolvedSeed,
           startedAt,
           capturedByFile: capturedByFile.size > 0 ? capturedByFile : undefined,
           combinedProtectionMap: { buildDir: outDir, subdir: leg },

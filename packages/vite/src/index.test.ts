@@ -67,6 +67,7 @@ async function runPlugin(
   // biome-ignore lint/suspicious/noExplicitAny: exercising Vite hooks directly in a test.
   const p = plugin as any;
   p.configResolved({ root, build: { outDir } });
+  await p.buildStart.call({});
   await p.generateBundle.handler.call({}, { dir: outDir, ...outputOptions }, bundle);
   return bundle;
 }
@@ -458,20 +459,24 @@ describe("afterpackVite config() sourcemap auto-enable", () => {
   }
 
   it("auto-enables build.sourcemap when protectionMap:true and the user set none", () => {
-    expect(runConfig({ protectionMap: true }, {})).toEqual({ build: { sourcemap: true } });
+    expect(runConfig({ protectionMap: true }, {}).build).toEqual({ sourcemap: true });
   });
 
   it("respects an explicit build.sourcemap:false (never overrides it)", () => {
-    expect(runConfig({ protectionMap: true }, { build: { sourcemap: false } })).toBeUndefined();
+    expect(
+      runConfig({ protectionMap: true }, { build: { sourcemap: false } }).build,
+    ).toBeUndefined();
   });
 
   it("leaves an already-true build.sourcemap alone", () => {
-    expect(runConfig({ protectionMap: true }, { build: { sourcemap: true } })).toBeUndefined();
+    expect(
+      runConfig({ protectionMap: true }, { build: { sourcemap: true } }).build,
+    ).toBeUndefined();
   });
 
   it("does nothing unless protectionMap was explicitly requested", () => {
-    expect(runConfig({}, {})).toBeUndefined();
-    expect(runConfig({ protectionMap: false }, {})).toBeUndefined();
+    expect(runConfig({}, {}).build).toBeUndefined();
+    expect(runConfig({ protectionMap: false }, {}).build).toBeUndefined();
   });
 });
 
@@ -614,5 +619,89 @@ describe("afterpackVite sourceType", () => {
     __setVersion("0.2.2");
     await runPlugin({}, bundleOf(chunk("assets/index.js", "const a = 1;")), { format: "es" });
     expect(sharedConfig().sourceType).toBeUndefined();
+  });
+});
+
+describe("afterpackVite content-hashed names", () => {
+  // biome-ignore lint/suspicious/noExplicitAny: exercising Vite hooks directly in a test.
+  async function startedPlugin(options: AfterpackViteOptions): Promise<any> {
+    // biome-ignore lint/suspicious/noExplicitAny: exercising Vite hooks directly in a test.
+    const plugin = afterpackVite(options) as any;
+    plugin.configResolved({ root, build: { outDir } });
+    await plugin.buildStart.call({});
+    return plugin;
+  }
+
+  async function saltOf(options: AfterpackViteOptions): Promise<string | undefined> {
+    resetBuildSessions();
+    return (await startedPlugin(options)).augmentChunkHash();
+  }
+
+  it("salts every chunk hash with the seed, the engine and the settings", async () => {
+    const salt = await saltOf({ seed: 1 });
+    expect(salt).toMatch(/^[0-9a-f]{32}$/);
+    expect(await saltOf({ seed: 1 })).toBe(salt);
+    expect(await saltOf({ seed: 2 })).not.toBe(salt);
+    expect(await saltOf({ seed: 1, preset: "hard" })).not.toBe(salt);
+    __setVersion("9.9.9");
+    expect(await saltOf({ seed: 1 })).not.toBe(salt);
+  });
+
+  it("draws a new salt for every build without a pinned seed", async () => {
+    const plugin = await startedPlugin({});
+    const first = plugin.augmentChunkHash();
+    await plugin.buildStart.call({});
+    expect(plugin.augmentChunkHash()).not.toBe(first);
+  });
+
+  it("obfuscates with the seed it salted the names with", async () => {
+    const plugin = await startedPlugin({});
+    const bundle = bundleOf(chunk("assets/index-abc.js", "const a = 1;"));
+    await plugin.generateBundle.handler.call({}, { dir: outDir }, bundle);
+    const salt = plugin.augmentChunkHash();
+    resetBuildSessions();
+    const pinned = await startedPlugin({ seed: engineCalls[0].config.seed as number });
+    expect(pinned.augmentChunkHash()).toBe(salt);
+  });
+
+  it("leaves chunk hashes alone when autorun is off", async () => {
+    expect(await saltOf({ seed: 1, build: { autorun: false } })).toBeUndefined();
+  });
+
+  it("salts Web Worker sub-builds through worker.plugins, keeping the user's worker plugins", async () => {
+    const userWorkerPlugin = { name: "user-worker" };
+    const plugin = afterpackVite({ seed: 1 });
+    // biome-ignore lint/suspicious/noExplicitAny: exercising the Vite hook directly.
+    const overrides = (plugin.config as any)({ worker: { plugins: () => [userWorkerPlugin] } });
+    const workerPlugins = overrides.worker.plugins();
+    expect(workerPlugins[0]).toBe(userWorkerPlugin);
+    // biome-ignore lint/suspicious/noExplicitAny: exercising Vite hooks directly in a test.
+    const p = plugin as any;
+    p.configResolved({ root, build: { outDir } });
+    await p.buildStart.call({});
+    expect(workerPlugins[1].augmentChunkHash()).toBe(p.augmentChunkHash());
+  });
+
+  it("warns about a JS asset whose hashed name the salt could not reach, and not about worker output", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const plugin = afterpackVite({ seed: 1 });
+    // biome-ignore lint/suspicious/noExplicitAny: exercising the Vite hook directly.
+    const workerPlugin = (plugin.config as any)({}).worker.plugins()[0];
+    // biome-ignore lint/suspicious/noExplicitAny: exercising Vite hooks directly in a test.
+    const p = plugin as any;
+    p.configResolved({ root, build: { outDir } });
+    await p.buildStart.call({});
+    workerPlugin.generateBundle({}, { "assets/worker-AAAA.js": {} });
+    const bundle = bundleOf(
+      chunk("assets/index-BBBB.js", "const a = 1;"),
+      { type: "asset", fileName: "assets/worker-AAAA.js", source: "self.onmessage=()=>{};" },
+      { type: "asset", fileName: "assets/raw-CCCC.js", source: "var raw = 1;" },
+    );
+    await p.generateBundle.handler.call({}, { dir: outDir }, bundle);
+    const messages = warn.mock.calls.map(([message]) => String(message));
+    const unsalted = messages.filter((message) => message.includes("plain assets"));
+    expect(unsalted).toHaveLength(1);
+    expect(unsalted[0]).toContain("assets/raw-CCCC.js");
+    expect(unsalted[0]).not.toContain("worker-AAAA");
   });
 });
