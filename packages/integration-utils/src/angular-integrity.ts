@@ -1,14 +1,15 @@
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { writeFileAtomic } from "./atomic-write.js";
 
 const SRI_ATTR = /\b(src|href)\s*=\s*"([^"]+)"[^>]*\bintegrity\s*=\s*"(sha(?:256|384|512))-[^"]*"/g;
 const SRI_ATTR_REVERSED =
   /\bintegrity\s*=\s*"(sha(?:256|384|512))-[^"]*"[^>]*\b(src|href)\s*=\s*"([^"]+)"/g;
 
 function digest(
-  bytes: Buffer,
-  algo: "sha256" | "sha384" | "sha512",
+  bytes: Uint8Array | string,
+  algo: "sha1" | "sha256" | "sha384" | "sha512",
   enc: "base64" | "hex",
 ): string {
   return createHash(algo).update(bytes).digest(enc);
@@ -21,7 +22,7 @@ function fileFor(baseDir: string, ref: string): string | null {
   return join(baseDir, path);
 }
 
-function recomputeHtmlIntegrity(browserDir: string): void {
+function planHtmlIntegrity(browserDir: string, planned: Map<string, string>): void {
   for (const html of htmlFilesUnder(browserDir)) {
     const text = readFileSync(html, "utf8");
     const rewrite = (algo: "sha256" | "sha384" | "sha512", ref: string, match: string): string => {
@@ -39,7 +40,7 @@ function recomputeHtmlIntegrity(browserDir: string): void {
     next = next.replace(SRI_ATTR_REVERSED, (match, algo, _attr, ref) =>
       rewrite(algo as "sha256", ref as string, match),
     );
-    if (next !== text) writeFileSync(html, next);
+    if (next !== text) planned.set(html, next);
   }
 }
 
@@ -53,7 +54,7 @@ function htmlFilesUnder(dir: string): string[] {
 
 const PLUGIN_LABEL = "@afterpack/angular";
 
-function recomputeNgswHashTable(browserDir: string, label: string): void {
+function planNgswHashTable(browserDir: string, label: string, planned: Map<string, string>): void {
   const ngsw = join(browserDir, "ngsw.json");
   if (!existsSync(ngsw)) return;
   const config = JSON.parse(readFileSync(ngsw, "utf8")) as { hashTable?: Record<string, string> };
@@ -68,9 +69,37 @@ function recomputeNgswHashTable(browserDir: string, label: string): void {
           "disable the service worker for this build.",
       );
     }
-    table[url] = createHash("sha1").update(readFileSync(file)).digest("hex");
+    table[url] = digest(planned.get(file) ?? readFileSync(file), "sha1", "hex");
   }
-  writeFileSync(ngsw, `${JSON.stringify(config, null, 2)}\n`);
+  planned.set(ngsw, `${JSON.stringify(config, null, 2)}\n`);
+}
+
+export function planAngularIntegrity(
+  outputRoot: string,
+  browserDir: string,
+  label = PLUGIN_LABEL,
+): Map<string, string> {
+  const refusal = angularServerManifestRefusal(outputRoot);
+  if (refusal !== null) {
+    throw new Error(
+      `${label}: ${refusal} — obfuscate only the browser output, or remove ` +
+        "@afterpack/angular from the SSR build.",
+    );
+  }
+  const planned = new Map<string, string>();
+  planHtmlIntegrity(browserDir, planned);
+  planNgswHashTable(browserDir, label, planned);
+  return planned;
+}
+
+export function recomputeAngularIntegrity(
+  outputRoot: string,
+  browserDir: string,
+  label = PLUGIN_LABEL,
+): void {
+  for (const [path, text] of planAngularIntegrity(outputRoot, browserDir, label)) {
+    writeFileAtomic(path, text);
+  }
 }
 
 export function angularServerManifestRefusal(outputRoot: string): string | null {
@@ -88,20 +117,4 @@ export function angularServerManifestRefusal(outputRoot: string): string | null 
     }
   }
   return null;
-}
-
-export function recomputeAngularIntegrity(
-  outputRoot: string,
-  browserDir: string,
-  label = PLUGIN_LABEL,
-): void {
-  const refusal = angularServerManifestRefusal(outputRoot);
-  if (refusal !== null) {
-    throw new Error(
-      `${label}: ${refusal} — obfuscate only the browser output, or remove ` +
-        "@afterpack/angular from the SSR build.",
-    );
-  }
-  recomputeHtmlIntegrity(browserDir);
-  recomputeNgswHashTable(browserDir, label);
 }

@@ -33,6 +33,16 @@ describe("recomputeAngularIntegrity ngsw.json", () => {
     expect(table["/main-ABCD2345.js"]).toBe(sha("sha1", "OBF main", "hex"));
   });
 
+  it("refuses when ngsw.json names a file the obfuscated output no longer has", () => {
+    writeFileSync(
+      join(browserDir, "ngsw.json"),
+      JSON.stringify({ hashTable: { "/missing-ABCD2345.js": "0".repeat(40) } }),
+    );
+    expect(() => recomputeAngularIntegrity(root, browserDir)).toThrow(/service worker hash/);
+  });
+});
+
+describe("recomputeAngularIntegrity ngsw.json and HTML together", () => {
   it("hashes index.html after its integrity attributes are rewritten", () => {
     writeFileSync(join(browserDir, "main-ABCD2345.js"), "OBF main");
     writeFileSync(
@@ -44,18 +54,10 @@ describe("recomputeAngularIntegrity ngsw.json", () => {
       JSON.stringify({ hashTable: { "/index.html": "0".repeat(40) } }),
     );
     recomputeAngularIntegrity(root, browserDir);
-    const table = JSON.parse(readFileSync(join(browserDir, "ngsw.json"), "utf8")).hashTable;
     const html = readFileSync(join(browserDir, "index.html"), "utf8");
     expect(html).toContain(`integrity="sha384-${sha("sha384", "OBF main", "base64")}"`);
+    const table = JSON.parse(readFileSync(join(browserDir, "ngsw.json"), "utf8")).hashTable;
     expect(table["/index.html"]).toBe(sha("sha1", html, "hex"));
-  });
-
-  it("refuses when ngsw.json names a file the obfuscated output no longer has", () => {
-    writeFileSync(
-      join(browserDir, "ngsw.json"),
-      JSON.stringify({ hashTable: { "/missing-ABCD2345.js": "0".repeat(40) } }),
-    );
-    expect(() => recomputeAngularIntegrity(root, browserDir)).toThrow(/service worker hash/);
   });
 });
 

@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cpSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, readdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { expect } from "@playwright/test";
 import { runBuild, withFixtureDirLock } from "./build.js";
@@ -75,6 +75,51 @@ export function expectRestoreUndoesRenames(
       ).toEqual(plain);
     } finally {
       rmSync(join(fixture.dir, DEPLOY_COPY), { recursive: true, force: true });
+      runBuild(fixture, {}, log("rebuild"));
+    }
+  });
+}
+
+const KILL_HOOK = join(REPO_ROOT, "e2e", "helpers", "kill-after-writes.cjs");
+
+export function expectKilledRunRestores(
+  fixture: Fixture,
+  cliTarget: string,
+  treeDir: string = cliTarget,
+  writes = 2,
+): void {
+  const seed = String(readExpectations(fixture).seed);
+  const log = (step: string) => `${fixture.buildLog}.kill-${step}`;
+  const tree = join(fixture.dir, treeDir);
+  withFixtureDirLock(fixture.dir, () => {
+    try {
+      runBuild(fixture, { AFTERPACK_build_autorun: "false" }, log("plain"));
+      const plain = snapshot(tree);
+
+      const killed = spawnSync(
+        process.execPath,
+        ["--require", KILL_HOOK, CLI, cliTarget, `--seed=${seed}`],
+        {
+          cwd: fixture.dir,
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            ...fixture.env,
+            AFTERPACK_telemetry_enabled: "false",
+            AFTERPACK_E2E_KILL_AFTER_WRITES: String(writes),
+            AFTERPACK_E2E_KILL_UNDER: realpathSync(tree),
+          },
+        },
+      );
+      expect(killed.signal, `${fixture.name}: ${killed.stdout}${killed.stderr}`).toBe("SIGKILL");
+      expect(snapshot(tree), `${fixture.name}: the killed run wrote nothing`).not.toEqual(plain);
+
+      expect(afterpack(fixture, ["restore"])).toContain("stopped partway");
+      expect(
+        snapshot(tree),
+        `${fixture.name}: afterpack restore did not undo the killed run byte for byte`,
+      ).toEqual(plain);
+    } finally {
       runBuild(fixture, {}, log("rebuild"));
     }
   });

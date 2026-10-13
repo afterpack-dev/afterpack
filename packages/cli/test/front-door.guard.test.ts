@@ -156,7 +156,9 @@ describe("the build-layer view comes from that same resolution", () => {
 
     expect(code).toBe(0);
     expect(readdirSync(join(root, "dist")).some((f) => /\.backup\./.test(f))).toBe(false);
-    expect(existsSync(join(root, ".afterpack", "backup", "dist", "app.js"))).toBe(true);
+    expect(
+      existsSync(join(root, ".afterpack", "backups", "dist", "current", "files", "dist", "app.js")),
+    ).toBe(true);
   });
 });
 

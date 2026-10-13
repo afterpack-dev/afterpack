@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { __reset, __setProcessResult, processBatch } from "../../../test/core-fake.js";
 import { CONTACT_FOOTER } from "../src/args.js";
-import { backupManifestPath } from "../src/backup.js";
+import { backupSlot } from "../src/backup.js";
 import { RESTORE_USAGE } from "../src/restore.js";
 import { run } from "../src/run.js";
 
@@ -95,7 +95,7 @@ describe("afterpack restore", () => {
 
     expect(readFileSync(join(buildDir, "app.js"), "utf8")).toBe("tampered after the build");
     expect(readFileSync(join(buildDir, "b.js"), "utf8")).toBe(obfuscatedB);
-    expect(existsSync(backupManifestPath(root))).toBe(true);
+    expect(existsSync(backupSlot(root, "dist").manifestPath)).toBe(true);
   });
 
   it("deletes the receipt and the whole backup dir on success, but leaves .afterpack/ in place", async () => {
@@ -103,11 +103,11 @@ describe("afterpack restore", () => {
     expect(await invoke(["dist", ...QUIET])).toBe(0);
     const receipt = join(root, ".afterpack", "receipts", "dist.json");
     expect(existsSync(receipt)).toBe(true);
-    expect(existsSync(join(root, ".afterpack", "backup"))).toBe(true);
+    expect(existsSync(join(root, ".afterpack", "backups", "dist"))).toBe(true);
 
     expect(await invoke(["restore"])).toBe(0);
     expect(existsSync(receipt)).toBe(false);
-    expect(existsSync(join(root, ".afterpack", "backup"))).toBe(false);
+    expect(existsSync(join(root, ".afterpack", "backups", "dist"))).toBe(false);
     expect(existsSync(join(root, ".afterpack"))).toBe(true);
   });
 
@@ -119,7 +119,7 @@ describe("afterpack restore", () => {
     mkdirSync(join(outside, ".afterpack", "receipts"), { recursive: true });
     const decoy = join(outside, ".afterpack", "receipts", "dist.json");
     writeFileSync(decoy, '{"someone":"else"}');
-    const manifestPath = backupManifestPath(root);
+    const manifestPath = backupSlot(root, "dist").manifestPath;
     const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
     manifest.receiptPath = decoy;
     writeFileSync(manifestPath, JSON.stringify(manifest));
@@ -159,7 +159,7 @@ describe("afterpack restore", () => {
     writeFileSync(join(backup, "dist", "app.js"), "export const a = 1;");
     const sha = (text: string) => createHash("sha256").update(text).digest("hex");
     writeFileSync(
-      backupManifestPath(root),
+      join(backup, "manifest.json"),
       JSON.stringify({
         schema: 1,
         timestamp: "2026-01-01T00:00:00.000Z",
@@ -198,7 +198,7 @@ describe("afterpack restore", () => {
 
   it("hard-refuses a corrupt manifest, naming the path and exiting 1", async () => {
     mkdirSync(join(root, ".afterpack", "backup"), { recursive: true });
-    writeFileSync(backupManifestPath(root), "not json");
+    writeFileSync(join(root, ".afterpack", "backup", "manifest.json"), "not json");
 
     expect(await invoke(["restore"])).toBe(1);
     const text = err.join("\n");

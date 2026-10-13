@@ -5,10 +5,12 @@ import type { ProtectionMap } from "@afterpack/protection-map";
 import {
   DEFAULT_LOGGER,
   type Logger,
+  planArtifactWrites,
   warnIfPublicPath,
   writeArtifacts,
   writeCombinedProtectionMap,
 } from "./artifacts.js";
+import { sha256Hex, stagedPath } from "./atomic-write.js";
 import { collectSourceMaps, collectStylesheets } from "./collect.js";
 import {
   assertSupportedCore,
@@ -47,12 +49,10 @@ import {
   type HashedNamesOptions,
   type HashedNamesPlan,
   planHashedNames,
-  stagedPath,
 } from "./hashed-names.js";
 import { afterpackHome, describeUnanchoredHome } from "./home.js";
 import { type CapturedModule, colorRegions, type DecodedSourceMap } from "./map-color.js";
 import { type CloudNotice, reportNotices, sanitizeServerText } from "./notices.js";
-import { resolveArtifactPaths, shortHash } from "./paths.js";
 import {
   type AfterpackArtifactOptions,
   type BuildContext,
@@ -88,6 +88,7 @@ import {
   removeSourceMaps,
   stripCssSourceMappingURLs,
   withinRealDir,
+  withoutCssSourceMappingURL,
   withSourceMappingURL,
 } from "./source-map.js";
 import { formatPassSummary, type PassSummaryStyle } from "./summary.js";
@@ -165,7 +166,7 @@ export interface PassReceiptIdentity {
 
 export interface PassWritePlan {
   renamed: ReadonlyMap<string, string>;
-  touched: string[];
+  planned: ReadonlyMap<string, readonly (string | null)[]>;
 }
 
 export interface ObfuscationPassOptions {
@@ -275,14 +276,13 @@ function fileFailure(f: EngineFileResult, source: string): string | null {
   return null;
 }
 
-function removeBundlerSourceMaps(input: {
+function bundlerMapsToRemove(input: {
   perFile: Iterable<string[]>;
   sweepDir: string | null;
   engineMaps: Set<string>;
   policy: ReportPolicy;
-  label: string;
-}): void {
-  const { sweepDir, engineMaps, policy, label } = input;
+}): string[] {
+  const { sweepDir, engineMaps, policy } = input;
   const bundlerMaps = new Set<string>([...input.perFile].flat());
   if (sweepDir != null) {
     const swept = collectSourceMaps(sweepDir).filter(
@@ -290,10 +290,18 @@ function removeBundlerSourceMaps(input: {
     );
     for (const path of containedSourceMaps(swept, sweepDir)) bundlerMaps.add(path);
   }
-  removeSourceMaps(
-    [...bundlerMaps].filter((path) => !engineMaps.has(path)),
-    label,
-  );
+  return [...bundlerMaps].filter((path) => !engineMaps.has(path));
+}
+
+function removeBundlerSourceMaps(input: {
+  perFile: Iterable<string[]>;
+  sweepDir: string | null;
+  engineMaps: Set<string>;
+  policy: ReportPolicy;
+  label: string;
+}): void {
+  const { sweepDir, policy, label } = input;
+  removeSourceMaps(bundlerMapsToRemove(input), label);
   if (sweepDir != null && !policy.sourceMap) {
     stripCssSourceMappingURLs(collectStylesheets(sweepDir));
   }
@@ -713,31 +721,53 @@ export async function runObfuscationPass(
     verified.push({ result: f, source });
   }
 
+  const artifactInput = (f: EngineFileResult, source: string) => ({
+    outPath: f.path,
+    code: withSourceMappingURL(f.code, null),
+    sourceMapJson: f.sourceMap ?? null,
+    originalSource: source,
+    policy,
+    mode: "framework" as const,
+  });
+
   if (!options.emitToCaller && options.beforeWrite) {
-    const touched = new Set<string>();
+    const planned = new Map<string, (string | null)[]>();
+    const expectState = (path: string, state: string | null): void => {
+      const states = planned.get(path) ?? [];
+      if (!states.includes(state)) states.push(state);
+      planned.set(path, states);
+    };
+    for (const from of namesPlan?.renamed.keys() ?? []) expectState(from, null);
+    const plannedEngineMaps = new Set<string>();
     for (const { result: f, source } of verified) {
-      const paths = resolveArtifactPaths(
-        f.path,
-        "framework",
-        policy.backup ? shortHash(source) : undefined,
-      );
-      touched.add(f.path);
-      if (policy.sourceMap && f.sourceMap != null) touched.add(paths.mapPath);
-      if (paths.backupPath) touched.add(paths.backupPath);
+      const artifacts = planArtifactWrites(artifactInput(f, source));
+      if (artifacts.mapPath) plannedEngineMaps.add(resolve(artifacts.mapPath));
+      for (const write of artifacts.writes) {
+        expectState(write.path, sha256Hex(write.content));
+        expectState(stagedPath(write.path), null);
+      }
     }
-    for (const [from, to] of namesPlan?.rewrites ?? []) {
-      touched.add(from).add(to).add(stagedPath(to));
+    for (const { to, text } of namesPlan?.rewrites.values() ?? []) {
+      expectState(to, sha256Hex(text));
+      expectState(stagedPath(to), null);
     }
-    for (const from of namesPlan?.renamed.keys() ?? []) touched.add(from);
-    for (const maps of bundlerMapsByPath.values()) for (const map of maps) touched.add(map);
-    if (sweepDir != null) {
-      for (const map of collectSourceMaps(sweepDir)) touched.add(resolve(map));
-      if (!policy.sourceMap) for (const css of collectStylesheets(sweepDir)) touched.add(css);
+    for (const map of bundlerMapsToRemove({
+      perFile: bundlerMapsByPath.values(),
+      sweepDir,
+      engineMaps: plannedEngineMaps,
+      policy,
+    })) {
+      expectState(map, null);
     }
-    options.beforeWrite({
-      renamed: namesPlan?.renamed ?? new Map(),
-      touched: [...touched].sort(),
-    });
+    if (sweepDir != null && !policy.sourceMap) {
+      for (const css of collectStylesheets(sweepDir)) {
+        const rewritten = namesPlan?.rewrites.get(css);
+        const text = rewritten?.text ?? readFileSync(css, "utf8");
+        const stripped = withoutCssSourceMappingURL(text);
+        if (stripped !== text) expectState(rewritten?.to ?? css, sha256Hex(stripped));
+      }
+    }
+    options.beforeWrite({ renamed: namesPlan?.renamed ?? new Map(), planned });
   }
 
   const writtenFiles: string[] = [];
@@ -750,13 +780,8 @@ export async function runObfuscationPass(
       continue;
     }
     const written = writeArtifacts({
-      outPath: f.path,
-      code: withSourceMappingURL(f.code, null),
-      sourceMapJson: f.sourceMap ?? null,
+      ...artifactInput(f, source),
       protectionMapJson: null,
-      originalSource: source,
-      policy,
-      mode: "framework",
       afterpackDir: home.dir,
       logger,
     });

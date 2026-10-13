@@ -4,6 +4,7 @@ import {
   angularHashToken,
   angularServerManifestRefusal,
   detectNextBundler,
+  findHashTokenReference,
   type HashedNamesOptions,
   type HashTokenOf,
   NEXT_CHUNKS_PREFIX,
@@ -20,9 +21,14 @@ export interface HashedLayout {
   angular?: { outputRoot: string; browserDir: string };
 }
 
+export type KeepReason =
+  | { kind: "outside-reference"; path: string; target: string }
+  | { kind: "unchecked"; target: string }
+  | { kind: "precache"; path: string };
+
 export type LayoutDecision =
   | { status: "rename"; layout: HashedLayout }
-  | { status: "keep" }
+  | { status: "keep"; reason?: KeepReason }
   | { status: "refuse"; message: string }
   | { status: "plain" };
 
@@ -30,6 +36,27 @@ export const KEPT_NAMES_NOTICE =
   "File names stay as your bundler hashed them, so a cache can serve an old copy under the " +
   "same name. For long-lived caching, use your framework's AfterPack plugin, or pin a constant " +
   "`seed`.";
+
+export function keptNamesNotice(
+  reason: KeepReason | undefined,
+  show: (path: string) => string,
+): string {
+  if (reason === undefined) return KEPT_NAMES_NOTICE;
+  const why =
+    reason.kind === "outside-reference"
+      ? `${show(reason.path)} names files in ${show(reason.target)}, so renaming them would break it.`
+      : reason.kind === "unchecked"
+        ? `The folders beside ${show(reason.target)} are too large to check for references to its files.`
+        : `${show(reason.path)} precaches files by revision, which renaming would leave stale.`;
+  return `${why} ${KEPT_NAMES_NOTICE}`;
+}
+
+const OUTSIDE_SCAN_LIMITS = { maxDepth: 6, maxFiles: 5000, maxBytes: 128 * 1024 * 1024 };
+const OUTPUT_SIBLING_RE =
+  /^(?:build|dist|out|output|server|ssr|functions|lambda|edge|workers?)(?:[-_.].*)?$|server|ssr/i;
+const PRECACHE_RE =
+  /["']?url["']?\s*:\s*["'][^"']+["']\s*,\s*["']?revision["']?\s*:|["']?revision["']?\s*:\s*(?:null|["'][^"']*["'])\s*,\s*["']?url["']?\s*:/;
+const PRECACHE_SCAN_LIMIT = 5000;
 
 const NEXT_EXPORT_CHUNKS_PREFIX = `_next/${NEXT_CHUNKS_PREFIX}`;
 const VITE_HASHED_NAME_RE = /-([A-Za-z0-9_-]{8})\.(?:js|mjs|css)$/;
@@ -204,12 +231,37 @@ const webpackToken: HashTokenOf = (relativePath) => {
   return token !== null && /[a-f]/.test(token) ? token : null;
 };
 
+function outsideRoots(target: string): string[] {
+  const parent = dirname(target);
+  const projectRoot = existsSync(join(parent, "package.json"));
+  return namesIn(parent)
+    .filter((name) => name !== "node_modules" && !name.startsWith("."))
+    .map((name) => join(parent, name))
+    .filter((path) => path !== target)
+    .filter((path) => {
+      if (!projectRoot) return true;
+      return isDir(path) ? OUTPUT_SIBLING_RE.test(basename(path)) : /\.[cm]?js$/.test(path);
+    })
+    .sort();
+}
+
 function selfContained(
   kind: LayoutKind,
   hashedNames: HashedNamesOptions,
   files: readonly string[],
 ): LayoutDecision {
   if (unreferencedHashedFiles(hashedNames, files).length > 0) return { status: "keep" };
+  const target = hashedNames.root;
+  const outside = findHashTokenReference(
+    outsideRoots(target),
+    hashedNames,
+    files,
+    OUTSIDE_SCAN_LIMITS,
+  );
+  if (outside.found !== null) {
+    return { status: "keep", reason: { kind: "outside-reference", path: outside.found, target } };
+  }
+  if (outside.truncated) return { status: "keep", reason: { kind: "unchecked", target } };
   return { status: "rename", layout: { kind, hashedNames } };
 }
 
@@ -247,6 +299,55 @@ function webpackLayout(target: string, files: readonly string[]): LayoutDecision
   return selfContained("webpack", { root: target, tokenOf: webpackToken }, files);
 }
 
+function precacheManifest(dirs: readonly string[]): string | null {
+  let seen = 0;
+  const walk = (dir: string): string | null => {
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return null;
+    }
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (
+          entry.name === "node_modules" ||
+          entry.name === ".afterpack" ||
+          entry.name === "cache"
+        ) {
+          continue;
+        }
+        const found = walk(full);
+        if (found !== null) return found;
+        continue;
+      }
+      if (!entry.isFile() || !/\.(?:[cm]?js|json)$/.test(entry.name)) continue;
+      if (++seen > PRECACHE_SCAN_LIMIT) return null;
+      try {
+        if (PRECACHE_RE.test(readFileSync(full, "utf8"))) return full;
+      } catch {}
+    }
+    return null;
+  };
+  for (const dir of dirs) {
+    const found = walk(dir);
+    if (found !== null) return found;
+  }
+  return null;
+}
+
+function withoutStalePrecache(decision: LayoutDecision): LayoutDecision {
+  if (decision.status !== "rename") return decision;
+  const { kind, hashedNames } = decision.layout;
+  const dirs =
+    kind === "next"
+      ? [hashedNames.root, join(dirname(hashedNames.root), "public")]
+      : [hashedNames.root];
+  const found = precacheManifest(dirs);
+  return found === null ? decision : { status: "keep", reason: { kind: "precache", path: found } };
+}
+
 export function detectHashedLayout(
   target: string,
   isDirectory: boolean,
@@ -259,27 +360,6 @@ export function detectHashedLayout(
       viteLayout(target, files) ??
       webpackLayout(target, files))
     : null;
-  if (decision !== null) return decision;
+  if (decision !== null) return withoutStalePrecache(decision);
   return looksContentHashed(files) ? { status: "keep" } : { status: "plain" };
-}
-
-export function angularIntegrityTargets(browserDir: string): string[] {
-  const out: string[] = [];
-  const walk = (dir: string): void => {
-    let entries: Dirent[];
-    try {
-      entries = readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      const full = join(dir, entry.name);
-      if (entry.isDirectory()) walk(full);
-      else if (entry.isFile() && entry.name.endsWith(".html")) out.push(full);
-    }
-  };
-  walk(browserDir);
-  const ngsw = join(browserDir, "ngsw.json");
-  if (existsSync(ngsw)) out.push(ngsw);
-  return out.sort();
 }

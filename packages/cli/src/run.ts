@@ -2,8 +2,10 @@ import { existsSync, rmSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import {
   AfterpackFilesError,
+  type AfterpackHome,
   AlreadyObfuscatedError,
   afterpackHome,
+  buildDirKey,
   CLOUD_REFUSAL_SUMMARY,
   type ClientIdentity,
   CloudApiError,
@@ -21,13 +23,15 @@ import {
   npxAlternative,
   type ObfuscationEngine,
   type ObfuscationPassResult,
+  planAngularIntegrity,
   type ResolvedPluginConfig,
-  recomputeAngularIntegrity,
   resolvePluginConfig,
   runObfuscationPass,
   type SourceType,
   serverAddsInfo,
+  sha256Hex,
   UnreadableReceiptError,
+  writeFileAtomic,
 } from "@afterpack/integration-utils";
 import {
   type CliRunOptions,
@@ -41,14 +45,18 @@ import {
 import { AUDIT_HELP, audit } from "./audit.js";
 import {
   BackupOutsideProjectError,
-  backupDir,
-  backupManifestPath,
+  type BackupSlot,
+  backupSlot,
   beginJournal,
   captureOriginals,
+  discardSlot,
   type Journal,
+  journalCondition,
+  legacySlot,
   matchAlreadyObfuscated,
   type PendingBackup,
   readBackupManifest,
+  recoverSlot,
   type WriteBackupsResult,
 } from "./backup.js";
 import { frameworkDocsUrl } from "./detect.js";
@@ -63,12 +71,8 @@ import {
 } from "./exit.js";
 import { colorSupported, dim, green, isCiTruthy, red, setColorEnabled, yellow } from "./format.js";
 import { printHeader } from "./header.js";
-import {
-  angularIntegrityTargets,
-  detectHashedLayout,
-  type HashedLayout,
-  KEPT_NAMES_NOTICE,
-} from "./layout.js";
+import { detectHashedLayout, type HashedLayout, keptNamesNotice } from "./layout.js";
+import { acquireLock, type HeldLock, LockHeldError } from "./lock.js";
 import {
   type CommandName,
   displayDir,
@@ -485,7 +489,7 @@ async function runObfuscationAndBackup(input: {
   mode: OutputMode;
   label: string;
   backupEnabled: boolean;
-  projectRoot: string;
+  slot: BackupSlot;
   layout: HashedLayout | null;
   client: ClientIdentity | null;
 }): Promise<{
@@ -536,13 +540,10 @@ async function runObfuscationAndBackup(input: {
           hashedNames: input.layout?.hashedNames,
           beforeWrite: (plan) => {
             journal = beginJournal({
-              projectRoot: input.projectRoot,
+              slot: input.slot,
               protectedRoot: input.buildDir,
               cliVersion: input.version,
-              touched: [
-                ...plan.touched,
-                ...(angular ? angularIntegrityTargets(angular.browserDir) : []),
-              ],
+              planned: plan.planned,
               renamed: plan.renamed,
               persist: input.backupEnabled,
               merge: input.fileTarget,
@@ -554,7 +555,13 @@ async function runObfuscationAndBackup(input: {
           colorGlyph: green,
         }),
     });
-    if (angular) recomputeAngularIntegrity(angular.outputRoot, angular.browserDir, "afterpack");
+    if (angular) {
+      const integrity = planAngularIntegrity(angular.outputRoot, angular.browserDir, "afterpack");
+      (journal as Journal | null)?.expect(
+        new Map([...integrity].map(([path, text]) => [path, sha256Hex(text)])),
+      );
+      for (const [path, text] of integrity) writeFileAtomic(path, text);
+    }
   } catch (error) {
     failureError = error;
     failure = error instanceof Error ? error.message : String(error);
@@ -579,19 +586,18 @@ function renderNextSteps(input: {
   cwd: string;
   env: Record<string, string | undefined>;
   stdout: CliStdout;
-  projectRoot: string;
+  slot: BackupSlot;
   buildDir: string;
   receiptPath: string | null | undefined;
   backupWritten: WriteBackupsResult | null;
   hasConfiguredKey: boolean;
 }): void {
-  const { report, cwd, env, stdout, projectRoot, receiptPath, backupWritten, hasConfiguredKey } =
-    input;
+  const { report, cwd, env, stdout, slot, receiptPath, backupWritten, hasConfiguredKey } = input;
   if (receiptPath) {
     report.log(`  receipt  ${documentPath(cwd, receiptPath)}`);
   }
   if (backupWritten !== null && backupWritten.count > 0) {
-    report.log(`  backup   ${documentPath(cwd, backupDir(projectRoot))}/`);
+    report.log(`  backup   ${documentPath(cwd, slot.container)}/`);
   }
   if (receiptPath || backupWritten !== null) {
     report.log("");
@@ -750,6 +756,15 @@ export function defaultCliStdout(): CliStdout {
 }
 
 export async function run(deps: CliDeps): Promise<number> {
+  const locks: HeldLock[] = [];
+  try {
+    return await runHolding(deps, locks);
+  } finally {
+    for (const lock of locks) lock.release();
+  }
+}
+
+async function runHolding(deps: CliDeps, locks: HeldLock[]): Promise<number> {
   const startedAt = Date.now();
   const { engine, logger, version } = deps;
   const cwd = realDir(deps.cwd);
@@ -924,9 +939,9 @@ export async function run(deps: CliDeps): Promise<number> {
   const target = realDir(requestedPath);
   const isDirectory = statSync(target).isDirectory();
   const buildDir = isDirectory ? target : dirname(target);
-  let projectRoot: string;
+  let home: AfterpackHome;
   try {
-    projectRoot = afterpackHome(buildDir, { fileTarget: !isDirectory }).projectRoot;
+    home = afterpackHome(buildDir, { fileTarget: !isDirectory });
   } catch (error) {
     if (!(error instanceof AfterpackFilesError)) throw error;
     return refuseHere(EXIT.failure, error.code, error.summary, error.fix);
@@ -960,23 +975,51 @@ export async function run(deps: CliDeps): Promise<number> {
     );
   }
 
-  const backupManifestResult = readBackupManifest(projectRoot);
+  const projectRoot = home.projectRoot;
+  const slot = backupSlot(projectRoot, buildDirKey(home));
+  try {
+    locks.push(acquireLock(slot.lockPath, (m) => notice.warn(`${yellow("⚠")} ${m}`)));
+  } catch (error) {
+    if (!(error instanceof LockHeldError)) throw error;
+    return refuseHere(
+      EXIT.failure,
+      error.code,
+      error.message,
+      "Wait for it to finish, then run afterpack again. If no afterpack run is going, delete " +
+        `${documentPath(cwd, error.lockPath)}.`,
+    );
+  }
+  recoverSlot(slot);
+
+  const backupManifestResult = readBackupManifest(slot);
   if (backupManifestResult.status === "corrupt") {
     notice.warn(
       `${yellow("⚠")} Backup manifest is unreadable: ${documentPath(cwd, backupManifestResult.path)} — ` +
         "the already-obfuscated check cannot use it.",
     );
   }
-  const backupManifest =
-    backupManifestResult.status === "ok" ? backupManifestResult.manifest : null;
+  let backupManifest = backupManifestResult.status === "ok" ? backupManifestResult.manifest : null;
   if (backupManifest?.state === "applying") {
-    return refuseHere(
-      EXIT.failure,
-      "INTERRUPTED_RUN",
-      "A previous afterpack run stopped before it finished",
-      "Run `afterpack restore` to put the build output back as your bundler wrote it, then " +
-        "run afterpack again.",
+    const condition = journalCondition(projectRoot, backupManifest);
+    if (condition === "restorable") {
+      return refuseHere(
+        EXIT.failure,
+        "INTERRUPTED_RUN",
+        "A previous afterpack run over this directory stopped before it finished",
+        "Run `afterpack restore` to put the build output back as your bundler wrote it. Or " +
+          "rebuild the output from source and run afterpack again: a rebuilt tree makes the " +
+          `stopped run's backup stale, and afterpack discards it. Deleting ${documentPath(cwd, slot.container)} ` +
+          "clears it too.",
+      );
+    }
+    discardSlot(slot);
+    notice.warn(
+      `${yellow("⚠")} Discarded the backup of an afterpack run that stopped partway: ` +
+        (condition === "pristine"
+          ? "the build output already matches what your bundler wrote."
+          : "the build output was rebuilt since."),
     );
+    backupManifest = null;
   }
   const pendingBackups: PendingBackup[] = backupManifest
     ? captureOriginals(projectRoot, files)
@@ -992,7 +1035,7 @@ export async function run(deps: CliDeps): Promise<number> {
         new AlreadyObfuscatedError(
           `${matched.length} file(s) already carry AfterPack output from a previous run`,
           matched,
-          backupManifestPath(projectRoot),
+          slot.manifestPath,
           buildDir,
         ),
       );
@@ -1009,7 +1052,11 @@ export async function run(deps: CliDeps): Promise<number> {
         "exactly as your bundler wrote it.",
     );
   }
-  if (layoutDecision.status === "keep") notice.warn(`${yellow("⚠")} ${KEPT_NAMES_NOTICE}`);
+  if (layoutDecision.status === "keep") {
+    notice.warn(
+      `${yellow("⚠")} ${keptNamesNotice(layoutDecision.reason, (path) => documentPath(cwd, path))}`,
+    );
+  }
 
   const progressLabel = `Protecting ${isDirectory ? displayDir(cwd, target) : documentPath(cwd, target)}…`;
 
@@ -1031,7 +1078,7 @@ export async function run(deps: CliDeps): Promise<number> {
       mode,
       label: progressLabel,
       backupEnabled,
-      projectRoot,
+      slot,
       layout: layoutDecision.status === "rename" ? layoutDecision.layout : null,
       client: deps.client ?? null,
     });
@@ -1085,12 +1132,20 @@ export async function run(deps: CliDeps): Promise<number> {
     return EXIT.ok;
   }
 
+  if (backupWritten !== null) {
+    const legacy = legacySlot(projectRoot);
+    const previous = readBackupManifest(legacy);
+    if (previous.status === "ok" && previous.manifest.protectedRoot === buildDir) {
+      discardSlot(legacy);
+    }
+  }
+
   renderNextSteps({
     report,
     cwd,
     env,
     stdout,
-    projectRoot,
+    slot,
     buildDir,
     receiptPath: result?.receiptPath,
     backupWritten,

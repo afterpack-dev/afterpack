@@ -3,7 +3,13 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { collectJsFiles } from "@afterpack/integration-utils";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { detectHashedLayout, type LayoutDecision, looksContentHashed } from "../src/layout.js";
+import {
+  detectHashedLayout,
+  KEPT_NAMES_NOTICE,
+  keptNamesNotice,
+  type LayoutDecision,
+  looksContentHashed,
+} from "../src/layout.js";
 
 let root: string;
 
@@ -168,6 +174,79 @@ describe("detectHashedLayout — Vite", () => {
     write("dist/assets/vendor-abcdefgh.js");
     write("dist/other.html", '<script src="/assets/vendor-abcdefgh.js"></script>');
     expect(detect("dist")).toEqual({ status: "keep" });
+  });
+});
+
+describe("detectHashedLayout — names referenced from outside the output", () => {
+  function remixLike(): void {
+    write("build/client/assets/entry-Ab3dE9fG.js", 'import("./route-Q1w2E3r4.js")');
+    write("build/client/assets/route-Q1w2E3r4.js", "export default 1;");
+    write(
+      "build/client/.vite/manifest.json",
+      JSON.stringify({ a: { file: "assets/entry-Ab3dE9fG.js" } }),
+    );
+    write("build/client/index.html", '<script src="/assets/entry-Ab3dE9fG.js"></script>');
+  }
+
+  it("keeps names when a server bundle beside the client hard-codes them", () => {
+    remixLike();
+    const server = write("build/server/index.js", 'const entry = "/assets/route-Q1w2E3r4.js";');
+    expect(detect("build/client")).toEqual({
+      status: "keep",
+      reason: { kind: "outside-reference", path: server, target: join(root, "build/client") },
+    });
+  });
+
+  it("renames when the server bundle names none of them", () => {
+    remixLike();
+    write("build/server/index.js", "export const handler = 1;");
+    expect(detect("build/client").status).toBe("rename");
+  });
+
+  it("checks only build-output folders beside a project-root output, never the source", () => {
+    viteTree();
+    write("package.json", "{}");
+    write("src/notes.js", "// mentions index-Ab3dE9fG.js");
+    expect(detect("dist").status).toBe("rename");
+    const ssr = write("dist-ssr/entry.js", '"/assets/lazy-Q1w2E3r4.js"');
+    expect(detect("dist")).toMatchObject({ status: "keep", reason: { path: ssr } });
+  });
+});
+
+describe("detectHashedLayout — service-worker precache manifests", () => {
+  it("keeps names when a Workbox precache lists files by revision", () => {
+    viteTree();
+    const sw = write(
+      "dist/sw.js",
+      'precacheAndRoute([{url:"index.html",revision:"3f2a1b"},{url:"assets/index-Ab3dE9fG.js",revision:null}])',
+    );
+    expect(detect("dist")).toEqual({ status: "keep", reason: { kind: "precache", path: sw } });
+  });
+
+  it("looks for a Next.js service worker in public/ too", () => {
+    write(".next/BUILD_ID", "b");
+    mkdirSync(join(root, ".next", "turbopack"), { recursive: true });
+    write(".next/static/chunks/0ghe5rzlpm1le.js");
+    const sw = write(
+      "public/sw.js",
+      '[{"revision":"abc","url":"/_next/static/chunks/0ghe5rzlpm1le.js"}]',
+    );
+    expect(detect(".next")).toMatchObject({
+      status: "keep",
+      reason: { kind: "precache", path: sw },
+    });
+  });
+});
+
+describe("keptNamesNotice", () => {
+  it("says why the names were kept, then what to do", () => {
+    const text = keptNamesNotice(
+      { kind: "outside-reference", path: "/p/build/server/index.js", target: "/p/build/client" },
+      (path) => path.replace("/p/", ""),
+    );
+    expect(text).toBe(
+      `build/server/index.js names files in build/client, so renaming them would break it. ${KEPT_NAMES_NOTICE}`,
+    );
   });
 });
 

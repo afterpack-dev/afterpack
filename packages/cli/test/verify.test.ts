@@ -336,7 +336,9 @@ describe("afterpack <dir> writes the receipt afterpack verify reads", () => {
 
     expect(await invokeIn(root, ["p2/dist", ...QUIET])).toBe(1);
     expect(err.join("\n")).toContain("Already obfuscated");
-    expect(existsSync(join(p2, ".afterpack", "backup", "manifest.json"))).toBe(true);
+    expect(existsSync(join(p2, ".afterpack", "backups", "dist", "current", "manifest.json"))).toBe(
+      true,
+    );
   });
 
   it("keeps the receipt and the backup together next to the project marker, whatever the cwd", async () => {
@@ -351,7 +353,7 @@ describe("afterpack <dir> writes the receipt afterpack verify reads", () => {
 
     expect(readdirSync(join(project, ".afterpack")).sort()).toEqual([
       ".gitignore",
-      "backup",
+      "backups",
       "receipts",
     ]);
     expect(existsSync(join(root, ".afterpack"))).toBe(false);
@@ -369,7 +371,9 @@ describe("afterpack <dir> writes the receipt afterpack verify reads", () => {
 
     expect(readdirSync(served)).toEqual(["app.js"]);
     expect(existsSync(join(root, ".afterpack", "receipts", "public.json"))).toBe(true);
-    expect(existsSync(join(root, ".afterpack", "backup", "manifest.json"))).toBe(true);
+    expect(
+      existsSync(join(root, ".afterpack", "backups", "public", "current", "manifest.json")),
+    ).toBe(true);
     expect(out.join("\n")).toContain("no lockfile, afterpack.json, .git or package.json above");
     expect(await invokeIn(served, ["verify"])).toBe(0);
     expect(await invokeIn(served, ["restore"])).toBe(0);
@@ -420,7 +424,9 @@ describe("afterpack <dir> writes the receipt afterpack verify reads", () => {
     expect(await invoke(["app.js", ...QUIET])).toBe(0);
 
     expect(existsSync(join(root, ".afterpack", "receipts", "..json"))).toBe(true);
-    expect(existsSync(join(root, ".afterpack", "backup", "manifest.json"))).toBe(true);
+    expect(existsSync(join(root, ".afterpack", "backups", "%2E", "current", "manifest.json"))).toBe(
+      true,
+    );
     expect(existsSync(join(dirname(root), ".afterpack"))).toBe(false);
     expect(await invoke(["verify"])).toBe(0);
     err = [];
@@ -466,7 +472,10 @@ describe("afterpack <dir> writes the receipt afterpack verify reads", () => {
     expect(await invoke([".output/server/chunks", ...QUIET])).toBe(0);
 
     expect(existsSync(join(server, ".afterpack"))).toBe(false);
-    expect(existsSync(join(root, ".afterpack", "backup", "manifest.json"))).toBe(true);
+    expect(readdirSync(join(root, ".afterpack", "backups")).sort()).toEqual([
+      "%2Eoutput%2Fserver",
+      "%2Eoutput%2Fserver%2Fchunks",
+    ]);
     expect(readdirSync(join(root, ".afterpack", "receipts")).sort()).toEqual([
       ".output%2Fserver%2Fchunks.json",
       ".output%2Fserver.json",
@@ -500,7 +509,11 @@ describe("afterpack <dir> writes the receipt afterpack verify reads", () => {
 
     expect(existsSync(join(root, "dist", "cjs", ".afterpack"))).toBe(false);
     expect(existsSync(join(root, ".afterpack", "receipts", "dist%2Fcjs%2Flib.json"))).toBe(true);
-    expect(existsSync(join(root, ".afterpack", "backup", "manifest.json"))).toBe(true);
+    expect(
+      existsSync(
+        join(root, ".afterpack", "backups", "dist%2Fcjs%2Flib", "current", "manifest.json"),
+      ),
+    ).toBe(true);
   });
 
   it("keeps a single served file's .afterpack outside the folder it is served from", async () => {

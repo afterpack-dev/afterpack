@@ -1,5 +1,6 @@
 export {
   angularServerManifestRefusal,
+  planAngularIntegrity,
   recomputeAngularIntegrity,
 } from "./angular-integrity.js";
 export {
@@ -9,6 +10,7 @@ export {
   type WriteArtifactsResult,
   writeArtifacts,
 } from "./artifacts.js";
+export { sha256Hex, stagedPath, writeFileAtomic } from "./atomic-write.js";
 export {
   applyBundleOutput,
   type BundleEntryLike,
@@ -80,8 +82,11 @@ export {
   skipNextInternals,
 } from "./hash-tokens.js";
 export {
+  findHashTokenReference,
   type HashedNamesOptions,
   type HashTokenOf,
+  type TokenScanLimits,
+  type TokenScanResult,
   unreferencedHashedFiles,
 } from "./hashed-names.js";
 export {
@@ -143,6 +148,7 @@ export {
   type TransformKind,
 } from "./policy.js";
 export {
+  buildDirKey,
   DIAG_RECEIPT_UNREADABLE,
   type HomeTarget,
   type LocatedReceipt,

@@ -1,18 +1,32 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
-import { PROTECTION_RECEIPTS_DIR } from "@afterpack/integration-utils";
+import {
+  afterpackHome,
+  buildDirKey,
+  PROTECTION_RECEIPTS_DIR,
+  writeFileAtomic,
+} from "@afterpack/integration-utils";
 import { CONTACT_FOOTER } from "./args.js";
 import {
   absoluteFilePath,
   type BackupManifest,
   type BackupManifestFile,
-  backupDir,
+  type BackupSlot,
+  backupSlot,
+  copyPath,
   currentSha256,
+  discardSlot,
+  entryStatus,
   findBackupProjectRoot,
+  hasBackup,
+  legacySlot,
   readBackupManifest,
+  recoverSlot,
+  slotsUnder,
 } from "./backup.js";
 import { EXIT, type ExitCode } from "./exit.js";
 import { dim, green } from "./format.js";
+import { acquireLock, type HeldLock, LockHeldError } from "./lock.js";
 import {
   commandFailure,
   displayDir,
@@ -28,25 +42,25 @@ export const RESTORE_USAGE = "usage: afterpack restore [dir]";
 export const RESTORE_HELP = `${RESTORE_USAGE}
 
 Restores the original, pre-obfuscation files that a previous \`afterpack\` run backed up to
-.afterpack/backup/, undoing that run in place.
+.afterpack/backups/, undoing that run in place.
 
-Finds .afterpack/backup/ where the \`afterpack\` run kept it: next to the nearest lockfile,
+Finds .afterpack/backups/ where the \`afterpack\` run kept it: next to the nearest lockfile,
 afterpack.json or .git above the build directory (failing those the nearest package.json,
-otherwise beside the build directory). Point it at that project root or at the build directory
-itself.
+otherwise beside the build directory). Point it at a build directory to undo the run over that
+directory, or at the project root to undo every run backed up there.
 
 Undoes every rename the run made, too: a file the run renamed is put back under its original
 name, and every file whose references the run rewrote gets its original bytes back. A run that
 stopped partway is undone the same way, from the copies it saved before it wrote anything.
 
-Verifies every recorded file against the hash it was obfuscated to BEFORE touching anything: if
-any file no longer matches, or the manifest itself is unreadable, restore changes nothing and
-fails closed. On success it deletes the backup and the stale protection receipt it recorded in
+Verifies every recorded file against the hash it was obfuscated to BEFORE touching anything (for
+a run that stopped partway, against the bytes it was about to write): if any file no longer
+matches, or the manifest itself is unreadable, restore changes nothing and fails closed. On success it deletes the backup and the stale protection receipt it recorded in
 .afterpack/receipts/, leaving .afterpack/ itself in place.
 
 Arguments:
-  [dir]                    a directory at or beneath the project root that holds
-                           .afterpack/backup/ (default: the working directory)
+  [dir]                    a protected build directory, or the project root that
+                           holds .afterpack/backups/ (default: the working directory)
 
 Options:
   --diagnostics.format=<text|json>   json prints ONE document on stdout
@@ -88,6 +102,38 @@ function isRecordedReceipt(projectRoot: string, receiptPath: string): boolean {
 const NOTHING_TO_RESTORE_FIX =
   "Run `afterpack <path>` first — restore reads the backup manifest that run writes.";
 
+function selectSlots(dir: string): BackupSlot[] {
+  const own: BackupSlot[] = [];
+  for (const fileTarget of [false, true]) {
+    let home: ReturnType<typeof afterpackHome>;
+    try {
+      home = afterpackHome(dir, { fileTarget });
+    } catch {
+      continue;
+    }
+    const slot = backupSlot(home.projectRoot, buildDirKey(home));
+    if (hasBackup(slot) && !own.some((s) => s.container === slot.container)) own.push(slot);
+    const legacy = legacySlot(home.projectRoot);
+    const manifest = readBackupManifest(legacy);
+    if (
+      manifest.status === "ok" &&
+      manifest.manifest.protectedRoot === home.buildDir &&
+      !own.some((s) => s.container === legacy.container)
+    ) {
+      own.push(legacy);
+    }
+  }
+  if (own.length > 0) return own;
+  const projectRoot = findBackupProjectRoot(dir);
+  return projectRoot === null ? [] : slotsUnder(projectRoot);
+}
+
+interface LoadedSlot {
+  slot: BackupSlot;
+  manifest: BackupManifest;
+  restore: BackupManifestFile[];
+}
+
 export function restore(deps: RestoreDeps): ExitCode {
   const { cwd, positionals } = deps;
   if (positionals.length > 1) {
@@ -107,12 +153,12 @@ export function restore(deps: RestoreDeps): ExitCode {
       EXIT.failure,
       "PATH_NOT_FOUND",
       `path not found: ${requested}`,
-      "Point restore at the project root that holds .afterpack/backup/, or a directory beneath it.",
+      "Point restore at the project root that holds .afterpack/backups/, or a directory beneath it.",
     );
   }
 
-  const projectRoot = findBackupProjectRoot(realDir(requestedPath));
-  if (projectRoot === null) {
+  const slots = selectSlots(realDir(requestedPath));
+  if (slots.length === 0) {
     return fail(
       deps,
       EXIT.failure,
@@ -122,18 +168,45 @@ export function restore(deps: RestoreDeps): ExitCode {
     );
   }
 
-  const manifestResult = readBackupManifest(projectRoot);
-  if (manifestResult.status === "corrupt") {
+  const locks: HeldLock[] = [];
+  try {
+    for (const slot of slots) {
+      locks.push(acquireLock(slot.lockPath, (m) => deps.report.log(dim(m))));
+    }
+    return restoreSlots(deps, slots);
+  } catch (error) {
+    if (!(error instanceof LockHeldError)) throw error;
     return fail(
       deps,
       EXIT.failure,
-      "BACKUP_MANIFEST_CORRUPT",
-      "Backup manifest is unreadable",
-      `Delete ${documentPath(cwd, manifestResult.path)} and run \`afterpack <path>\` again — ` +
-        "a corrupt manifest cannot be restored from.",
+      error.code,
+      error.message,
+      `Wait for that run to finish, then restore. If no afterpack run is going, delete ${documentPath(cwd, error.lockPath)}.`,
     );
+  } finally {
+    for (const lock of locks) lock.release();
   }
-  if (manifestResult.status === "missing") {
+}
+
+function restoreSlots(deps: RestoreDeps, slots: BackupSlot[]): ExitCode {
+  const { cwd } = deps;
+  const loaded: LoadedSlot[] = [];
+  for (const slot of slots) {
+    recoverSlot(slot);
+    const result = readBackupManifest(slot);
+    if (result.status === "corrupt") {
+      return fail(
+        deps,
+        EXIT.failure,
+        "BACKUP_MANIFEST_CORRUPT",
+        "Backup manifest is unreadable",
+        `Delete ${documentPath(cwd, result.path)} and run \`afterpack <path>\` again — ` +
+          "a corrupt manifest cannot be restored from.",
+      );
+    }
+    if (result.status === "ok") loaded.push({ slot, manifest: result.manifest, restore: [] });
+  }
+  if (loaded.length === 0) {
     return fail(
       deps,
       EXIT.failure,
@@ -142,59 +215,81 @@ export function restore(deps: RestoreDeps): ExitCode {
       NOTHING_TO_RESTORE_FIX,
     );
   }
-  const manifest = manifestResult.manifest;
 
-  const mismatched = manifest.files.filter((entry) => !restorable(projectRoot, manifest, entry));
+  const mismatched: string[] = [];
+  let staleInterrupted = false;
+  for (const item of loaded) {
+    for (const entry of item.manifest.files) {
+      const status = entryStatus(item.slot.projectRoot, item.manifest, entry);
+      if (status === "unexpected") {
+        mismatched.push(entry.path);
+        if (item.manifest.state === "applying") staleInterrupted = true;
+      } else if (status === "expected") {
+        item.restore.push(entry);
+      }
+    }
+  }
   if (mismatched.length > 0) {
     const noun = mismatched.length === 1 ? "file" : "files";
     return fail(
       deps,
       EXIT.failure,
       "RESTORE_MISMATCH",
-      `${mismatched.length} ${noun} changed since obfuscation — restoring nothing`,
-      `Rebuild ${noun === "file" ? "the file below" : "the files below"} from source, then run ` +
-        "`afterpack <path>` again before retrying restore.",
-      mismatched.map((f) => f.path),
+      staleInterrupted
+        ? `${mismatched.length} ${noun} changed since an afterpack run stopped partway — restoring nothing`
+        : `${mismatched.length} ${noun} changed since obfuscation — restoring nothing`,
+      staleInterrupted
+        ? "The build output was rebuilt since that run, so there is nothing to undo. Run " +
+            "`afterpack <path>` on it: that discards the stale backup."
+        : `Rebuild ${noun === "file" ? "the file below" : "the files below"} from source, then run ` +
+            "`afterpack <path>` again before retrying restore.",
+      mismatched,
     );
   }
 
-  const dir = backupDir(projectRoot);
-  const restored = manifest.files.filter(
-    (entry) => currentSha256(absoluteFilePath(projectRoot, entry.path)) !== entry.originalSha256,
-  );
-  const missing = restored.filter(
-    (entry) =>
-      entry.originalSha256 !== null &&
-      currentSha256(absoluteFilePath(dir, entry.path)) !== entry.originalSha256,
+  const missing = loaded.flatMap((item) =>
+    item.restore
+      .filter(
+        (entry) =>
+          entry.originalSha256 !== null &&
+          currentSha256(copyPath(item.slot, entry.path)) !== entry.originalSha256,
+      )
+      .map((entry) => ({ entry, slot: item.slot })),
   );
   if (missing.length > 0) {
+    const noun = missing.length === 1 ? "file" : "files";
     return fail(
       deps,
       EXIT.failure,
       "BACKUP_INCOMPLETE",
-      `The backup is missing the original of ${missing.length} ${missing.length === 1 ? "file" : "files"} — restoring nothing`,
-      "Rebuild from source instead; this backup cannot undo the run.",
-      missing.map((f) => f.path),
+      `The backup is missing the original of ${missing.length} ${noun} — restoring nothing`,
+      "This backup cannot undo the run. Rebuild the output from source and run `afterpack " +
+        "<path>` on it, which discards a backup the rebuild made stale, or delete " +
+        `${documentPath(cwd, missing[0].slot.container)}.`,
+      missing.map(({ entry }) => entry.path),
     );
   }
 
-  for (const entry of restored) {
-    const currentPath = absoluteFilePath(projectRoot, entry.path);
-    if (entry.originalSha256 === null) {
-      rmSync(currentPath, { force: true });
-      continue;
+  for (const item of loaded) {
+    for (const entry of item.restore) {
+      const currentPath = absoluteFilePath(item.slot.projectRoot, entry.path);
+      if (entry.originalSha256 === null) {
+        rmSync(currentPath, { force: true });
+        continue;
+      }
+      mkdirSync(dirname(currentPath), { recursive: true });
+      writeFileAtomic(currentPath, readFileSync(copyPath(item.slot, entry.path)));
     }
-    mkdirSync(dirname(currentPath), { recursive: true });
-    const staged = `${currentPath}.afterpack-restore`;
-    writeFileSync(staged, readFileSync(absoluteFilePath(dir, entry.path)));
-    renameSync(staged, currentPath);
+  }
+  for (const { slot, manifest } of loaded) {
+    if (manifest.receiptPath && isRecordedReceipt(slot.projectRoot, manifest.receiptPath)) {
+      rmSync(manifest.receiptPath, { force: true });
+    }
+    discardSlot(slot);
+    if (!slot.legacy) rmSync(slot.container, { recursive: true, force: true });
   }
 
-  if (manifest.receiptPath && isRecordedReceipt(projectRoot, manifest.receiptPath)) {
-    rmSync(manifest.receiptPath, { force: true });
-  }
-  rmSync(dir, { recursive: true, force: true });
-
+  const restored = loaded.flatMap((item) => item.restore);
   if (deps.mode.format === "json") {
     emitJson(deps.logger, {
       afterpack: deps.version,
@@ -211,33 +306,22 @@ export function restore(deps: RestoreDeps): ExitCode {
           diagnostics: [],
         })),
       diagnostics: [],
-      summary: { directory: documentPath(cwd, projectRoot), files: restored.length },
+      summary: { directory: documentPath(cwd, loaded[0].slot.projectRoot), files: restored.length },
       artifacts: {},
     });
     return EXIT.ok;
   }
 
   const noun = restored.length === 1 ? "file" : "files";
-  const renames = manifest.renames.length;
+  const renames = loaded.reduce((n, item) => n + item.manifest.renames.length, 0);
   const undone =
     renames > 0 ? dim(` · ${renames} ${renames === 1 ? "rename" : "renames"} undone`) : "";
-  const interrupted =
-    manifest.state === "applying" ? dim(" · undid a run that stopped partway") : "";
+  const interrupted = loaded.some((item) => item.manifest.state === "applying")
+    ? dim(" · undid a run that stopped partway")
+    : "";
+  const dirs = loaded.map((item) => displayDir(cwd, item.manifest.protectedRoot)).join(", ");
   deps.report.log(
-    `${green("✓")} Restored ${restored.length} ${noun} · ${displayDir(cwd, manifest.protectedRoot)}` +
-      undone +
-      interrupted,
+    `${green("✓")} Restored ${restored.length} ${noun} · ${dirs}${undone}${interrupted}`,
   );
   return EXIT.ok;
-}
-
-function restorable(
-  projectRoot: string,
-  manifest: BackupManifest,
-  entry: BackupManifestFile,
-): boolean {
-  const current = currentSha256(absoluteFilePath(projectRoot, entry.path));
-  if (entry.obfuscatedSha256 !== undefined && current === entry.obfuscatedSha256) return true;
-  if (manifest.state !== "applying") return false;
-  return entry.obfuscatedSha256 === undefined || current === entry.originalSha256;
 }

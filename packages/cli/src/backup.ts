@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import {
+  type Dirent,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -13,16 +15,19 @@ import {
   AFTERPACK_DIR,
   afterpackHome,
   ensureAfterpackGitignore,
+  stagedPath,
 } from "@afterpack/integration-utils";
 
 const BACKUP_MANIFEST_FILE = "manifest.json";
-const SET_ASIDE_SUFFIX = ".previous";
+const LEGACY_BACKUP_DIR = "backup";
+const BACKUPS_DIR = "backups";
 
 export type JournalState = "applying" | "complete";
 
 export interface BackupManifestFile {
   path: string;
   originalSha256: string | null;
+  plannedSha256?: (string | null)[];
   obfuscatedSha256?: string | null;
 }
 
@@ -42,12 +47,75 @@ export interface BackupManifest {
   renames: BackupRename[];
 }
 
-export function backupDir(projectRoot: string): string {
-  return join(projectRoot, AFTERPACK_DIR, "backup");
+export interface BackupSlot {
+  projectRoot: string;
+  container: string;
+  current: string;
+  previous: string;
+  manifestPath: string;
+  lockPath: string;
+  legacy: boolean;
 }
 
-export function backupManifestPath(projectRoot: string): string {
-  return join(backupDir(projectRoot), BACKUP_MANIFEST_FILE);
+export function backupsDir(projectRoot: string): string {
+  return join(projectRoot, AFTERPACK_DIR, BACKUPS_DIR);
+}
+
+export function backupSlot(projectRoot: string, key: string): BackupSlot {
+  const container = join(backupsDir(projectRoot), key.replace(/^\./, "%2E"));
+  const current = join(container, "current");
+  return {
+    projectRoot,
+    container,
+    current,
+    previous: join(container, "previous"),
+    manifestPath: join(current, BACKUP_MANIFEST_FILE),
+    lockPath: join(container, "lock"),
+    legacy: false,
+  };
+}
+
+export function legacySlot(projectRoot: string): BackupSlot {
+  const current = join(projectRoot, AFTERPACK_DIR, LEGACY_BACKUP_DIR);
+  return {
+    projectRoot,
+    container: current,
+    current,
+    previous: `${current}.previous`,
+    manifestPath: join(current, BACKUP_MANIFEST_FILE),
+    lockPath: `${current}.lock`,
+    legacy: true,
+  };
+}
+
+export function copyPath(slot: BackupSlot, relPath: string): string {
+  return slot.legacy
+    ? absoluteFilePath(slot.current, relPath)
+    : absoluteFilePath(join(slot.current, "files"), relPath);
+}
+
+export function hasBackup(slot: BackupSlot): boolean {
+  return existsSync(slot.manifestPath) || existsSync(join(slot.previous, BACKUP_MANIFEST_FILE));
+}
+
+export function slotsUnder(projectRoot: string): BackupSlot[] {
+  let entries: Dirent[] = [];
+  try {
+    entries = readdirSync(backupsDir(projectRoot), { withFileTypes: true });
+  } catch {
+    entries = [];
+  }
+  const slots = entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => backupSlot(projectRoot, decodeSlotName(entry.name)))
+    .filter(hasBackup)
+    .sort((a, b) => a.container.localeCompare(b.container));
+  const legacy = legacySlot(projectRoot);
+  return existsSync(legacy.manifestPath) ? [legacy, ...slots] : slots;
+}
+
+function decodeSlotName(name: string): string {
+  return name.startsWith("%2E") ? `.${name.slice(3)}` : name;
 }
 
 function homeProjectRoot(dir: string): string | null {
@@ -60,7 +128,27 @@ function homeProjectRoot(dir: string): string | null {
 
 export function findBackupProjectRoot(dir: string): string | null {
   const candidates = [dir, homeProjectRoot(dir)].filter((c): c is string => c !== null);
-  return candidates.find((c) => existsSync(backupManifestPath(c))) ?? null;
+  return candidates.find((c) => slotsUnder(c).length > 0) ?? null;
+}
+
+export function recoverSlot(slot: BackupSlot): void {
+  if (slot.legacy) return;
+  if (existsSync(slot.manifestPath)) {
+    rmSync(slot.previous, { recursive: true, force: true });
+    return;
+  }
+  if (!existsSync(join(slot.previous, BACKUP_MANIFEST_FILE))) return;
+  rmSync(slot.current, { recursive: true, force: true });
+  renameSync(slot.previous, slot.current);
+}
+
+export function discardSlot(slot: BackupSlot): void {
+  if (slot.legacy) {
+    rmSync(slot.current, { recursive: true, force: true });
+    return;
+  }
+  rmSync(slot.current, { recursive: true, force: true });
+  rmSync(slot.previous, { recursive: true, force: true });
 }
 
 function toPosixPath(value: string): string {
@@ -125,7 +213,9 @@ function isEntry(value: unknown, legacy: boolean): value is BackupManifestFile {
   }
   return (
     isSha(entry.originalSha256) &&
-    (entry.obfuscatedSha256 === undefined || isSha(entry.obfuscatedSha256))
+    (entry.obfuscatedSha256 === undefined || isSha(entry.obfuscatedSha256)) &&
+    (entry.plannedSha256 === undefined ||
+      (Array.isArray(entry.plannedSha256) && entry.plannedSha256.every(isSha)))
   );
 }
 
@@ -134,8 +224,8 @@ function isRename(value: unknown): value is BackupRename {
   return typeof rename?.from === "string" && typeof rename.to === "string";
 }
 
-export function readBackupManifest(projectRoot: string): BackupManifestResult {
-  const path = backupManifestPath(projectRoot);
+export function readBackupManifest(slot: BackupSlot): BackupManifestResult {
+  const path = slot.manifestPath;
   if (!existsSync(path)) return { status: "missing" };
   try {
     const parsed = JSON.parse(readFileSync(path, "utf8")) as Omit<
@@ -166,6 +256,40 @@ export function readBackupManifest(projectRoot: string): BackupManifestResult {
   }
 }
 
+export type EntryStatus = "original" | "expected" | "unexpected";
+
+function scratch(entry: BackupManifestFile): boolean {
+  return (
+    entry.originalSha256 === null &&
+    entry.plannedSha256 !== undefined &&
+    entry.plannedSha256.every((state) => state === null)
+  );
+}
+
+export function entryStatus(
+  projectRoot: string,
+  manifest: BackupManifest,
+  entry: BackupManifestFile,
+): EntryStatus {
+  const current = currentSha256(absoluteFilePath(projectRoot, entry.path));
+  if (current === entry.originalSha256) return "original";
+  if (manifest.state === "complete") {
+    return entry.obfuscatedSha256 !== undefined && current === entry.obfuscatedSha256
+      ? "expected"
+      : "unexpected";
+  }
+  if (scratch(entry) || entry.plannedSha256?.includes(current)) return "expected";
+  return "unexpected";
+}
+
+export type JournalCondition = "pristine" | "restorable" | "stale";
+
+export function journalCondition(projectRoot: string, manifest: BackupManifest): JournalCondition {
+  const statuses = manifest.files.map((entry) => entryStatus(projectRoot, manifest, entry));
+  if (statuses.includes("unexpected")) return "stale";
+  return statuses.every((status) => status === "original") ? "pristine" : "restorable";
+}
+
 export interface WriteBackupsResult {
   manifestPath: string;
   count: number;
@@ -183,36 +307,22 @@ export class BackupOutsideProjectError extends Error {
   }
 }
 
-interface PreImage {
+interface Tracked {
   path: string;
   relPath: string;
   bytes: Buffer | null;
   sha256: string | null;
-}
-
-function capturePreImage(projectRoot: string, path: string): PreImage | null {
-  const relPath = relPathFor(projectRoot, path);
-  try {
-    const stats = statSync(path);
-    if (!stats.isFile()) return null;
-    const bytes = readFileSync(path);
-    return { path, relPath, bytes, sha256: sha256OfBytes(bytes) };
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    return { path, relPath, bytes: null, sha256: null };
-  }
+  planned: (string | null)[];
 }
 
 function outsideRoot(relPath: string): boolean {
   return relPath === "" || relPath.startsWith("../") || relPath === ".." || isAbsolute(relPath);
 }
 
-function writeManifest(projectRoot: string, manifest: BackupManifest): string {
-  const path = backupManifestPath(projectRoot);
+function writeManifestAt(path: string, manifest: BackupManifest): void {
   const staged = `${path}.tmp`;
   writeFileSync(staged, `${JSON.stringify(manifest, null, 2)}\n`);
   renameSync(staged, path);
-  return path;
 }
 
 function byPath<T extends { path: string }>(a: T, b: T): number {
@@ -220,88 +330,115 @@ function byPath<T extends { path: string }>(a: T, b: T): number {
 }
 
 export interface BeginJournalInput {
-  projectRoot: string;
+  slot: BackupSlot;
   protectedRoot: string;
   cliVersion: string;
-  touched: readonly string[];
+  planned: ReadonlyMap<string, readonly (string | null)[]>;
   renamed: ReadonlyMap<string, string>;
   persist: boolean;
   merge?: boolean;
 }
 
 export interface Journal {
+  expect(planned: ReadonlyMap<string, string>): void;
   rollback(): void;
   commit(receiptPath: string | null): WriteBackupsResult | null;
 }
 
 export function beginJournal(input: BeginJournalInput): Journal {
-  const { projectRoot, persist } = input;
-  const images = [...new Set(input.touched)]
-    .map((path) => capturePreImage(projectRoot, path))
-    .filter((image): image is PreImage => image !== null);
+  const { slot, persist } = input;
+  const { projectRoot } = slot;
+  const tracked = new Map<string, Tracked>();
   const renames: BackupRename[] = [...input.renamed]
     .map(([from, to]) => ({ from: relPathFor(projectRoot, from), to: relPathFor(projectRoot, to) }))
     .sort((a, b) => a.from.localeCompare(b.from));
-
-  const dir = backupDir(projectRoot);
-  const aside = `${dir}${SET_ASIDE_SUFFIX}`;
-  const touchedRel = new Set(images.map((image) => image.relPath));
   let kept: BackupManifestFile[] = [];
   let keptRenames: BackupRename[] = [];
   let previous: BackupManifest | null = null;
 
-  const dropCopies = (relPaths: Iterable<string>): void => {
-    for (const relPath of relPaths) rmSync(absoluteFilePath(dir, relPath), { force: true });
+  const track = (path: string): Tracked | null => {
+    const known = tracked.get(path);
+    if (known) return known;
+    const relPath = relPathFor(projectRoot, path);
+    let entry: Tracked;
+    try {
+      if (!statSync(path).isFile()) return null;
+      const bytes = readFileSync(path);
+      entry = { path, relPath, bytes, sha256: sha256OfBytes(bytes), planned: [] };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      entry = { path, relPath, bytes: null, sha256: null, planned: [] };
+    }
+    if (persist && outsideRoot(relPath)) throw new BackupOutsideProjectError(path, projectRoot);
+    tracked.set(path, entry);
+    return entry;
+  };
+  const plan = (path: string, state: string | null): Tracked | null => {
+    const entry = track(path);
+    if (entry && !entry.planned.includes(state)) entry.planned.push(state);
+    return entry;
+  };
+
+  const applyingManifest = (): BackupManifest => ({
+    schema: 2,
+    state: "applying",
+    timestamp: new Date().toISOString(),
+    protectedRoot: input.protectedRoot,
+    cliVersion: input.cliVersion,
+    receiptPath: null,
+    files: [
+      ...kept,
+      ...[...tracked.values()].map((entry) => ({
+        path: entry.relPath,
+        originalSha256: entry.sha256,
+        plannedSha256: entry.planned,
+      })),
+    ].sort(byPath),
+    renames: [...keptRenames, ...renames],
+  });
+  const saveCopies = (entries: Iterable<Tracked>): void => {
+    for (const entry of entries) {
+      if (entry.bytes === null) continue;
+      const dest = copyPath(slot, entry.relPath);
+      mkdirSync(dirname(dest), { recursive: true });
+      writeFileSync(dest, entry.bytes);
+    }
   };
   const discardPersisted = (): void => {
     if (previous !== null) {
-      const previousPaths = new Set(kept.map((f) => f.path));
-      dropCopies([...touchedRel].filter((relPath) => !previousPaths.has(relPath)));
-      writeManifest(projectRoot, { ...previous, files: kept });
+      const keptPaths = new Set(kept.map((f) => f.path));
+      for (const entry of tracked.values()) {
+        if (!keptPaths.has(entry.relPath)) rmSync(copyPath(slot, entry.relPath), { force: true });
+      }
+      writeManifestAt(slot.manifestPath, { ...previous, files: kept });
       return;
     }
-    rmSync(dir, { recursive: true, force: true });
-    if (existsSync(aside)) renameSync(aside, dir);
+    rmSync(slot.current, { recursive: true, force: true });
+    if (existsSync(slot.previous)) renameSync(slot.previous, slot.current);
   };
 
+  for (const [path, states] of input.planned) for (const state of states) plan(path, state);
+
   if (persist) {
-    const escaped = images.find((image) => outsideRoot(image.relPath));
-    if (escaped) throw new BackupOutsideProjectError(escaped.path, projectRoot);
-    const existing = input.merge ? readBackupManifest(projectRoot) : null;
+    const existing = input.merge ? readBackupManifest(slot) : null;
     if (
       existing?.status === "ok" &&
       existing.manifest.state === "complete" &&
       existing.manifest.protectedRoot === input.protectedRoot
     ) {
       previous = existing.manifest;
-      kept = previous.files.filter((f) => !touchedRel.has(f.path));
+      const touched = new Set([...tracked.values()].map((entry) => entry.relPath));
+      kept = previous.files.filter((f) => !touched.has(f.path));
       keptRenames = previous.renames;
     } else {
-      rmSync(aside, { recursive: true, force: true });
-      if (existsSync(dir)) renameSync(dir, aside);
+      rmSync(slot.previous, { recursive: true, force: true });
+      if (existsSync(slot.current)) renameSync(slot.current, slot.previous);
     }
     try {
-      mkdirSync(dir, { recursive: true });
-      ensureAfterpackGitignore(dir);
-      for (const image of images) {
-        if (image.bytes === null) continue;
-        const dest = absoluteFilePath(dir, image.relPath);
-        mkdirSync(dirname(dest), { recursive: true });
-        writeFileSync(dest, image.bytes);
-      }
-      writeManifest(projectRoot, {
-        schema: 2,
-        state: "applying",
-        timestamp: new Date().toISOString(),
-        protectedRoot: input.protectedRoot,
-        cliVersion: input.cliVersion,
-        receiptPath: null,
-        files: [
-          ...kept,
-          ...images.map((image) => ({ path: image.relPath, originalSha256: image.sha256 })),
-        ].sort(byPath),
-        renames: [...keptRenames, ...renames],
-      });
+      mkdirSync(slot.current, { recursive: true });
+      ensureAfterpackGitignore(join(projectRoot, AFTERPACK_DIR));
+      saveCopies(tracked.values());
+      writeManifestAt(slot.manifestPath, applyingManifest());
     } catch (error) {
       discardPersisted();
       throw error;
@@ -309,13 +446,25 @@ export function beginJournal(input: BeginJournalInput): Journal {
   }
 
   return {
+    expect(planned) {
+      const added: Tracked[] = [];
+      for (const [path, sha256] of planned) {
+        const known = tracked.has(path);
+        const entry = plan(path, sha256);
+        plan(stagedPath(path), null);
+        if (entry && !known) added.push(entry);
+      }
+      if (!persist) return;
+      saveCopies(added);
+      writeManifestAt(slot.manifestPath, applyingManifest());
+    },
     rollback() {
-      for (const image of [...images].reverse()) {
-        if (image.bytes === null) {
-          rmSync(image.path, { force: true });
-        } else if (currentSha256(image.path) !== image.sha256) {
-          mkdirSync(dirname(image.path), { recursive: true });
-          writeFileSync(image.path, image.bytes);
+      for (const entry of [...tracked.values()].reverse()) {
+        if (entry.bytes === null) {
+          rmSync(entry.path, { force: true });
+        } else if (currentSha256(entry.path) !== entry.sha256) {
+          mkdirSync(dirname(entry.path), { recursive: true });
+          writeFileSync(entry.path, entry.bytes);
         }
       }
       if (persist) discardPersisted();
@@ -323,20 +472,23 @@ export function beginJournal(input: BeginJournalInput): Journal {
     commit(receiptPath) {
       const changed: BackupManifestFile[] = [];
       const unchanged: string[] = [];
-      for (const image of images) {
-        const after = currentSha256(image.path);
-        if (after === image.sha256) unchanged.push(image.relPath);
+      for (const entry of tracked.values()) {
+        const after = currentSha256(entry.path);
+        if (after === entry.sha256) unchanged.push(entry.relPath);
         else
           changed.push({
-            path: image.relPath,
-            originalSha256: image.sha256,
+            path: entry.relPath,
+            originalSha256: entry.sha256,
             obfuscatedSha256: after,
           });
       }
       if (!persist) return null;
-      dropCopies(unchanged.filter((relPath) => !kept.some((f) => f.path === relPath)));
+      const keptPaths = new Set(kept.map((f) => f.path));
+      for (const relPath of unchanged) {
+        if (!keptPaths.has(relPath)) rmSync(copyPath(slot, relPath), { force: true });
+      }
       const files = [...kept, ...changed].sort(byPath);
-      const manifestPath = writeManifest(projectRoot, {
+      writeManifestAt(slot.manifestPath, {
         schema: 2,
         state: "complete",
         timestamp: new Date().toISOString(),
@@ -346,8 +498,8 @@ export function beginJournal(input: BeginJournalInput): Journal {
         files,
         renames: [...keptRenames, ...renames],
       });
-      rmSync(aside, { recursive: true, force: true });
-      return { manifestPath, count: files.length };
+      rmSync(slot.previous, { recursive: true, force: true });
+      return { manifestPath: slot.manifestPath, count: files.length };
     },
   };
 }

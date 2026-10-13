@@ -217,7 +217,7 @@ Commands:
                            hashes to the value it was obfuscated to. Run it in
                            the deploy step. \`afterpack verify --help\` for more.
   restore [dir]            undo a run in place: restores the original files a
-                           previous run backed up to .afterpack/backup/ (defaults
+                           previous run backed up to .afterpack/backups/ (defaults
                            to the working directory). Refuses a file whose current
                            bytes no longer match what that run obfuscated it to,
                            and refuses outright with no backup manifest.

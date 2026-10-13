@@ -5,6 +5,7 @@ import {
   type ProtectionMapFile,
   renderProtectionMapHtml,
 } from "@afterpack/protection-map";
+import { writeFileAtomic } from "./atomic-write.js";
 import { AFTERPACK_DIR } from "./home.js";
 import {
   type ArtifactMode,
@@ -65,41 +66,60 @@ function appendSourceMappingURL(code: string, mapPath: string): string {
   return `${code}${needsNewline ? "\n" : ""}${comment}\n`;
 }
 
-export function writeArtifacts(input: WriteArtifactsInput): WriteArtifactsResult {
-  const { outPath, code, sourceMapJson, protectionMapJson, originalSource, policy } = input;
-  const mode = input.mode ?? "single";
-  const afterpackDir = input.afterpackDir;
-  const logger = input.logger ?? DEFAULT_LOGGER;
+export interface PlannedArtifactWrite {
+  path: string;
+  content: string;
+}
 
+export type ArtifactWritePlan = Pick<
+  WriteArtifactsResult,
+  "codePath" | "mapPath" | "backupPath" | "wroteSourceMappingURL"
+> & { writes: PlannedArtifactWrite[] };
+
+export function planArtifactWrites(
+  input: Pick<
+    WriteArtifactsInput,
+    "outPath" | "code" | "sourceMapJson" | "originalSource" | "policy" | "mode"
+  >,
+): ArtifactWritePlan {
+  const { outPath, code, sourceMapJson, originalSource, policy } = input;
   const hash = policy.backup && originalSource != null ? shortHash(originalSource) : undefined;
-  const paths = resolveArtifactPaths(outPath, mode, hash);
-
-  const result: WriteArtifactsResult = {
+  const paths = resolveArtifactPaths(outPath, input.mode ?? "single", hash);
+  const plan: ArtifactWritePlan = {
     codePath: outPath,
     mapPath: null,
     backupPath: null,
-    protectionMapPath: null,
     wroteSourceMappingURL: false,
+    writes: [],
   };
-
   if (policy.backup && originalSource != null && paths.backupPath != null) {
-    writeFileSync(paths.backupPath, originalSource);
-    result.backupPath = paths.backupPath;
+    plan.writes.push({ path: paths.backupPath, content: originalSource });
+    plan.backupPath = paths.backupPath;
   }
-
   const willWriteMap = policy.sourceMap && sourceMapJson != null;
   let finalCode = code;
   if (willWriteMap && policy.emitSourceMappingURL) {
     finalCode = appendSourceMappingURL(code, paths.mapPath);
-    result.wroteSourceMappingURL = true;
+    plan.wroteSourceMappingURL = true;
   }
-
-  writeFileSync(outPath, finalCode);
-
+  plan.writes.push({ path: outPath, content: finalCode });
   if (willWriteMap && sourceMapJson != null) {
-    writeFileSync(paths.mapPath, sourceMapJson);
-    result.mapPath = paths.mapPath;
+    plan.writes.push({ path: paths.mapPath, content: sourceMapJson });
+    plan.mapPath = paths.mapPath;
   }
+  return plan;
+}
+
+export function writeArtifacts(input: WriteArtifactsInput): WriteArtifactsResult {
+  const { protectionMapJson, policy } = input;
+  const mode = input.mode ?? "single";
+  const afterpackDir = input.afterpackDir;
+  const logger = input.logger ?? DEFAULT_LOGGER;
+  const paths = resolveArtifactPaths(input.outPath, mode);
+
+  const { writes, ...planned } = planArtifactWrites(input);
+  for (const write of writes) writeFileAtomic(write.path, write.content);
+  const result: WriteArtifactsResult = { ...planned, protectionMapPath: null };
 
   if (mode === "single" && policy.protectionMap && protectionMapJson != null) {
     mkdirSync(afterpackDir, { recursive: true });

@@ -92,6 +92,10 @@ function homeOf(target: HomeTarget): AfterpackHome {
   return typeof target === "string" ? afterpackHome(target) : target;
 }
 
+export function buildDirKey(target: HomeTarget): string {
+  return receiptKey(buildDirOf(homeOf(target)));
+}
+
 export function protectionReceiptPath(target: HomeTarget): string {
   return receiptPathIn(homeOf(target));
 }

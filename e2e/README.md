@@ -116,7 +116,10 @@ that fixture's other browsers. To repeat one Firefox test, select only that brow
    `cli-next-app`). The test makes a plain build, runs the CLI over it with its backup on, checks
    that at least one file left its plain name, runs `afterpack verify` on the tree and on a deploy
    copy of it, then runs `afterpack restore`, which must give back the plain build byte for byte.
-   It rebuilds the fixture last, so the tests after it see the protected build.
+   `expectKilledRunRestores` then runs the CLI under `e2e/helpers/kill-after-writes.cjs`, a
+   `--require` hook that SIGKILLs the process right after its second write into the output, and
+   checks that `afterpack restore` undoes the half-finished run byte for byte. Both tests rebuild
+   the fixture last, so the tests after them see the protected build.
 
 ## Writing a scenario
 

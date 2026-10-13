@@ -7,10 +7,12 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, relative, sep } from "node:path";
-import { AFTERPACK_DIR } from "./home.js";
+import { stagedPath } from "./atomic-write.js";
+import { AFTERPACK_DIR, isWithinDir } from "./home.js";
 import type { RegionConfig } from "./policy.js";
 
 export type HashTokenOf = (relativePath: string) => string | null;
@@ -26,10 +28,15 @@ export interface HashedNameInput {
   regions?: RegionConfig[];
 }
 
+export interface HashedNameRewrite {
+  to: string;
+  text: string;
+}
+
 export interface HashedNamesPlan {
   tokens: Map<string, string>;
   renamed: Map<string, string>;
-  rewrites: Map<string, string>;
+  rewrites: Map<string, HashedNameRewrite>;
   rewrite(text: string): string;
   preflight(): void;
   apply(): void;
@@ -41,11 +48,6 @@ const UPPER_ALNUM = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const LOWER_ALNUM = "0123456789abcdefghijklmnopqrstuvwxyz";
 const ALNUM = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 const MIN_TOKEN_LENGTH = 6;
-const STAGED_SUFFIX = ".afterpack-tmp";
-
-export function stagedPath(path: string): string {
-  return `${path}${STAGED_SUFFIX}`;
-}
 
 const BINARY_EXTENSIONS = new Set([
   ".png",
@@ -191,6 +193,64 @@ export function unreferencedHashedFiles(
     .sort();
 }
 
+export interface TokenScanLimits {
+  maxDepth: number;
+  maxFiles: number;
+  maxBytes: number;
+}
+
+export interface TokenScanResult {
+  found: string | null;
+  truncated: boolean;
+}
+
+export function findHashTokenReference(
+  paths: readonly string[],
+  options: HashedNamesOptions,
+  files: readonly string[],
+  limits: TokenScanLimits,
+): TokenScanResult {
+  const tokens = files
+    .map((file) => tokenAt(options.root, options.tokenOf, file))
+    .filter((token): token is string => token !== null);
+  const pattern = tokenPattern(new Set(tokens));
+  const result: TokenScanResult = { found: null, truncated: false };
+  if (pattern === null) return result;
+  let seenFiles = 0;
+  let seenBytes = 0;
+  const visit = (path: string, depth: number): void => {
+    if (result.found !== null || result.truncated || isWithinDir(options.root, path)) return;
+    let stats: ReturnType<typeof statSync>;
+    try {
+      stats = statSync(path);
+    } catch {
+      return;
+    }
+    if (stats.isDirectory()) {
+      const name = basename(path);
+      if (name === "node_modules" || name.startsWith(".")) return;
+      if (depth > limits.maxDepth) {
+        result.truncated = true;
+        return;
+      }
+      for (const entry of readdirSync(path).sort()) visit(join(path, entry), depth + 1);
+      return;
+    }
+    if (!stats.isFile() || !isCandidate(path)) return;
+    seenFiles += 1;
+    seenBytes += stats.size;
+    if (seenFiles > limits.maxFiles || seenBytes > limits.maxBytes) {
+      result.truncated = true;
+      return;
+    }
+    const text = readText(path);
+    pattern.lastIndex = 0;
+    if (text !== null && pattern.test(text)) result.found = path;
+  };
+  for (const path of paths) visit(path, 0);
+  return result;
+}
+
 function writableDir(dir: string): boolean {
   try {
     accessSync(dir, constants.W_OK);
@@ -265,12 +325,13 @@ export function planHashedNames(input: {
     if (next !== path) renamed.set(path, next);
   }
   const writes: { from: string; to: string; text: string }[] = [];
-  const rewrites = new Map<string, string>();
+  const rewrites = new Map<string, HashedNameRewrite>();
   for (const path of changed) {
     const to = renamedPath(path);
     if (to !== path) renamed.set(path, to);
-    rewrites.set(path, to);
-    writes.push({ from: path, to, text: rewrite(others.get(path) as string) });
+    const text = rewrite(others.get(path) as string);
+    rewrites.set(path, { to, text });
+    writes.push({ from: path, to, text });
   }
 
   const preflight = (): void => {

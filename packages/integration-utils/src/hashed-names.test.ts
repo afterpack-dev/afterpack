@@ -12,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { stagedPath } from "./atomic-write.js";
 import {
   afterpackHashSalt,
   cloudEngineMismatch,
@@ -21,9 +22,9 @@ import {
 } from "./hash-salt.js";
 import {
   deriveHashToken,
+  findHashTokenReference,
   type HashTokenOf,
   planHashedNames,
-  stagedPath,
   unreferencedHashedFiles,
 } from "./hashed-names.js";
 import { resetBuildSessions } from "./seed.js";
@@ -241,10 +242,17 @@ describe("planHashedNames staging", () => {
       inputs: new Map([[main, { source: "x" }]]),
       salt: "s",
     });
+    const renamedMain = `main-${deriveHashToken("0123456789abcdef", "s")}.js`;
     expect(plan.rewrites).toEqual(
       new Map([
-        [manifest, manifest],
-        [css, join(root, `static/chunks/app-${deriveHashToken("fedcba9876543210", "s")}.css`)],
+        [manifest, { to: manifest, text: renamedMain }],
+        [
+          css,
+          {
+            to: join(root, `static/chunks/app-${deriveHashToken("fedcba9876543210", "s")}.css`),
+            text: `url(${renamedMain})`,
+          },
+        ],
       ]),
     );
   });
@@ -263,6 +271,40 @@ describe("planHashedNames staging", () => {
     expect(readFileSync(join(root, "a.json"), "utf8")).toBe("main-0123456789abcdef.js");
     expect(readFileSync(join(root, "b.json"), "utf8")).toBe("main-0123456789abcdef.js");
     expect(existsSync(stagedPath(join(root, "a.json")))).toBe(false);
+  });
+});
+
+describe("findHashTokenReference", () => {
+  const LIMITS = { maxDepth: 4, maxFiles: 100, maxBytes: 1_000_000 };
+
+  it("finds a file outside the root that names a hashed file, and ignores the root itself", () => {
+    const main = write("build/client/assets/main-0123456789abcdef.js", "x");
+    write("build/client/index.html", "main-0123456789abcdef.js");
+    const server = write(
+      "build/server/index.js",
+      'import "../client/assets/main-0123456789abcdef.js"',
+    );
+    const options = { root: join(root, "build/client"), tokenOf: DASH_TOKEN };
+    expect(findHashTokenReference([join(root, "build")], options, [main], LIMITS)).toEqual({
+      found: server,
+      truncated: false,
+    });
+    expect(findHashTokenReference([join(root, "build/client")], options, [main], LIMITS)).toEqual({
+      found: null,
+      truncated: false,
+    });
+  });
+
+  it("reports a scan it had to cut short", () => {
+    const main = write("build/client/main-0123456789abcdef.js", "x");
+    for (let i = 0; i < 5; i++) write(`build/server/chunk-${i}.js`, "nothing");
+    const result = findHashTokenReference(
+      [join(root, "build")],
+      { root: join(root, "build/client"), tokenOf: DASH_TOKEN },
+      [main],
+      { ...LIMITS, maxFiles: 3 },
+    );
+    expect(result).toEqual({ found: null, truncated: true });
   });
 });
 

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -2242,7 +2243,7 @@ describe("runObfuscationPass hashedNames", () => {
     expect(readFileSync(join(outDir, "index.html"), "utf8")).toBe("main-0123456789abcdef.js");
   });
 
-  it("announces every path it will write, rename or remove before it writes any", async () => {
+  it("announces, before writing anything, every path it touches and the bytes each will end with", async () => {
     const main = join(outDir, "main-0123456789abcdef.js");
     const map = join(outDir, "main-0123456789abcdef.js.map");
     const css = join(outDir, "site.css");
@@ -2251,7 +2252,11 @@ describe("runObfuscationPass hashedNames", () => {
     writeFileSync(css, "body{}\n/*# sourceMappingURL=site.css.map */");
     writeFileSync(join(outDir, "index.html"), "main-0123456789abcdef.js");
     const { engine } = makeEngine((source) => ({ code: `OBF:${source}` }));
-    const seen: { touched: string[]; renamed: Map<string, string>; tree: string[] }[] = [];
+    const seen: {
+      planned: Map<string, readonly (string | null)[]>;
+      renamed: Map<string, string>;
+      tree: string[];
+    }[] = [];
     const result = await runObfuscationPass({
       files: [main],
       engine,
@@ -2264,7 +2269,7 @@ describe("runObfuscationPass hashedNames", () => {
       hashedNames: { root: outDir, tokenOf },
       beforeWrite: (plan) =>
         seen.push({
-          touched: plan.touched,
+          planned: new Map(plan.planned),
           renamed: new Map(plan.renamed),
           tree: readdirSync(outDir).sort(),
         }),
@@ -2280,8 +2285,16 @@ describe("runObfuscationPass hashedNames", () => {
     ]);
     expect(seen[0].renamed).toEqual(new Map([[main, renamedMain]]));
     for (const path of [main, renamedMain, map, css, join(outDir, "index.html")]) {
-      expect(seen[0].touched).toContain(path);
+      expect(seen[0].planned.has(path)).toBe(true);
     }
+    for (const [path, states] of seen[0].planned) {
+      const now = existsSync(path)
+        ? createHash("sha256").update(readFileSync(path)).digest("hex")
+        : null;
+      expect(states, path).toContain(now);
+    }
+    expect(seen[0].planned.get(main)).toEqual([null]);
+    expect(seen[0].planned.get(map)).toEqual([null]);
   });
 });
 

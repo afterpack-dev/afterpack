@@ -73,8 +73,9 @@ Rules:
 
 - `.afterpack/receipts/<output dir>.json` (`.afterpack/receipts/dist.json` for `dist`): the receipt
   `afterpack verify` checks.
-- `.afterpack/backup/`: the original files, on by default for the CLI, so `afterpack restore` can
-  undo the run. `--build.backup=false` turns it off.
+- `.afterpack/backups/<output dir>/`: the original files, on by default for the CLI, so
+  `afterpack restore` can undo the run. `--build.backup=false` turns it off. Each output directory
+  has its own backup and lock, so parallel builds of different apps don't collide.
 - `.afterpack/protectionMap.html`: the Protection Map report, when the build has source maps.
 - `.map` files beside the output, only with `--sourceMap.enabled` or on a development run
   (`--build.mode=development` or `NODE_ENV=development`) when an input map exists.
@@ -121,7 +122,7 @@ minification.
 | [`paths.exclude`][paths.exclude] | globs to leave untouched | `[]` |
 | [`paths.include`][paths.include] | globs to add back to the walk | `[]` |
 | [`identifiers.reserved`][identifiers.reserved] | names never to rename | `[]` |
-| [`build.backup`][build.backup] | keep originals in `.afterpack/backup/` | `true` for the CLI, `false` in plugins |
+| [`build.backup`][build.backup] | keep originals in `.afterpack/backups/` | `true` for the CLI, `false` in plugins |
 | [`sourceMap.enabled`][sourceMap.enabled] | write `.map` files | off; on in development mode when an input map exists |
 | [`protectionMap.enabled`][protectionMap.enabled] | write the Protection Map | on when an input map exists |
 | [`diagnostics.format`][diagnostics.format] | `text` or `json` | `text` |
@@ -231,13 +232,13 @@ or a file changed after it was obfuscated. A missing receipt is a failure. `veri
 
 ## `afterpack restore [dir]`
 
-Puts the originals from `.afterpack/backup/` back, under their original names, and undoes a run
+Puts the originals from `.afterpack/backups/` back, under their original names, and undoes a run
 that stopped partway. It checks each file still matches what the run wrote and skips (and names)
 any that changed since, exiting `1` if any were skipped. With no backup
 there is nothing to restore, and it exits `1`.
 
 ```bash
-npx afterpack@latest restore         # the project root holding .afterpack/backup/
+npx afterpack@latest restore         # every backup under the project root's .afterpack/backups/
 npx afterpack@latest restore dist
 ```
 

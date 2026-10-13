@@ -3,7 +3,7 @@ import { expectObfuscationPass, readBuildLog } from "@e2e/helpers/build-log.js";
 import { readExpectations, smokeOf } from "@e2e/helpers/expectations.js";
 import { expectVerifyPasses } from "@e2e/helpers/receipt.js";
 import { baseURLOf, fixture } from "@e2e/helpers/registry.js";
-import { expectRestoreUndoesRenames } from "@e2e/helpers/restore.js";
+import { expectKilledRunRestores, expectRestoreUndoesRenames } from "@e2e/helpers/restore.js";
 import { expectObfuscationSignatures } from "@e2e/helpers/signatures.js";
 import { runSmoke } from "@e2e/helpers/smoke.js";
 import { hashedNamesTest } from "@e2e/helpers/hashed-names.js";
@@ -39,6 +39,14 @@ test.describe("`afterpack restore` undoes the renames", () => {
     { tag: "@node" },
     () => {
       expectRestoreUndoesRenames(app, ".next/static/chunks", ".next");
+    },
+  );
+
+  test(
+    "restore gives back the plain .next tree after a run killed between two writes",
+    { tag: "@node" },
+    () => {
+      expectKilledRunRestores(app, ".next/static/chunks", ".next");
     },
   );
 });

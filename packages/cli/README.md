@@ -39,7 +39,11 @@ Each run writes:
 
 - `.afterpack/receipts/<output dir>.json` (`.afterpack/receipts/dist.json` for `dist`), the receipt
   that `afterpack verify` checks.
-- `.afterpack/backup/`, a copy of the original files, so `afterpack restore` can undo the run.
+- `.afterpack/backups/<output dir>/`, a copy of the original files, so `afterpack restore` can
+  undo the run. Each output directory has its own backup and its own lock, so parallel builds of
+  different apps in one repository don't collide, and a second run over the same directory is
+  refused while the first is still going. Versions of the CLI before this one kept a single backup in
+  `.afterpack/backup/` and don't read the new location; this version still restores the old one.
   Turn it off with [`--build.backup`][build.backup]`=false`.
 - `.afterpack/protectionMap.html`, the [Protection Map](https://www.afterpack.dev/docs/protection-map),
   when your build has source maps.
@@ -87,8 +91,10 @@ write a receipt.
 
 ## `afterpack restore [dir]`
 
-Puts back the original files from `.afterpack/backup/`, under their original names, and undoes a run
-that stopped partway. A file that changed since the run is skipped and named, and the command exits
+Puts back the original files from `.afterpack/backups/`, under their original names, and undoes a
+run that stopped partway. A run that stopped partway is undone only while every file still holds
+its original bytes or the bytes the run was about to write; once the output is rebuilt, the next
+`afterpack` run discards that backup and says so. A file that changed since the run is skipped and named, and the command exits
 `1`.
 
 ## `afterpack audit <url>`
@@ -116,7 +122,7 @@ An unknown or misspelled option fails the run and names the right spelling.
 | [`--paths.exclude`][paths.exclude] | globs to leave untouched | none |
 | [`--paths.include`][paths.include] | globs to add back to the walk | none |
 | [`--identifiers.reserved`][identifiers.reserved] | names never to rename | none |
-| [`--build.backup`][build.backup] | back up originals to `.afterpack/backup/` | `true` |
+| [`--build.backup`][build.backup] | back up originals to `.afterpack/backups/` | `true` |
 | [`--protectionMap.enabled`][protectionMap.enabled] | write the Protection Map | on when an input map exists |
 
 Each flag is also a key in `afterpack.json` and an `AFTERPACK_*` variable. Every other option is in
