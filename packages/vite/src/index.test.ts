@@ -712,4 +712,59 @@ describe("afterpackVite content-hashed names", () => {
     expect(unsalted[0]).toContain("assets/raw-CCCC.js");
     expect(unsalted[0]).not.toContain("worker-AAAA");
   });
+
+  it("folds the env-derived report policy into the salt", async () => {
+    const original = process.env.NODE_ENV;
+    try {
+      process.env.NODE_ENV = "production";
+      const prod = await saltOf({ seed: 1 });
+      process.env.NODE_ENV = "development";
+      const dev = await saltOf({ seed: 1 });
+      expect(dev).not.toBe(prod);
+    } finally {
+      process.env.NODE_ENV = original;
+    }
+  });
+
+  it("gives a chunk a different salt when a directive on one of its modules changes", async () => {
+    // biome-ignore lint/suspicious/noExplicitAny: exercising Vite hooks directly in a test.
+    const plugin = afterpackVite({ seed: 1, directives: { enabled: true } }) as any;
+    plugin.configResolved({ root, command: "build", build: { outDir } });
+    await plugin.buildStart.call({});
+    const bare = plugin.augmentChunkHash({ moduleIds: ["/src/a.ts"] });
+    plugin.transform('const s = /* @afterpack strings.encode=off */ "KEEP";', "/src/a.ts");
+    const withDirective = plugin.augmentChunkHash({ moduleIds: ["/src/a.ts"] });
+    expect(withDirective).not.toBe(bare);
+    expect(plugin.augmentChunkHash({ moduleIds: ["/src/other.ts"] })).toBe(bare);
+  });
+
+  it("regenerates a .gz sibling from the obfuscated bytes", async () => {
+    const { gunzipSync } = await import("node:zlib");
+    // biome-ignore lint/suspicious/noExplicitAny: exercising Vite hooks directly in a test.
+    const plugin = afterpackVite({ seed: 1 }) as any;
+    plugin.configResolved({ root, command: "build", build: { outDir } });
+    await plugin.buildStart.call({});
+    const bundle = bundleOf(chunk("assets/index-abc.js", "const a = 1;"), {
+      type: "asset",
+      fileName: "assets/index-abc.js.gz",
+      source: Buffer.from("stale") as unknown as string,
+    });
+    await plugin.generateBundle.handler.call({}, { dir: outDir }, bundle);
+    const obfuscated = (bundle["assets/index-abc.js"] as { code: string }).code;
+    const gz = bundle["assets/index-abc.js.gz"].source as unknown as Uint8Array;
+    expect(gunzipSync(gz).toString()).toBe(obfuscated);
+  });
+
+  it("refuses a build that also runs an SRI plugin", () => {
+    // biome-ignore lint/suspicious/noExplicitAny: exercising the Vite hook directly.
+    const plugin = afterpackVite({ seed: 1 }) as any;
+    expect(() =>
+      plugin.configResolved({
+        root,
+        command: "build",
+        build: { outDir },
+        plugins: [{ name: "vite-plugin-sri" }],
+      }),
+    ).toThrow(/subresource integrity/i);
+  });
 });
