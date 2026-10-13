@@ -46,6 +46,7 @@ interface Fixture {
 interface HashTaps {
   chunkHash?: (chunk: unknown, hash: { update(value: string): void }) => void;
   updateHash?: (content: Buffer[], oldHash: string) => string | undefined;
+  noRealContentHashHooks?: boolean;
 }
 
 function applyPlugin(
@@ -56,7 +57,7 @@ function applyPlugin(
   let tap: (() => Promise<void>) | undefined;
   let onCompilation: ((compilation: unknown) => void) | undefined;
   let onThisCompilation: ((compilation: unknown) => void) | undefined;
-  let beforeRun: (() => Promise<void>) | undefined;
+  let make: (() => Promise<void>) | undefined;
   let afterEmitTap: ((compilation: unknown) => Promise<void>) | undefined;
   const compiler = {
     outputPath: outDir,
@@ -74,15 +75,17 @@ function applyPlugin(
         },
       },
       optimize: {
-        RealContentHashPlugin: {
-          getCompilationHooks: () => ({
-            updateHash: {
-              tap: (_name: string, fn: NonNullable<HashTaps["updateHash"]>) => {
-                hashTaps.updateHash = fn;
-              },
+        RealContentHashPlugin: hashTaps.noRealContentHashHooks
+          ? {}
+          : {
+              getCompilationHooks: () => ({
+                updateHash: {
+                  tap: (_name: string, fn: NonNullable<HashTaps["updateHash"]>) => {
+                    hashTaps.updateHash = fn;
+                  },
+                },
+              }),
             },
-          }),
-        },
       },
       util: { createHash: () => createHash("sha256") },
       Compilation: { PROCESS_ASSETS_STAGE_REPORT: 5000 },
@@ -99,12 +102,11 @@ function applyPlugin(
       },
     },
     hooks: {
-      beforeRun: {
+      make: {
         tapPromise: (_name: string, fn: () => Promise<void>) => {
-          beforeRun = fn;
+          make = fn;
         },
       },
-      watchRun: { tapPromise: () => {} },
       thisCompilation: {
         tap: (_name: string, fn: (compilation: unknown) => void) => {
           onThisCompilation = fn;
@@ -156,9 +158,9 @@ function applyPlugin(
       },
     };
     if (!onCompilation) throw new Error("compilation hook was not tapped");
-    await beforeRun?.();
     onThisCompilation?.(compilation);
     onCompilation(compilation);
+    await make?.();
     if (!tap) throw new Error("processAssets hook was not registered");
     await tap();
     if (afterEmitTap) await afterEmitTap(compilation);
@@ -492,6 +494,18 @@ describe("AfterpackWebpackPlugin content-hashed names", () => {
     expect(hashTaps.updateHash?.(content, "fedcba9876543210")).toBeUndefined();
     const other = await taps({ seed: 2 });
     expect(other.updateHash?.(content, "0123456789abcdef")).not.toBe(js);
+  });
+
+  it("warns once when webpack offers no realContentHash hook to salt", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const invoke = applyPlugin(
+      new AfterpackWebpackPlugin({ seed: 1 }),
+      { optimization: { realContentHash: true } },
+      { noRealContentHashHooks: true },
+    );
+    await invoke(fixture({ [JS]: "const a = 1;" }, [JS]));
+    const messages = warn.mock.calls.map(([message]) => String(message));
+    expect(messages.filter((message) => message.includes("realContentHash"))).toHaveLength(1);
   });
 
   it("leaves every hash alone when autorun is off", async () => {

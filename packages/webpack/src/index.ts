@@ -138,6 +138,7 @@ export class AfterpackWebpackPlugin {
     WriteProtectionReceiptInput
   >();
   private hashSalt: PreparedHashSalt | null = null;
+  private warnedRealContentHash = false;
 
   constructor(options: AfterpackWebpackOptions = {}) {
     const resolved = resolvePluginConfig({
@@ -171,8 +172,7 @@ export class AfterpackWebpackPlugin {
           warn: (message) => console.warn(message),
         });
       };
-      compiler.hooks.beforeRun.tapPromise(PLUGIN_NAME, prepare);
-      compiler.hooks.watchRun.tapPromise(PLUGIN_NAME, prepare);
+      compiler.hooks.make.tapPromise(PLUGIN_NAME, prepare);
       compiler.hooks.thisCompilation.tap(PLUGIN_NAME, (compilation) => {
         this.saltJavascriptHashes(compiler, compilation);
       });
@@ -222,7 +222,17 @@ export class AfterpackWebpackPlugin {
     );
     const realContentHash = compiler.webpack.optimize
       .RealContentHashPlugin as unknown as RealContentHashPluginStatic;
-    if (typeof realContentHash.getCompilationHooks !== "function") return;
+    if (typeof realContentHash.getCompilationHooks !== "function") {
+      if (compiler.options.optimization?.realContentHash && !this.warnedRealContentHash) {
+        this.warnedRealContentHash = true;
+        console.warn(
+          "[afterpack-webpack] this webpack version offers no hook into realContentHash, so " +
+            "each obfuscated chunk keeps the name of its plain bytes. Upgrade webpack, or set " +
+            "`optimization.realContentHash: false`.",
+        );
+      }
+      return;
+    }
     let jsNames: string[] | null = null;
     realContentHash
       .getCompilationHooks(compilation)
