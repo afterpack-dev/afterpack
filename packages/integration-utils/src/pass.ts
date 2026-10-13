@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import type { ProtectionMap } from "@afterpack/protection-map";
@@ -35,6 +35,8 @@ import {
   scanDirectives,
 } from "./directives.js";
 import { detectGitContext } from "./git.js";
+import { afterpackHashSalt, isCloudBuild, readEngineVersion } from "./hash-salt.js";
+import { type HashedNamesOptions, type HashedNamesPlan, planHashedNames } from "./hashed-names.js";
 import { afterpackHome, describeUnanchoredHome } from "./home.js";
 import { type CapturedModule, colorRegions, type DecodedSourceMap } from "./map-color.js";
 import { type CloudNotice, reportNotices, sanitizeServerText } from "./notices.js";
@@ -60,7 +62,12 @@ import {
   writeProtectionReceipt,
 } from "./receipt.js";
 import type { CoreConfigSubset, SourceType } from "./registry.js";
-import { resolveBuildSeed, type SeedOption, type SeedOrigin } from "./seed.js";
+import {
+  type ResolvedBuildSeed,
+  resolveBuildSeed,
+  type SeedOption,
+  type SeedOrigin,
+} from "./seed.js";
 import {
   bundlerSourceMapPaths,
   containedSourceMaps,
@@ -167,7 +174,9 @@ export interface ObfuscationPassOptions {
   env?: EnvLike;
   messages?: PassMessages;
   receipt?: PassReceiptIdentity;
-  afterWrite?: () => void;
+  afterWrite?: (writtenFiles: string[]) => void;
+  resolvedSeed?: ResolvedBuildSeed;
+  hashedNames?: HashedNamesOptions;
   sourceMapSweepDir?: string | null;
   outputSweep?: boolean;
   diagnostics?: DiagnosticsVerbosity;
@@ -202,6 +211,7 @@ export interface ObfuscationPassResult {
   timing: PassTiming;
   diagnostics: DiagnosticsSummary;
   transformedFiles: string[];
+  renamed: Map<string, string>;
   outputs?: InMemoryOutput[];
 }
 
@@ -265,14 +275,6 @@ function removeBundlerSourceMaps(input: {
   );
   if (sweepDir != null && !policy.sourceMap) {
     stripCssSourceMappingURLs(collectStylesheets(sweepDir));
-  }
-}
-
-async function readEngineVersion(engine: ObfuscationEngine): Promise<string | null> {
-  try {
-    return (await engine.version?.()) ?? null;
-  } catch {
-    return null;
   }
 }
 
@@ -356,11 +358,13 @@ export async function runObfuscationPass(
   }
   prepareProtectionReceipt(home, label);
 
-  const resolvedSeed = resolveBuildSeed(
-    options.seed,
-    { root: cwd, leg: options.buildLeg ?? combinedProtectionMap.buildDir },
-    { env, warn: (m) => logger.warn(m) },
-  );
+  const resolvedSeed =
+    options.resolvedSeed ??
+    resolveBuildSeed(
+      options.seed,
+      { root: cwd, leg: options.buildLeg ?? combinedProtectionMap.buildDir },
+      { env, warn: (m) => logger.warn(m) },
+    );
   const seed = resolvedSeed.seed;
   if (resolvedSeed.mismatch) {
     logger.warn(
@@ -546,6 +550,32 @@ export async function runObfuscationPass(
     engine: options.engineConfig,
     renameGlobals: capture.renameGlobals,
   });
+  let namesPlan: HashedNamesPlan | null = null;
+  if (options.hashedNames && !options.emitToCaller) {
+    const { seed: _seed, ...configWithoutSeed } = engineConfig;
+    namesPlan = planHashedNames({
+      options: options.hashedNames,
+      inputs: new Map(inputs.map((input) => [input.path, input.source])),
+      salt: afterpackHashSalt({
+        seed,
+        engineVersion: localEngineVersion,
+        settings: {
+          engine: configWithoutSeed,
+          sourceMap: policy.sourceMap,
+          emitSourceMappingURL: policy.emitSourceMappingURL,
+        },
+        cloud: isCloudBuild(env),
+      }),
+    });
+    for (const input of inputs) {
+      const path = namesPlan.renamed.get(input.path) ?? input.path;
+      const source = namesPlan.rewrite(input.source);
+      sourceByPath.delete(input.path);
+      sourceByPath.set(path, source);
+      input.path = path;
+      input.source = source;
+    }
+  }
   if (style !== "cli") {
     logger.log(
       prefix(
@@ -675,6 +705,20 @@ export async function runObfuscationPass(
     if (written.backupPath) sensitiveArtifactPaths.push(written.backupPath);
   }
   if (!options.emitToCaller) {
+    if (namesPlan) {
+      for (const [from, to] of namesPlan.renamed) {
+        if (sourceByPath.has(to)) rmSync(from, { force: true });
+      }
+      namesPlan.apply();
+      if (namesPlan.renamed.size > 0) {
+        logger.log(
+          prefix(
+            `renamed ${namesPlan.renamed.size} content-hashed file(s) so each name follows its ` +
+              "obfuscated bytes",
+          ),
+        );
+      }
+    }
     removeBundlerSourceMaps({
       perFile: bundlerMapsByPath.values(),
       sweepDir,
@@ -682,7 +726,7 @@ export async function runObfuscationPass(
       policy,
       label,
     });
-    options.afterWrite?.();
+    options.afterWrite?.(writtenFiles);
   }
 
   const protectionMapPath = writeCombinedProtectionMap({
@@ -780,6 +824,7 @@ export async function runObfuscationPass(
     timing,
     diagnostics: diagnosticsSummary,
     transformedFiles,
+    renamed: namesPlan?.renamed ?? new Map(),
     ...(options.emitToCaller ? { outputs } : {}),
   };
 }

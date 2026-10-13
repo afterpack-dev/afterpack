@@ -13,6 +13,7 @@ export {
   type OutputBundleLike,
   sourceTypeForBundle,
   stripBundleCssSourceMaps,
+  unsaltedAssetsWarning,
 } from "./bundle.js";
 export {
   type CollectJsOptions,
@@ -56,6 +57,14 @@ export {
   scanDirectives,
 } from "./directives.js";
 export type { GitBuildContext } from "./git.js";
+export {
+  type PreparedHashSalt,
+  type PrepareHashSaltInput,
+  prepareHashSalt,
+  readEngineVersion,
+  saltSettings,
+} from "./hash-salt.js";
+export type { HashedNamesOptions, HashTokenOf } from "./hashed-names.js";
 export {
   AFTERPACK_DIR,
   AfterpackFilesError,
@@ -154,7 +163,12 @@ export {
   type ValueType,
   validateConfig,
 } from "./registry.js";
-export { SEED_ENV_VAR, type SeedOption, type SeedOrigin } from "./seed.js";
+export {
+  type ResolvedBuildSeed,
+  SEED_ENV_VAR,
+  type SeedOption,
+  type SeedOrigin,
+} from "./seed.js";
 export {
   decodeDataUri,
   discoverInputSourceMap,

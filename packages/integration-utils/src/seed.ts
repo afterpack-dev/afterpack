@@ -32,7 +32,7 @@ interface BuildSeedScope {
   leg: string;
 }
 
-interface ResolvedBuildSeed {
+export interface ResolvedBuildSeed {
   seed: number | string;
   origin: SeedOrigin;
   legs: string[];

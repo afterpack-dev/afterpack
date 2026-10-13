@@ -2143,3 +2143,121 @@ describe("sourceType", () => {
     expect(config.sourceType).toBe("script");
   });
 });
+
+describe("runObfuscationPass hashedNames", () => {
+  const tokenOf = (path: string) => /-([0-9a-f]{16})\.js$/.exec(path)?.[1] ?? null;
+
+  async function passOver(seed: number, written: string[][] = []) {
+    const main = join(outDir, "main-0123456789abcdef.js");
+    const lazy = join(outDir, "lazy-fedcba9876543210.js");
+    writeFileSync(main, 'import("./lazy-fedcba9876543210.js");');
+    writeFileSync(lazy, "export const lazy = 1;");
+    writeFileSync(join(outDir, "index.html"), '<script src="main-0123456789abcdef.js"></script>');
+    const { engine, calls } = makeEngine((source) => ({ code: `OBF:${source}` }), "local", "0.2.4");
+    const result = await runObfuscationPass({
+      files: [main, lazy],
+      engine,
+      label: "test",
+      cwd: root,
+      seed,
+      combinedProtectionMap: { buildDir: outDir },
+      hashedNames: { root: outDir, tokenOf },
+      afterWrite: (files) => written.push(files),
+      logger: silentLogger().logger,
+    });
+    return { result, calls };
+  }
+
+  function freshTree(): void {
+    rmSync(outDir, { recursive: true, force: true });
+    mkdirSync(outDir);
+    rmSync(join(root, ".afterpack"), { recursive: true, force: true });
+    resetBuildSessions();
+  }
+
+  function treeBytes(): string[] {
+    return readdirSync(outDir)
+      .sort()
+      .map((name) => `${name}:${readFileSync(join(outDir, name), "utf8")}`);
+  }
+
+  it("renames each hashed file before obfuscating it and points every reference at the new name", async () => {
+    const written: string[][] = [];
+    const { result, calls } = await passOver(11, written);
+    const names = readdirSync(outDir).sort();
+    const main = names.find((name) => name.startsWith("main-")) as string;
+    const lazy = names.find((name) => name.startsWith("lazy-")) as string;
+    expect(names).toEqual([main, lazy, "index.html"].sort());
+    expect(main).not.toBe("main-0123456789abcdef.js");
+    expect(lazy).not.toBe("lazy-fedcba9876543210.js");
+    expect(calls[0].inputs.map((input) => input.source)).toEqual([
+      `import("./${lazy}");`,
+      "export const lazy = 1;",
+    ]);
+    expect(readFileSync(join(outDir, main), "utf8")).toBe(`OBF:import("./${lazy}");`);
+    expect(readFileSync(join(outDir, "index.html"), "utf8")).toBe(
+      `<script src="${main}"></script>`,
+    );
+    expect(written).toEqual([[join(outDir, main), join(outDir, lazy)]]);
+    expect([...result.renamed.values()].sort()).toEqual(
+      [join(outDir, main), join(outDir, lazy)].sort(),
+    );
+    const receipt = JSON.parse(readFileSync(receiptFor(outDir), "utf8")) as ProtectionReceipt;
+    expect(receipt.files.map((file) => file.path).sort()).toEqual([lazy, main].sort());
+  });
+
+  it("gives the same bytes the same name, and a new seed new names", async () => {
+    await passOver(11);
+    const first = treeBytes();
+    freshTree();
+    await passOver(11);
+    expect(treeBytes()).toEqual(first);
+    const firstNames = readdirSync(outDir);
+    freshTree();
+    await passOver(12);
+    const renamedAgain = readdirSync(outDir).filter(
+      (name) => name !== "index.html" && firstNames.includes(name),
+    );
+    expect(renamedAgain).toEqual([]);
+  });
+
+  it("leaves the tree untouched when the engine fails", async () => {
+    const main = join(outDir, "main-0123456789abcdef.js");
+    writeFileSync(main, "x");
+    writeFileSync(join(outDir, "index.html"), "main-0123456789abcdef.js");
+    const { engine } = makeEngine(() => ({ fail: "boom" }));
+    await expect(
+      runObfuscationPass({
+        files: [main],
+        engine,
+        label: "test",
+        cwd: root,
+        seed: 1,
+        combinedProtectionMap: { buildDir: outDir },
+        hashedNames: { root: outDir, tokenOf },
+        logger: silentLogger().logger,
+      }),
+    ).rejects.toThrow(/boom/);
+    expect(readdirSync(outDir).sort()).toEqual(["index.html", "main-0123456789abcdef.js"]);
+    expect(readFileSync(join(outDir, "index.html"), "utf8")).toBe("main-0123456789abcdef.js");
+  });
+});
+
+describe("runObfuscationPass resolvedSeed", () => {
+  it("uses a seed the caller already resolved instead of drawing another", async () => {
+    const file = join(outDir, "a.js");
+    writeFileSync(file, "x");
+    const { engine, calls } = makeEngine((source) => ({ code: `OBF:${source}` }));
+    const result = await runObfuscationPass({
+      files: [file],
+      engine,
+      label: "test",
+      cwd: root,
+      combinedProtectionMap: { buildDir: outDir },
+      resolvedSeed: { seed: 99, origin: "fresh", legs: [outDir], generation: 1, mismatch: null },
+      logger: silentLogger().logger,
+    });
+    expect(calls[0].config.seed).toBe(99);
+    expect(result.seedOrigin).toBe("fresh");
+  });
+});

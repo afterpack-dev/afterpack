@@ -57,6 +57,24 @@ export function sourceTypeForBundle(
   return sourceTypeForOutputFormat(format);
 }
 
+export function unsaltedAssetsWarning(
+  entries: ReadonlyMap<string, BundleEntryLike>,
+  salted: ReadonlySet<string>,
+): string | null {
+  const fileNames: string[] = [];
+  for (const entry of entries.values()) {
+    if (entry.type !== "chunk" && !salted.has(entry.fileName)) fileNames.push(entry.fileName);
+  }
+  fileNames.sort();
+  if (fileNames.length === 0) return null;
+  return (
+    `${fileNames.length} JS file(s) reached the bundle as plain assets rather than chunks ` +
+    `(${fileNames.join(", ")}); the bundler fixed their content-hashed names before obfuscation, ` +
+    "so each keeps its name while its bytes change. Serve them without long-lived caching, or " +
+    "import them as modules so the bundler builds them as chunks."
+  );
+}
+
 function dataUri(json: string): string {
   return `data:application/json;charset=utf-8;base64,${Buffer.from(json, "utf8").toString("base64")}`;
 }
