@@ -49,13 +49,15 @@ interface HashTaps {
   noRealContentHashHooks?: boolean;
 }
 
+let lastProcessAssetsStage: number | undefined;
+
 function applyPlugin(
   plugin: AfterpackWebpackPlugin,
   compilerOptions: Record<string, unknown> = {},
   hashTaps: HashTaps = {},
 ): (fixture: Fixture) => Promise<Map<string, FakeAsset>> {
   let tap: (() => Promise<void>) | undefined;
-  let onCompilation: ((compilation: unknown) => void) | undefined;
+  const onCompilation: ((compilation: unknown) => void)[] = [];
   let onThisCompilation: ((compilation: unknown) => void) | undefined;
   let make: (() => Promise<void>) | undefined;
   let afterEmitTap: ((compilation: unknown) => Promise<void>) | undefined;
@@ -88,7 +90,7 @@ function applyPlugin(
             },
       },
       util: { createHash: () => createHash("sha256") },
-      Compilation: { PROCESS_ASSETS_STAGE_REPORT: 5000 },
+      Compilation: { PROCESS_ASSETS_STAGE_OPTIMIZE_HASH: 2500, PROCESS_ASSETS_STAGE_REPORT: 5000 },
       sources: {
         RawSource: class {
           constructor(private readonly value: string) {}
@@ -114,7 +116,7 @@ function applyPlugin(
       },
       compilation: {
         tap: (_name: string, fn: (compilation: unknown) => void) => {
-          onCompilation = fn;
+          onCompilation.push(fn);
         },
       },
       afterEmit: {
@@ -134,7 +136,8 @@ function applyPlugin(
       chunks: [{ files: new Set(claimed) }],
       hooks: {
         processAssets: {
-          tapPromise: (_options: unknown, fn: () => Promise<void>) => {
+          tapPromise: (options: { stage?: number }, fn: () => Promise<void>) => {
+            lastProcessAssetsStage = options.stage;
             tap = fn;
           },
         },
@@ -157,9 +160,9 @@ function applyPlugin(
         assets.delete(name);
       },
     };
-    if (!onCompilation) throw new Error("compilation hook was not tapped");
+    if (onCompilation.length === 0) throw new Error("compilation hook was not tapped");
     onThisCompilation?.(compilation);
-    onCompilation(compilation);
+    for (const fn of onCompilation) fn(compilation);
     await make?.();
     if (!tap) throw new Error("processAssets hook was not registered");
     await tap();
@@ -512,5 +515,51 @@ describe("AfterpackWebpackPlugin content-hashed names", () => {
     const hashTaps = await taps({ seed: 1, build: { autorun: false } });
     expect(hashTaps.chunkHash).toBeUndefined();
     expect(hashTaps.updateHash).toBeUndefined();
+  });
+
+  it("obfuscates just after OPTIMIZE_HASH, before compression and Workbox revisions run", async () => {
+    await taps({ seed: 1 });
+    expect(lastProcessAssetsStage).toBe(2501);
+  });
+
+  it("salts a child compilation too, since the hook is tapped per compilation", () => {
+    const hashTaps: HashTaps = {};
+    const invoke = applyPlugin(new AfterpackWebpackPlugin({ seed: 1 }), {}, hashTaps);
+    void invoke;
+    const childTaps: { chunkHash?: unknown } = {};
+    const child = {
+      chunkGraph: null,
+      hooks: { processAssets: { tapPromise: () => {} } },
+    };
+    const compiler = {
+      webpack: {
+        javascript: {
+          JavascriptModulesPlugin: {
+            getCompilationHooks: () => ({
+              chunkHash: {
+                tap: (_n: string, fn: unknown) => {
+                  childTaps.chunkHash = fn;
+                },
+              },
+            }),
+          },
+        },
+        optimize: { RealContentHashPlugin: {} },
+        util: { createHash: () => createHash("sha256") },
+      },
+      options: {},
+    };
+    // biome-ignore lint/suspicious/noExplicitAny: driving the private salt tap with a child compilation.
+    (new AfterpackWebpackPlugin({ seed: 1 }) as any).saltJavascriptHashes(compiler, child);
+    expect(childTaps.chunkHash).toBeTypeOf("function");
+  });
+
+  it("refuses a build that also runs webpack-subresource-integrity", () => {
+    class SubresourceIntegrityPlugin {}
+    expect(() =>
+      applyPlugin(new AfterpackWebpackPlugin({ seed: 1 }), {
+        plugins: [new SubresourceIntegrityPlugin()],
+      }),
+    ).toThrow(/subresource-integrity/i);
   });
 });

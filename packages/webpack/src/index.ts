@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { basename, join, relative } from "node:path";
 import { processBatch, version } from "@afterpack/core";
@@ -14,6 +15,7 @@ import {
   passSettings,
   prepareHashSalt,
   readEngineVersion,
+  reportPolicySaltBits,
   resolveClientIdentity,
   resolvePluginConfig,
   runObfuscationPass,
@@ -31,6 +33,12 @@ const PLUGIN_NAME = "AfterpackWebpackPlugin";
 const EMITTED_JS_RE = /\.(?:js|mjs|cjs)$/;
 const SOURCE_MODULE_RE = /\.(?:m?[jt]sx?)$/;
 const CSS_MAP_RE = /\.css\.map$/;
+
+const SRI_CONFLICT =
+  "[afterpack-webpack] webpack-subresource-integrity is not compatible with AfterPack. It hashes " +
+  "each chunk for its <script integrity=...> before AfterPack obfuscates, so the browser would " +
+  "block every script, and it taps the same RealContentHash.updateHash bail hook AfterPack needs " +
+  "to rename obfuscated chunks. Remove the SubresourceIntegrityPlugin, or remove AfterPack.";
 
 const PATHS_INCLUDE_UNSUPPORTED =
   "this plugin obfuscates the assets webpack's own chunks claim, in the pipeline — there is no " +
@@ -152,6 +160,10 @@ export class AfterpackWebpackPlugin {
 
   apply(compiler: Compiler): void {
     const context = compiler.options.context ?? process.cwd();
+    const sri = (compiler.options.plugins ?? []).find((plugin) =>
+      /SubresourceIntegrity/.test(plugin?.constructor?.name ?? ""),
+    );
+    if (sri) throw new Error(SRI_CONFLICT);
     const directivesEnabled = this.settings.directives.enabled;
     if (directivesEnabled) {
       compiler.hooks.thisCompilation.tap(PLUGIN_NAME, () => {
@@ -160,20 +172,29 @@ export class AfterpackWebpackPlugin {
     }
 
     if (this.settings.build?.autorun !== false) {
+      const devtool = compiler.options.devtool;
+      const hasBundlerSourcemap = typeof devtool === "string" && devtool.includes("source-map");
       const prepare = async (): Promise<void> => {
-        this.hashSalt = prepareHashSalt({
+        this.hashSalt = await prepareHashSalt({
           seed: this.settings.seed,
           root: context,
           leg: compiler.outputPath,
-          engineVersion: await readEngineVersion({ version }),
+          localEngineVersion: await readEngineVersion({ version }),
           settings: saltSettings(
             passSettings({ options: this.settings, engineConfig: this.engineConfig }),
+            {
+              ...reportPolicySaltBits(
+                process.env,
+                this.settings.artifactOptions,
+                hasBundlerSourcemap,
+              ),
+            },
           ),
           warn: (message) => console.warn(message),
         });
       };
       compiler.hooks.make.tapPromise(PLUGIN_NAME, prepare);
-      compiler.hooks.thisCompilation.tap(PLUGIN_NAME, (compilation) => {
+      compiler.hooks.compilation.tap(PLUGIN_NAME, (compilation) => {
         this.saltJavascriptHashes(compiler, compilation);
       });
     }
@@ -186,7 +207,10 @@ export class AfterpackWebpackPlugin {
         });
       }
       compilation.hooks.processAssets.tapPromise(
-        { name: PLUGIN_NAME, stage: compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_REPORT },
+        {
+          name: PLUGIN_NAME,
+          stage: compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_OPTIMIZE_HASH + 1,
+        },
         () => this.obfuscate(compiler, compilation, context),
       );
     });
@@ -210,14 +234,36 @@ export class AfterpackWebpackPlugin {
     });
   }
 
+  private directiveSaltForChunk(compilation: Compilation, chunk: unknown): string {
+    if (!this.settings.directives.enabled || this.captured.size === 0) return "";
+    const chunkGraph = compilation.chunkGraph;
+    if (!chunkGraph) return "";
+    const resources: string[] = [];
+    for (const module of chunkGraph.getChunkModulesIterable(chunk as never)) {
+      collectResourcesThroughConcatenatedModules(module, resources);
+    }
+    const parts: string[] = [];
+    for (const resource of resources) {
+      const cap = this.captured.get(resource);
+      if (cap && (cap.directives.length > 0 || cap.renameGlobals)) {
+        parts.push(JSON.stringify({ id: cap.id, d: cap.directives, g: cap.renameGlobals }));
+      }
+    }
+    if (parts.length === 0) return "";
+    return createHash("sha256").update(parts.sort().join("\0")).digest("hex").slice(0, 16);
+  }
+
   private saltJavascriptHashes(compiler: Compiler, compilation: Compilation): void {
     const salt = (): string | undefined => this.hashSalt?.salt;
     const { JavascriptModulesPlugin } = compiler.webpack.javascript;
     JavascriptModulesPlugin.getCompilationHooks(compilation).chunkHash.tap(
       PLUGIN_NAME,
-      (_chunk, hash) => {
+      (chunk, hash) => {
         const value = salt();
-        if (value) hash.update(value);
+        if (!value) return;
+        hash.update(value);
+        const directives = this.directiveSaltForChunk(compilation, chunk);
+        if (directives) hash.update(directives);
       },
     );
     const realContentHash = compiler.webpack.optimize
@@ -295,6 +341,7 @@ export class AfterpackWebpackPlugin {
       label: "afterpack-webpack",
       cwd: context,
       resolvedSeed: this.hashSalt?.resolvedSeed,
+      cloudEngineExpectation: this.hashSalt?.engine,
       startedAt,
       capturedByFile: capturedByFile.size > 0 ? capturedByFile : undefined,
       combinedProtectionMap: {
