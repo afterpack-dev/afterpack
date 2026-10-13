@@ -6,16 +6,25 @@ import {
   collectJsFiles,
   createTelemetryReporter,
   passSettings,
+  prepareHashSalt,
+  readEngineVersion,
   removeSourceMaps,
   resolveClientIdentity,
   resolvePluginConfig,
   runObfuscationPass,
+  saltSettings,
   sourceTypeForOutputFormat,
   stripCssSourceMappingURLs,
 } from "@afterpack/integration-utils";
 import type { BuildOptions, BuildResult, Plugin, PluginBuild } from "esbuild";
 
 export type AfterpackEsbuildOptions = AfterpackPluginOptions;
+
+function outputBuildDir(io: BuildOptions, cwd: string): string {
+  if (io.outdir) return isAbsolute(io.outdir) ? io.outdir : resolve(cwd, io.outdir);
+  if (io.outfile) return dirname(isAbsolute(io.outfile) ? io.outfile : resolve(cwd, io.outfile));
+  return cwd;
+}
 
 function resolveOutputs(
   io: BuildOptions,
@@ -40,13 +49,30 @@ export function afterpackEsbuild(options: AfterpackEsbuildOptions = {}): Plugin 
   const settings = resolved.options;
   return {
     name: "afterpack-esbuild",
-    setup(build: PluginBuild) {
+    async setup(build: PluginBuild) {
+      const autorun = settings.build?.autorun ?? true;
+      const initial = build.initialOptions;
+      if (!autorun || initial.write === false) return;
+      const initialCwd = initial.absWorkingDir ?? process.cwd();
+      const hashSalt = prepareHashSalt({
+        seed: settings.seed,
+        root: initialCwd,
+        leg: outputBuildDir(initial, initialCwd),
+        engineVersion: await readEngineVersion({ version }),
+        settings: saltSettings(passSettings(resolved), {
+          format: initial.format ?? null,
+          sourcemap: initial.sourcemap ?? null,
+        }),
+        warn: (message) => console.warn(message),
+      });
+      const banner = initial.banner?.js;
+      initial.banner = {
+        ...initial.banner,
+        js: `${banner ? `${banner}\n` : ""}/*afterpack:${hashSalt.salt}*/`,
+      };
       build.onEnd(async (result: BuildResult) => {
-        const autorun = settings.build?.autorun ?? true;
-        if (!autorun) return;
         if (result.errors.length > 0) return;
         const io = build.initialOptions;
-        if (io.write === false) return;
 
         const startedBeforeOutputWalk = Date.now();
         const cwd = io.absWorkingDir ?? process.cwd();
@@ -60,6 +86,7 @@ export function afterpackEsbuild(options: AfterpackEsbuildOptions = {}): Plugin 
           telemetry: createTelemetryReporter(),
           label: "afterpack-esbuild",
           cwd,
+          resolvedSeed: hashSalt.resolvedSeed,
           startedAt: startedBeforeOutputWalk,
           combinedProtectionMap: { buildDir },
           sourceMapSweepDir: sweepDir,

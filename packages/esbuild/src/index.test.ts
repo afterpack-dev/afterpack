@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __reset, __setProcessResult, __setVersion, engineCalls } from "../../../test/core-fake.js";
+import { resetBuildSessions } from "../../integration-utils/src/seed.js";
 import { type AfterpackEsbuildOptions, afterpackEsbuild } from "./index.js";
 
 let root: string;
@@ -43,9 +44,10 @@ function applyPlugin(
     },
   };
   // biome-ignore lint/suspicious/noExplicitAny: exercising the esbuild setup() with a fake build.
-  afterpackEsbuild(options).setup(build as any);
+  const setup = afterpackEsbuild(options).setup(build as any);
   return async (result) => {
-    if (!endFn) throw new Error("onEnd was not registered");
+    await setup;
+    if (!endFn) return;
     await endFn(result ?? { errors: [], warnings: [] });
   };
 }
@@ -241,6 +243,52 @@ describe("afterpackEsbuild afterpack.json (resolved from process.cwd, not esbuil
   it("fails the build on an unknown key instead of silently dropping it", () => {
     writeFileSync(join(root, "afterpack.json"), JSON.stringify({ level: "medium" }));
     expect(() => afterpackEsbuild({})).toThrow(/unknown configuration key `level`/);
+  });
+});
+
+describe("afterpackEsbuild content-hashed names", () => {
+  async function bannerOf(
+    options: AfterpackEsbuildOptions,
+    initial: Record<string, unknown> = {},
+  ): Promise<string | undefined> {
+    resetBuildSessions();
+    const initialOptions: Record<string, unknown> = {
+      outdir: outDir,
+      absWorkingDir: root,
+      ...initial,
+    };
+    await applyPlugin(options, initialOptions)();
+    return (initialOptions.banner as { js?: string } | undefined)?.js;
+  }
+
+  it("adds a salt banner, so esbuild hashes the protected output apart from the plain one", async () => {
+    const banner = await bannerOf({ seed: 1 });
+    expect(banner).toMatch(/^\/\*afterpack:[0-9a-f]{32}\*\/$/);
+    expect(await bannerOf({ seed: 1 })).toBe(banner);
+    expect(await bannerOf({ seed: 2 })).not.toBe(banner);
+    expect(await bannerOf({ seed: 1, preset: "hard" })).not.toBe(banner);
+    expect(await bannerOf({ seed: 1 }, { format: "cjs" })).not.toBe(banner);
+  });
+
+  it("keeps the user's own banner first, so a shebang stays on line one", async () => {
+    const banner = await bannerOf({ seed: 1 }, { banner: { js: "#!/usr/bin/env node" } });
+    expect(banner?.split("\n")[0]).toBe("#!/usr/bin/env node");
+    expect(banner?.split("\n")[1]).toMatch(/^\/\*afterpack:[0-9a-f]{32}\*\/$/);
+  });
+
+  it("obfuscates with the seed it salted the names with", async () => {
+    resetBuildSessions();
+    writeFileSync(join(outDir, "app.js"), "export const a = 1;");
+    const initialOptions: Record<string, unknown> = { outdir: outDir, absWorkingDir: root };
+    await applyPlugin({}, initialOptions)();
+    const seed = engineCalls[0].config.seed as number;
+    rmSync(join(outDir, "app.js"));
+    expect(await bannerOf({ seed })).toBe((initialOptions.banner as { js: string }).js);
+  });
+
+  it("leaves the output alone when autorun is off or nothing is written", async () => {
+    expect(await bannerOf({ seed: 1, build: { autorun: false } })).toBeUndefined();
+    expect(await bannerOf({ seed: 1 }, { write: false })).toBeUndefined();
   });
 });
 
