@@ -11,6 +11,7 @@ import {
   runObfuscationPass,
 } from "@afterpack/integration-utils";
 import { findAngularBrowserDir } from "./browser-dir.js";
+import { recomputeAngularIntegrity } from "./integrity.js";
 import { angularSourceType, classifyAngularScripts } from "./source-type.js";
 
 export type AfterpackAngularOptions = Omit<AfterpackPluginOptions, "directives"> & {
@@ -61,6 +62,7 @@ export async function afterpackAngular(options: AfterpackAngularOptions = {}): P
   if (files.length === 0) {
     throw new Error(`@afterpack/angular: no .js/.mjs/.cjs files found under ${browserDir}`);
   }
+  const outputRoot = applicationOutputRoot(browserDir);
   await runObfuscationPass({
     files,
     engine: { processBatch, version },
@@ -71,9 +73,10 @@ export async function afterpackAngular(options: AfterpackAngularOptions = {}): P
     startedAt: startedBeforeDirDiscovery,
     combinedProtectionMap: { buildDir: browserDir },
     sourceMapSweepDir: browserDir,
-    hashedNames: { root: applicationOutputRoot(browserDir), tokenOf: angularHashToken },
+    hashedNames: { root: outputRoot, tokenOf: angularHashToken },
     ...passSettings(resolved),
     sourceType: angularSourceType(classifyAngularScripts(browserDir, files)),
     directivesEnabled: DIRECTIVES_ALWAYS_DISABLED,
   });
+  recomputeAngularIntegrity(outputRoot, browserDir);
 }
