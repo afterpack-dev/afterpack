@@ -10,10 +10,14 @@ import {
   extractSourceMappingURL,
   type InMemoryInput,
   type PluginOptionsView,
+  type PreparedHashSalt,
   passSettings,
+  prepareHashSalt,
+  readEngineVersion,
   resolveClientIdentity,
   resolvePluginConfig,
   runObfuscationPass,
+  saltSettings,
   scanDirectives,
   sourceTypeForOutputFormat,
   type WriteProtectionReceiptInput,
@@ -37,6 +41,16 @@ export type AfterpackWebpackOptions = AfterpackPluginOptions;
 
 interface CapturedSource extends CapturedModule {
   renameGlobals: boolean;
+}
+
+interface RealContentHashHooks {
+  updateHash: {
+    tap(name: string, fn: (content: Buffer[], oldHash: string) => string | undefined): void;
+  };
+}
+
+interface RealContentHashPluginStatic {
+  getCompilationHooks?(compilation: Compilation): RealContentHashHooks;
 }
 
 interface OwnedAsset {
@@ -78,15 +92,19 @@ function stripCssSourceMaps(compilation: Compilation, RawSource: typeof sources.
   }
 }
 
-function chunkClaimedJsAssets(compilation: Compilation): OwnedAsset[] {
+function chunkClaimedJsNames(compilation: Compilation): string[] {
   const names = new Set<string>();
   for (const chunk of compilation.chunks) {
     for (const name of chunk.files) {
       if (isEmittedJs(name)) names.add(name);
     }
   }
+  return [...names];
+}
+
+function chunkClaimedJsAssets(compilation: Compilation): OwnedAsset[] {
   const out: OwnedAsset[] = [];
-  for (const name of names) {
+  for (const name of chunkClaimedJsNames(compilation)) {
     const asset = compilation.getAsset(name);
     if (!asset) continue;
     const related = (asset.info as { related?: { sourceMap?: string | string[] } }).related;
@@ -119,6 +137,7 @@ export class AfterpackWebpackPlugin {
     Compilation,
     WriteProtectionReceiptInput
   >();
+  private hashSalt: PreparedHashSalt | null = null;
 
   constructor(options: AfterpackWebpackOptions = {}) {
     const resolved = resolvePluginConfig({
@@ -136,6 +155,26 @@ export class AfterpackWebpackPlugin {
     if (directivesEnabled) {
       compiler.hooks.thisCompilation.tap(PLUGIN_NAME, () => {
         this.seenByBuildHooksThisCompilation.clear();
+      });
+    }
+
+    if (this.settings.build?.autorun !== false) {
+      const prepare = async (): Promise<void> => {
+        this.hashSalt = prepareHashSalt({
+          seed: this.settings.seed,
+          root: context,
+          leg: compiler.outputPath,
+          engineVersion: await readEngineVersion({ version }),
+          settings: saltSettings(
+            passSettings({ options: this.settings, engineConfig: this.engineConfig }),
+          ),
+          warn: (message) => console.warn(message),
+        });
+      };
+      compiler.hooks.beforeRun.tapPromise(PLUGIN_NAME, prepare);
+      compiler.hooks.watchRun.tapPromise(PLUGIN_NAME, prepare);
+      compiler.hooks.thisCompilation.tap(PLUGIN_NAME, (compilation) => {
+        this.saltJavascriptHashes(compiler, compilation);
       });
     }
 
@@ -169,6 +208,36 @@ export class AfterpackWebpackPlugin {
         );
       }
     });
+  }
+
+  private saltJavascriptHashes(compiler: Compiler, compilation: Compilation): void {
+    const salt = (): string | undefined => this.hashSalt?.salt;
+    const { JavascriptModulesPlugin } = compiler.webpack.javascript;
+    JavascriptModulesPlugin.getCompilationHooks(compilation).chunkHash.tap(
+      PLUGIN_NAME,
+      (_chunk, hash) => {
+        const value = salt();
+        if (value) hash.update(value);
+      },
+    );
+    const realContentHash = compiler.webpack.optimize
+      .RealContentHashPlugin as unknown as RealContentHashPluginStatic;
+    if (typeof realContentHash.getCompilationHooks !== "function") return;
+    let jsNames: string[] | null = null;
+    realContentHash
+      .getCompilationHooks(compilation)
+      .updateHash.tap(PLUGIN_NAME, (content, oldHash) => {
+        const value = salt();
+        if (!value) return undefined;
+        jsNames ??= chunkClaimedJsNames(compilation);
+        if (!jsNames.some((name) => name.includes(oldHash))) return undefined;
+        const { hashFunction, hashDigest, hashSalt } = compilation.outputOptions;
+        const hash = compiler.webpack.util.createHash(hashFunction ?? "md4");
+        if (hashSalt) hash.update(hashSalt);
+        hash.update(value);
+        for (const chunk of content) hash.update(chunk);
+        return String(hash.digest(hashDigest ?? "hex")).slice(0, oldHash.length);
+      });
   }
 
   private async obfuscate(
@@ -215,6 +284,7 @@ export class AfterpackWebpackPlugin {
       telemetry: createTelemetryReporter(),
       label: "afterpack-webpack",
       cwd: context,
+      resolvedSeed: this.hashSalt?.resolvedSeed,
       startedAt,
       capturedByFile: capturedByFile.size > 0 ? capturedByFile : undefined,
       combinedProtectionMap: {

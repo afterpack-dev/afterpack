@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -42,17 +43,48 @@ interface Fixture {
   claimed: string[];
 }
 
+interface HashTaps {
+  chunkHash?: (chunk: unknown, hash: { update(value: string): void }) => void;
+  updateHash?: (content: Buffer[], oldHash: string) => string | undefined;
+}
+
 function applyPlugin(
   plugin: AfterpackWebpackPlugin,
   compilerOptions: Record<string, unknown> = {},
+  hashTaps: HashTaps = {},
 ): (fixture: Fixture) => Promise<Map<string, FakeAsset>> {
   let tap: (() => Promise<void>) | undefined;
   let onCompilation: ((compilation: unknown) => void) | undefined;
+  let onThisCompilation: ((compilation: unknown) => void) | undefined;
+  let beforeRun: (() => Promise<void>) | undefined;
   let afterEmitTap: ((compilation: unknown) => Promise<void>) | undefined;
   const compiler = {
     outputPath: outDir,
     options: { context: root, devtool: false, ...compilerOptions },
     webpack: {
+      javascript: {
+        JavascriptModulesPlugin: {
+          getCompilationHooks: () => ({
+            chunkHash: {
+              tap: (_name: string, fn: NonNullable<HashTaps["chunkHash"]>) => {
+                hashTaps.chunkHash = fn;
+              },
+            },
+          }),
+        },
+      },
+      optimize: {
+        RealContentHashPlugin: {
+          getCompilationHooks: () => ({
+            updateHash: {
+              tap: (_name: string, fn: NonNullable<HashTaps["updateHash"]>) => {
+                hashTaps.updateHash = fn;
+              },
+            },
+          }),
+        },
+      },
+      util: { createHash: () => createHash("sha256") },
       Compilation: { PROCESS_ASSETS_STAGE_REPORT: 5000 },
       sources: {
         RawSource: class {
@@ -67,7 +99,17 @@ function applyPlugin(
       },
     },
     hooks: {
-      thisCompilation: { tap: () => {} },
+      beforeRun: {
+        tapPromise: (_name: string, fn: () => Promise<void>) => {
+          beforeRun = fn;
+        },
+      },
+      watchRun: { tapPromise: () => {} },
+      thisCompilation: {
+        tap: (_name: string, fn: (compilation: unknown) => void) => {
+          onThisCompilation = fn;
+        },
+      },
       compilation: {
         tap: (_name: string, fn: (compilation: unknown) => void) => {
           onCompilation = fn;
@@ -86,6 +128,7 @@ function applyPlugin(
   return async (fixture: Fixture) => {
     const { assets, claimed } = fixture;
     const compilation = {
+      outputOptions: {},
       chunks: [{ files: new Set(claimed) }],
       hooks: {
         processAssets: {
@@ -113,6 +156,8 @@ function applyPlugin(
       },
     };
     if (!onCompilation) throw new Error("compilation hook was not tapped");
+    await beforeRun?.();
+    onThisCompilation?.(compilation);
     onCompilation(compilation);
     if (!tap) throw new Error("processAssets hook was not registered");
     await tap();
@@ -409,5 +454,49 @@ describe("AfterpackWebpackPlugin sourceType", () => {
     const invoke = applyPlugin(new AfterpackWebpackPlugin({}), { output: { module: false } });
     await invoke(fixture({ "main.js": "const a = 1;" }, ["main.js"]));
     expect(engineCalls[0].config.sourceType).toBeUndefined();
+  });
+});
+
+describe("AfterpackWebpackPlugin content-hashed names", () => {
+  const JS = "main.0123456789abcdef.js";
+  const CSS = "main.fedcba9876543210.css";
+
+  async function taps(options: ConstructorParameters<typeof AfterpackWebpackPlugin>[0]) {
+    const hashTaps: HashTaps = {};
+    const invoke = applyPlugin(new AfterpackWebpackPlugin(options), {}, hashTaps);
+    await invoke(fixture({ [JS]: "const a = 1;", [CSS]: "a{}" }, [JS, CSS]));
+    return hashTaps;
+  }
+
+  function chunkHashUpdates(hashTaps: HashTaps): string[] {
+    const updates: string[] = [];
+    hashTaps.chunkHash?.({}, { update: (value) => updates.push(value) });
+    return updates;
+  }
+
+  it("salts every JS chunk hash, so the bundler names the protected bytes apart from the plain ones", async () => {
+    const updates = chunkHashUpdates(await taps({ seed: 1 }));
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toMatch(/^[0-9a-f]{32}$/);
+    expect(chunkHashUpdates(await taps({ seed: 1 }))).toEqual(updates);
+    expect(chunkHashUpdates(await taps({ seed: 2 }))).not.toEqual(updates);
+    expect(chunkHashUpdates(await taps({ seed: 1, preset: "hard" }))).not.toEqual(updates);
+  });
+
+  it("salts the real content hash of JS assets only, keeping its length", async () => {
+    const hashTaps = await taps({ seed: 1 });
+    const content = [Buffer.from("const a = 1;")];
+    const js = hashTaps.updateHash?.(content, "0123456789abcdef");
+    expect(js).toMatch(/^[0-9a-f]{16}$/);
+    expect(js).not.toBe("0123456789abcdef");
+    expect(hashTaps.updateHash?.(content, "fedcba9876543210")).toBeUndefined();
+    const other = await taps({ seed: 2 });
+    expect(other.updateHash?.(content, "0123456789abcdef")).not.toBe(js);
+  });
+
+  it("leaves every hash alone when autorun is off", async () => {
+    const hashTaps = await taps({ seed: 1, build: { autorun: false } });
+    expect(hashTaps.chunkHash).toBeUndefined();
+    expect(hashTaps.updateHash).toBeUndefined();
   });
 });
