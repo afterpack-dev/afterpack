@@ -140,7 +140,15 @@ export async function runAfterpackHook(input: AfterpackHookInput): Promise<void>
 
   const engine = input.engine ?? (await loadEngineOnDemand());
   const bundler = detectBundler(distDir);
-  await runObfuscationPass({
+  if (bundler === "unknown") {
+    console.warn(
+      `[${LABEL}] could not tell whether this build used Turbopack or webpack, so no content-hashed ` +
+        "chunk name was changed. The obfuscated chunks keep the plain build's names, and an " +
+        "immutable cache may serve stale bytes. Report this with your Next.js version.",
+    );
+  }
+  const buildId = readBuildIdFromManifest(distDir);
+  const result = await runObfuscationPass({
     files,
     engine,
     client: resolveClientIdentity(import.meta.url),
@@ -162,7 +170,7 @@ export async function runAfterpackHook(input: AfterpackHookInput): Promise<void>
     },
     receipt: {
       bundler,
-      buildId: readBuildIdFromManifest(distDir),
+      buildId,
     },
     messages: {
       autoEnableBundlerSourcemap:
@@ -175,4 +183,21 @@ export async function runAfterpackHook(input: AfterpackHookInput): Promise<void>
         "directives can be recovered from the emitted chunks' sourcesContent.",
     },
   });
+
+  if (buildId !== null && result.transformedFiles.length > 0) {
+    warnIfBuildIdPinned(buildId, settings.diagnostics?.level);
+  }
+}
+
+function warnIfBuildIdPinned(buildId: string, diagnosticsLevel: string | undefined): void {
+  if (diagnosticsLevel === "none") return;
+  if (!/^[0-9a-z]{16,}$/i.test(buildId)) {
+    console.warn(
+      `[${LABEL}] this build's id "${buildId}" is not a random Next id, so \`static/${buildId}/` +
+        "_buildManifest.js` and `_ssgManifest.js` keep one immutable URL across releases while " +
+        "their bytes change. AfterPack cannot rename the build id — Next writes into " +
+        `static/${buildId}/ after the build hook runs. Leave \`generateBuildId\` unset so Next ` +
+        "randomizes it per build, or bump it every release.",
+    );
+  }
 }

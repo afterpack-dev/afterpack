@@ -420,4 +420,58 @@ describe("runAfterpackHook content-hashed names", () => {
     expect(await names(1)).toEqual(first);
     expect(await names(2)).not.toEqual(first);
   });
+
+  it("warns about a pinned build id but leaves the build-id directory for Next to keep writing", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const p = project("webpack");
+    chunk(p, "283.721f6d989c3698cc.js", "var lazy=1;");
+    const buildStatic = join(p.distDir, "static", BUILD_ID);
+    mkdirSync(buildStatic, { recursive: true });
+    writeFileSync(join(buildStatic, "_buildManifest.js"), "self.__BUILD_MANIFEST = {};");
+    writeFileSync(join(p.distDir, "BUILD_ID"), BUILD_ID);
+
+    await runAfterpackHook({ metadata: p, options: { seed: 7 }, engine, env });
+
+    expect(readFileSync(join(p.distDir, "BUILD_ID"), "utf8").trim()).toBe(BUILD_ID);
+    expect(existsSync(join(buildStatic, "_buildManifest.js"))).toBe(true);
+    expect(warn.mock.calls.map(([m]) => String(m)).some((m) => m.includes("generateBuildId"))).toBe(
+      true,
+    );
+  });
+
+  it("stays quiet about a random Next build id", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const p = project("webpack");
+    chunk(p, "283.721f6d989c3698cc.js", "var lazy=1;");
+    writeFileSync(
+      join(p.distDir, "build-manifest.json"),
+      JSON.stringify({ lowPriorityFiles: ["static/a1b2c3d4e5f60718/_buildManifest.js"] }),
+    );
+    await runAfterpackHook({ metadata: p, options: { seed: 7 }, engine, env });
+    expect(warn.mock.calls.map(([m]) => String(m)).some((m) => m.includes("generateBuildId"))).toBe(
+      false,
+    );
+  });
+
+  it("warns and renames nothing when it cannot tell the bundler apart", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const projectDir = mkdtempSync(join(root, "app-"));
+    const distDir = join(projectDir, ".next");
+    const chunksDir = join(distDir, "static", "chunks");
+    mkdirSync(chunksDir, { recursive: true });
+    writeFileSync(join(distDir, "build-manifest.json"), JSON.stringify({ lowPriorityFiles: [] }));
+    writeFileSync(join(chunksDir, "283.721f6d989c3698cc.js"), "var lazy=1;");
+
+    await runAfterpackHook({
+      metadata: { projectDir, distDir },
+      options: { seed: 7 },
+      engine,
+      env,
+    });
+
+    expect(
+      warn.mock.calls.map(([m]) => String(m)).some((m) => /Turbopack or webpack/.test(m)),
+    ).toBe(true);
+    expect(readdirSync(chunksDir)).toContain("283.721f6d989c3698cc.js");
+  });
 });
