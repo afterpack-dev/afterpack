@@ -3,6 +3,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -16,7 +17,7 @@ import {
 } from "@afterpack/integration-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __reset, __setProcessResult, engineCalls, processBatch } from "../../../test/core-fake.js";
-import { runAfterpackHook, stripServedSourceMaps } from "./hook.js";
+import { nextChunkToken, runAfterpackHook, stripServedSourceMaps } from "./hook.js";
 
 const BUILD_ID = "test-build-id";
 const engine = { processBatch, version: async () => "9.9.9-test" };
@@ -300,5 +301,123 @@ describe("runAfterpackHook leaves no source map in the served tree", () => {
     expect(existsSync(join(p.chunksDir, "main.js.map"))).toBe(false);
     expect(existsSync(join(cssDir, "app.css.map"))).toBe(false);
     expect(readFileSync(join(cssDir, "app.css"), "utf8")).toBe("a{}\n");
+  });
+});
+
+describe("nextChunkToken", () => {
+  it.each([
+    ["static/chunks/0ssskeo7ttkz9.js", "0ssskeo7ttkz9"],
+    ["static/chunks/turbopack-0gz~.xyt2domn.js", "0gz~.xyt2domn"],
+    ["static/chunks/0o4l8u3~tr0.~.js", "0o4l8u3~tr0.~"],
+    ["static/chunks/0ddmp~g0xqrjw.css", "0ddmp~g0xqrjw"],
+    ["static/media/favicon.0x3dzn~oxb6tn.ico", null],
+    ["server/chunks/[root-of-the-server]__0w9fu3o._.js", null],
+  ])("reads Turbopack's content hash from %s", (path, token) => {
+    expect(nextChunkToken("turbopack")(path)).toBe(token);
+  });
+
+  it.each([
+    ["static/chunks/framework-145f8a2c2c53ff84.js", "145f8a2c2c53ff84"],
+    ["static/chunks/283.721f6d989c3698cc.js", "721f6d989c3698cc"],
+    ["static/chunks/app/page-0640c022b49868e7.js", "0640c022b49868e7"],
+    ["static/chunks/4bd1b696-3f86fc20d5681851.js", "3f86fc20d5681851"],
+    ["static/css/bd1f1db08a054734.css", null],
+    ["static/chunks/main.js", null],
+  ])("reads webpack's content hash from %s", (path, token) => {
+    expect(nextChunkToken("webpack")(path)).toBe(token);
+  });
+
+  it("reads nothing from a build it cannot identify", () => {
+    expect(nextChunkToken("unknown")("static/chunks/0ssskeo7ttkz9.js")).toBeNull();
+  });
+});
+
+describe("runAfterpackHook content-hashed names", () => {
+  it("renames each Turbopack chunk and rewrites every manifest, page and payload that names it", async () => {
+    const p = project("turbopack");
+    chunk(p, "0ssskeo7ttkz9.js", "self.load('static/chunks/0hkn0q5mfwmcp.js');");
+    chunk(p, "0hkn0q5mfwmcp.js", "var lazy=1;\n//# sourceMappingURL=0-76~-rwsrjmv.js.map\n");
+    writeFileSync(join(p.chunksDir, "0-76~-rwsrjmv.js.map"), '{"version":3}');
+    writeFileSync(join(p.chunksDir, "0ddmp~g0xqrjw.css"), "a{}");
+    writeFileSync(
+      join(p.distDir, "build-manifest.json"),
+      JSON.stringify({
+        rootMainFiles: ["static/chunks/0ssskeo7ttkz9.js"],
+        lowPriorityFiles: [`static/${BUILD_ID}/_buildManifest.js`],
+      }),
+    );
+    mkdirSync(join(p.distDir, "server", "app"), { recursive: true });
+    writeFileSync(
+      join(p.distDir, "server", "app", "index.rsc"),
+      '1:I[1,["static/chunks/0hkn0q5mfwmcp.js"],"default"]\nT2a,static/chunks/0ddmp~g0xqrjw.css',
+    );
+    mkdirSync(join(p.distDir, "cache"), { recursive: true });
+    writeFileSync(join(p.distDir, "cache", "entry.json"), "static/chunks/0ssskeo7ttkz9.js");
+
+    await runAfterpackHook({ metadata: p, options: { seed: 7 }, engine, env });
+
+    const names = readdirSync(p.chunksDir).sort();
+    expect(names).not.toContain("0ssskeo7ttkz9.js");
+    expect(names).not.toContain("0hkn0q5mfwmcp.js");
+    expect(names).toContain("0ddmp~g0xqrjw.css");
+    expect(names).not.toContain("0-76~-rwsrjmv.js.map");
+    const js = names.filter((name) => name.endsWith(".js"));
+    expect(js).toHaveLength(2);
+    for (const name of js) expect(name).toMatch(/^[0-9a-z]{13}\.js$/);
+    const manifest = JSON.parse(readFileSync(join(p.distDir, "build-manifest.json"), "utf8"));
+    expect(js).toContain(manifest.rootMainFiles[0].replace("static/chunks/", ""));
+    const lazy = js.find(
+      (name) => name !== manifest.rootMainFiles[0].replace("static/chunks/", ""),
+    );
+    expect(readFileSync(join(p.chunksDir, manifest.rootMainFiles[0].slice(14)), "utf8")).toBe(
+      `OBF:self.load('static/chunks/${lazy}');`,
+    );
+    expect(readFileSync(join(p.chunksDir, lazy as string), "utf8")).toBe("OBF:var lazy=1;\n");
+    expect(readFileSync(join(p.distDir, "server", "app", "index.rsc"), "utf8")).toBe(
+      `1:I[1,["static/chunks/${lazy}"],"default"]\nT2a,static/chunks/0ddmp~g0xqrjw.css`,
+    );
+    expect(readFileSync(join(p.distDir, "cache", "entry.json"), "utf8")).toBe(
+      "static/chunks/0ssskeo7ttkz9.js",
+    );
+    expect(
+      receiptOf(p)
+        .files.map((file) => file.path)
+        .sort(),
+    ).toEqual(js.map((name) => `static/chunks/${name}`).sort());
+    expect(verifyProtectionReceipt(receiptPathOf(p), p.distDir, BUILD_ID).problems).toEqual([]);
+  });
+
+  it("rewrites the hash map in webpack's runtime chunk along with the file names", async () => {
+    const p = project("webpack");
+    chunk(p, "webpack-36948fbfdf1f73c0.js", 'r.u=e=>""+e+"."+{283:"721f6d989c3698cc"}[e]+".js";');
+    chunk(p, "283.721f6d989c3698cc.js", "var lazy=1;");
+    chunk(p, "main.js", "var entry=1;");
+
+    await runAfterpackHook({ metadata: p, options: { seed: 7 }, engine, env });
+
+    const names = readdirSync(p.chunksDir).sort();
+    expect(names).toContain("main.js");
+    const runtime = names.find((name) => name.startsWith("webpack-")) as string;
+    const lazy = names.find((name) => name.startsWith("283.")) as string;
+    expect(runtime).toMatch(/^webpack-[0-9a-f]{16}\.js$/);
+    expect(runtime).not.toBe("webpack-36948fbfdf1f73c0.js");
+    expect(lazy).toMatch(/^283\.[0-9a-f]{16}\.js$/);
+    expect(lazy).not.toBe("283.721f6d989c3698cc.js");
+    const lazyToken = lazy.slice(4, 20);
+    expect(readFileSync(join(p.chunksDir, runtime), "utf8")).toBe(
+      `OBF:r.u=e=>""+e+"."+{283:"${lazyToken}"}[e]+".js";`,
+    );
+  });
+
+  it("gives the same name to the same bytes, and new names to a new seed", async () => {
+    const names = async (seed: number): Promise<string[]> => {
+      const p = project("webpack");
+      chunk(p, "283.721f6d989c3698cc.js", "var lazy=1;");
+      await runAfterpackHook({ metadata: p, options: { seed }, engine, env });
+      return readdirSync(p.chunksDir);
+    };
+    const first = await names(1);
+    expect(await names(1)).toEqual(first);
+    expect(await names(2)).not.toEqual(first);
   });
 });

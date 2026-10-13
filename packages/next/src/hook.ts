@@ -1,11 +1,12 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import {
   type AfterpackPluginOptions,
   collectJsFiles,
   collectSourceMaps,
   collectStylesheets,
   createTelemetryReporter,
+  type HashTokenOf,
   type ObfuscationEngine,
   passSettings,
   removeSourceMaps,
@@ -57,6 +58,22 @@ function detectBundler(distDir: string): string {
   if (existsSync(join(distDir, "turbopack"))) return "turbopack";
   if (existsSync(join(distDir, "server", "webpack-runtime.js"))) return "webpack";
   return "unknown";
+}
+
+const TURBOPACK_CHUNK_RE = /^(?:turbopack-)?([0-9a-z~._-]{13})\.(?:js|css)$/;
+const WEBPACK_CHUNK_RE = /[-.]([0-9a-f]{16})\.js$/;
+
+export function nextChunkToken(bundler: string): HashTokenOf {
+  const pattern =
+    bundler === "turbopack" ? TURBOPACK_CHUNK_RE : bundler === "webpack" ? WEBPACK_CHUNK_RE : null;
+  return (relativePath) => {
+    if (pattern === null || !relativePath.startsWith("static/chunks/")) return null;
+    return pattern.exec(basename(relativePath))?.[1] ?? null;
+  };
+}
+
+function skipNextInternals(relativePath: string): boolean {
+  return relativePath === "cache" || relativePath.startsWith("trace");
 }
 
 function stripTrailer(path: string): boolean {
@@ -122,6 +139,7 @@ export async function runAfterpackHook(input: AfterpackHookInput): Promise<void>
   }
 
   const engine = input.engine ?? (await loadEngineOnDemand());
+  const bundler = detectBundler(distDir);
   await runObfuscationPass({
     files,
     engine,
@@ -134,15 +152,16 @@ export async function runAfterpackHook(input: AfterpackHookInput): Promise<void>
     sourceMapSweepDir: join(distDir, "static"),
     ...passSettings(resolved),
     postMinify: true,
-    afterWrite: () => {
+    hashedNames: { root: distDir, tokenOf: nextChunkToken(bundler), skip: skipNextInternals },
+    afterWrite: (written) => {
       stripServedSourceMaps(
-        files,
+        written,
         join(distDir, "static"),
         settings.diagnostics?.level === "none" ? () => {} : (message) => console.log(message),
       );
     },
     receipt: {
-      bundler: detectBundler(distDir),
+      bundler,
       buildId: readBuildIdFromManifest(distDir),
     },
     messages: {
