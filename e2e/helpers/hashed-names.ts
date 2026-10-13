@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { expect, test } from "@playwright/test";
-import { runBuild } from "./build.js";
+import { runBuild, withFixtureDirLock } from "./build.js";
 import { currentFixture } from "./current.js";
 import { readExpectations } from "./expectations.js";
 import type { Fixture } from "./registry.js";
@@ -13,7 +13,6 @@ export interface HashedNamesExpectation {
 }
 
 export const SECOND_SEED = "913572468";
-const LOCK_WAIT_MS = 10 * 60 * 1000;
 const SCRIPT_OUTPUT = /\.(?:[cm]?js|map)$/;
 
 export type Snapshot = Map<string, string>;
@@ -54,30 +53,6 @@ export function nameReuseProblems(
   return problems;
 }
 
-function sleep(ms: number): void {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-}
-
-function withFixtureDirLock<T>(fixture: Fixture, fn: () => T): T {
-  const lock = join(fixture.dir, ".afterpack", "e2e-rebuild.lock");
-  mkdirSync(join(fixture.dir, ".afterpack"), { recursive: true });
-  const deadline = Date.now() + LOCK_WAIT_MS;
-  for (;;) {
-    try {
-      mkdirSync(lock);
-      break;
-    } catch {
-      if (Date.now() > deadline) throw new Error(`${fixture.name}: timed out waiting for ${lock}`);
-      sleep(500);
-    }
-  }
-  try {
-    return fn();
-  } finally {
-    rmSync(lock, { recursive: true, force: true });
-  }
-}
-
 type HashedNamesDeclaration =
   | HashedNamesExpectation
   | Record<string, HashedNamesExpectation | null>
@@ -102,7 +77,7 @@ export function expectHashedNamesFollowBytes(fixture: Fixture): void {
   if (!spec) return;
   const pattern = new RegExp(spec.pattern);
   const log = (step: string) => `${fixture.buildLog}.hashed-names-${step}`;
-  const builds = withFixtureDirLock(fixture, () => {
+  const builds = withFixtureDirLock(fixture.dir, () => {
     const seeded = snapshotTargets(fixture);
     runBuild(
       fixture,

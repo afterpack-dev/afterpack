@@ -13,6 +13,32 @@ import { dirname, join, relative } from "node:path";
 import { expect } from "@playwright/test";
 import type { Fixture, FixtureTarget } from "./registry.js";
 
+const LOCK_WAIT_MS = 10 * 60 * 1000;
+
+function sleep(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+export function withFixtureDirLock<T>(dir: string, fn: () => T): T {
+  const lock = join(dir, ".afterpack", "e2e-rebuild.lock");
+  mkdirSync(join(dir, ".afterpack"), { recursive: true });
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  for (;;) {
+    try {
+      mkdirSync(lock);
+      break;
+    } catch {
+      if (Date.now() > deadline) throw new Error(`timed out waiting for ${lock}`);
+      sleep(500);
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    rmSync(lock, { recursive: true, force: true });
+  }
+}
+
 export function runBuild(
   fixture: Fixture,
   extraEnv: Record<string, string> = {},
@@ -65,14 +91,16 @@ export function hashTargets(targets: FixtureTarget[]): Map<string, string> {
 }
 
 export function expectDeterministic(fixture: Fixture): void {
-  const first = hashTargets(fixture.targets);
-  runBuild(fixture, {}, `${fixture.buildLog}.rebuild`);
-  const second = hashTargets(fixture.targets);
-  const changed = [...new Set([...first.keys(), ...second.keys()])].filter(
-    (file) => first.get(file) !== second.get(file),
-  );
-  expect(
-    changed,
-    `${fixture.name}: two builds with the same seed produced different output`,
-  ).toEqual([]);
+  withFixtureDirLock(fixture.dir, () => {
+    const first = hashTargets(fixture.targets);
+    runBuild(fixture, {}, `${fixture.buildLog}.rebuild`);
+    const second = hashTargets(fixture.targets);
+    const changed = [...new Set([...first.keys(), ...second.keys()])].filter(
+      (file) => first.get(file) !== second.get(file),
+    );
+    expect(
+      changed,
+      `${fixture.name}: two builds with the same seed produced different output`,
+    ).toEqual([]);
+  });
 }
