@@ -366,7 +366,9 @@ jobs:
             echo "a rejected key rewrote the input" >&2
             exit 1
           fi
-          if [ -e "$RUNNER_TEMP/closed/.afterpack/receipts" ]; then
+          # The writability check before any rewrite may leave the directory; a
+          # receipt is a file in it.
+          if [ -n "$(find "$RUNNER_TEMP/closed/.afterpack/receipts" -type f 2>/dev/null)" ]; then
             echo "a rejected key still wrote a protection receipt" >&2
             exit 1
           fi
