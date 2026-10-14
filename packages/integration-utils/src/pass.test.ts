@@ -2145,6 +2145,70 @@ describe("sourceType", () => {
   });
 });
 
+describe("per-file sourceType", () => {
+  async function inputsSentWith(input: {
+    version?: string;
+    client?: { coreVersion: string | null } | null;
+    engineConfig?: { sourceType?: "auto" | "module" | "script" };
+  }): Promise<{ inputs: EngineFileInput[]; config: CoreConfig }> {
+    const mod = join(outDir, "main.js");
+    const classic = join(outDir, "scripts.js");
+    const other = join(outDir, "other.js");
+    writeFileSync(mod, "export const a = 1;");
+    writeFileSync(classic, "var legacy = 1;");
+    writeFileSync(other, "var other = 1;");
+    const { engine, calls } = makeEngine(() => ({}), "local", input.version);
+    await runObfuscationPass({
+      ...baseOptions([mod, classic, other], engine),
+      fileSourceTypes: new Map([
+        [mod, "module"],
+        [classic, "script"],
+      ]),
+      engineConfig: input.engineConfig,
+      client: input.client as never,
+      logger: silentLogger().logger,
+    });
+    return { inputs: calls[0].inputs, config: calls[0].config };
+  }
+
+  const typesOf = (inputs: EngineFileInput[]) => inputs.map((i) => [i.path, i.sourceType] as const);
+
+  it("sends each classified file's sourceType when the engine reports 0.2.5 or newer", async () => {
+    const { inputs, config } = await inputsSentWith({ version: "0.2.5" });
+    expect(typesOf(inputs)).toEqual([
+      ["main.js", "module"],
+      ["scripts.js", "script"],
+      ["other.js", undefined],
+    ]);
+    expect("sourceType" in (inputs[2] as object)).toBe(false);
+    expect(config.sourceType).toBeUndefined();
+  });
+
+  it("sends none when the engine is older than 0.2.5", async () => {
+    const { inputs } = await inputsSentWith({ version: "0.2.4" });
+    expect(inputs.every((i) => !("sourceType" in i))).toBe(true);
+  });
+
+  it("sends none when no version can be read", async () => {
+    const { inputs } = await inputsSentWith({});
+    expect(inputs.every((i) => !("sourceType" in i))).toBe(true);
+  });
+
+  it("falls back to the client core version when the engine does not report one", async () => {
+    const { inputs } = await inputsSentWith({ client: { coreVersion: "0.2.5" } });
+    expect(typesOf(inputs)[0]).toEqual(["main.js", "module"]);
+  });
+
+  it("leaves an explicitly configured sourceType in charge of every file", async () => {
+    const { inputs, config } = await inputsSentWith({
+      version: "0.2.5",
+      engineConfig: { sourceType: "script" },
+    });
+    expect(inputs.every((i) => !("sourceType" in i))).toBe(true);
+    expect(config.sourceType).toBe("script");
+  });
+});
+
 describe("runObfuscationPass hashedNames", () => {
   const tokenOf = (path: string) => /-([0-9a-f]{16})\.js$/.exec(path)?.[1] ?? null;
 

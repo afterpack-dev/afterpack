@@ -16,6 +16,7 @@ import {
   assertSupportedCore,
   type ClientIdentity,
   clientString,
+  coreSupportsFileSourceType,
   coreSupportsSourceType,
   safeVersionString,
   toCloudApiError,
@@ -104,6 +105,7 @@ export interface EngineFileInput {
   source: string;
   sourceMap?: string;
   regions?: RegionConfig[];
+  sourceType?: SourceType;
 }
 
 export interface EngineFileResult {
@@ -184,6 +186,7 @@ export interface ObfuscationPassOptions {
   preset?: Preset;
   complexity?: number;
   sourceType?: SourceType;
+  fileSourceTypes?: ReadonlyMap<string, SourceType>;
   regions?: RegionConfig[];
   engineConfig?: CoreConfigSubset;
   directivesEnabled?: boolean;
@@ -564,11 +567,21 @@ export async function runObfuscationPass(
       : detectGitContext(artifactOptions.git ?? null, { env, cwd });
 
   const localEngineVersion = await readEngineVersion(engine);
+  const gateVersion = localEngineVersion ?? options.client?.coreVersion;
   const derivedSourceType =
-    options.sourceType !== undefined &&
-    coreSupportsSourceType(localEngineVersion ?? options.client?.coreVersion)
+    options.sourceType !== undefined && coreSupportsSourceType(gateVersion)
       ? options.sourceType
       : undefined;
+  if (
+    options.fileSourceTypes &&
+    options.engineConfig?.sourceType === undefined &&
+    coreSupportsFileSourceType(gateVersion)
+  ) {
+    for (const input of inputs) {
+      const sourceType = options.fileSourceTypes.get(input.path);
+      if (sourceType !== undefined) input.sourceType = sourceType;
+    }
+  }
   const engineConfig = buildEngineConfig({
     policy,
     seed,
@@ -587,7 +600,10 @@ export async function runObfuscationPass(
   if (options.hashedNames && saltEngine && !options.emitToCaller) {
     const { seed: _seed, ...configWithoutSeed } = engineConfig;
     const namedInputs = new Map<string, HashedNameInput>(
-      inputs.map((input) => [input.path, { source: input.source, regions: input.regions }]),
+      inputs.map((input) => [
+        input.path,
+        { source: input.source, regions: input.regions, sourceType: input.sourceType },
+      ]),
     );
     hashSalt = afterpackHashSalt({
       seed,

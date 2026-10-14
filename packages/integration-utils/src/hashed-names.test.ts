@@ -231,6 +231,31 @@ const LOCAL: SaltEngine = {
   probeFailed: false,
 };
 
+describe("planHashedNames per-file sourceType", () => {
+  function nameFor(input: { sourceType?: "module" | "script" }): string {
+    const main = write("main-0123456789abcdef.js", "x");
+    const plan = planHashedNames({
+      options: { root, tokenOf: DASH_TOKEN },
+      inputs: new Map([[main, { source: "x", ...input }]]),
+      salt: "s",
+    });
+    return plan.renamed.get(main) as string;
+  }
+
+  it("keeps the name of a file that carries no sourceType", () => {
+    expect(nameFor({})).toBe(join(root, `main-${deriveHashToken("0123456789abcdef", "s")}.js`));
+  });
+
+  it("derives a different name for each sourceType a file carries", () => {
+    const names = new Set([
+      nameFor({}),
+      nameFor({ sourceType: "module" }),
+      nameFor({ sourceType: "script" }),
+    ]);
+    expect(names.size).toBe(3);
+  });
+});
+
 describe("planHashedNames staging", () => {
   it("lists every reference file it rewrites, renamed or not", () => {
     const main = write("static/chunks/main-0123456789abcdef.js", "x");

@@ -15,6 +15,8 @@ export const MIN_CORE_VERSION = "0.2.0";
 
 export const SOURCE_TYPE_MIN_CORE_VERSION = "0.2.3";
 
+export const FILE_SOURCE_TYPE_MIN_CORE_VERSION = "0.2.5";
+
 export const CORE_PACKAGE = "@afterpack/core";
 
 export interface ClientIdentity {
@@ -103,6 +105,13 @@ export function coreSupportsSourceType(coreVersion: string | null | undefined): 
   return (
     releaseTriple(coreVersion) !== null &&
     !isBelowVersion(coreVersion, SOURCE_TYPE_MIN_CORE_VERSION)
+  );
+}
+
+export function coreSupportsFileSourceType(coreVersion: string | null | undefined): boolean {
+  return (
+    releaseTriple(coreVersion) !== null &&
+    !isBelowVersion(coreVersion, FILE_SOURCE_TYPE_MIN_CORE_VERSION)
   );
 }
 

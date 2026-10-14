@@ -14,6 +14,7 @@ import { basename, dirname, join, relative, sep } from "node:path";
 import { stagedPath } from "./atomic-write.js";
 import { AFTERPACK_DIR, isWithinDir } from "./home.js";
 import type { RegionConfig } from "./policy.js";
+import type { SourceType } from "./registry.js";
 
 export type HashTokenOf = (relativePath: string) => string | null;
 
@@ -26,6 +27,7 @@ export interface HashedNamesOptions {
 export interface HashedNameInput {
   source: string;
   regions?: RegionConfig[];
+  sourceType?: SourceType;
 }
 
 export interface HashedNameRewrite {
@@ -85,8 +87,9 @@ function alphabetOf(token: string): string {
   return ALNUM;
 }
 
-function regionsKey(regions: RegionConfig[] | undefined): string {
-  return regions && regions.length > 0 ? JSON.stringify(regions) : "";
+function inputKey(input: Omit<HashedNameInput, "source"> = {}): string {
+  const regions = input.regions && input.regions.length > 0 ? JSON.stringify(input.regions) : "";
+  return input.sourceType === undefined ? regions : `${regions}\0${input.sourceType}`;
 }
 
 export function deriveHashToken(token: string, salt: string, regions = ""): string {
@@ -270,15 +273,15 @@ export function planHashedNames(input: {
   const skip = input.options.skip ?? (() => false);
   const tokens = new Map<string, string>();
   const tokenOfPath = (path: string): string | null => tokenAt(root, tokenOf, path);
-  const addToken = (token: string, regions?: RegionConfig[]): boolean => {
+  const addToken = (token: string, file?: Omit<HashedNameInput, "source">): boolean => {
     if (tokens.has(token)) return false;
-    tokens.set(token, deriveHashToken(token, input.salt, regionsKey(regions)));
+    tokens.set(token, deriveHashToken(token, input.salt, inputKey(file)));
     return true;
   };
 
-  for (const [path, { regions }] of input.inputs) {
+  for (const [path, file] of input.inputs) {
     const token = tokenOfPath(path);
-    if (token !== null) addToken(token, regions);
+    if (token !== null) addToken(token, file);
   }
 
   const others = new Map<string, string>();

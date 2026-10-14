@@ -4,10 +4,12 @@ import { fileURLToPath } from "node:url";
 import type { ProtectionMap } from "../packages/protection-map/index.js";
 
 export interface EngineCall {
+  path: string;
   input: string;
   config: Record<string, unknown>;
   sourceMap?: string;
   regions?: unknown[];
+  sourceType?: string;
 }
 
 export const engineCalls: EngineCall[] = [];
@@ -364,7 +366,13 @@ export function guardedEngine<
 }
 
 export async function processBatch(
-  files: Array<{ path: string; source: string; sourceMap?: string; regions?: unknown[] }>,
+  files: Array<{
+    path: string;
+    source: string;
+    sourceMap?: string;
+    regions?: unknown[];
+    sourceType?: string;
+  }>,
   config: unknown,
   buildContext?: unknown,
 ): Promise<FakeBatchResult> {
@@ -377,10 +385,12 @@ export async function processBatch(
   let failureCount = 0;
   const results = files.map((f) => {
     engineCalls.push({
+      path: f.path,
       input: f.source,
       config: configRecord,
       sourceMap: f.sourceMap,
       regions: f.regions,
+      sourceType: f.sourceType,
     });
     const pr = impl(f.source, configRecord) as {
       code: string;

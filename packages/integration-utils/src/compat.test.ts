@@ -12,7 +12,9 @@ import {
   CloudApiError,
   CoreVersionError,
   clientString,
+  coreSupportsFileSourceType,
   coreSupportsSourceType,
+  FILE_SOURCE_TYPE_MIN_CORE_VERSION,
   isBelowVersion,
   MIN_CORE_VERSION,
   npxAlternative,
@@ -320,5 +322,25 @@ describe("coreSupportsSourceType", () => {
     expect(coreSupportsSourceType("0.2")).toBe(false);
     expect(coreSupportsSourceType(null)).toBe(false);
     expect(coreSupportsSourceType(undefined)).toBe(false);
+  });
+});
+
+describe("coreSupportsFileSourceType", () => {
+  it("accepts the minimum version and newer", () => {
+    expect(coreSupportsFileSourceType(FILE_SOURCE_TYPE_MIN_CORE_VERSION)).toBe(true);
+    expect(coreSupportsFileSourceType("0.2.5")).toBe(true);
+    expect(coreSupportsFileSourceType("0.2.5-rc.202610132148")).toBe(true);
+    expect(coreSupportsFileSourceType("0.3.0")).toBe(true);
+    expect(coreSupportsFileSourceType("1.0.0")).toBe(true);
+  });
+
+  it("rejects an older version and one it cannot read", () => {
+    expect(coreSupportsFileSourceType("0.2.4")).toBe(false);
+    expect(coreSupportsFileSourceType("0.2.3")).toBe(false);
+    expect(coreSupportsFileSourceType("0.1.9")).toBe(false);
+    expect(coreSupportsFileSourceType("dev")).toBe(false);
+    expect(coreSupportsFileSourceType("")).toBe(false);
+    expect(coreSupportsFileSourceType(null)).toBe(false);
+    expect(coreSupportsFileSourceType(undefined)).toBe(false);
   });
 });
