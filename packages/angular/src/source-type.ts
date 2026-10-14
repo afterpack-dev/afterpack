@@ -95,3 +95,18 @@ export function angularSourceType(kinds: AngularScriptKinds): SourceType | undef
   if (kinds.module.length === 0) return undefined;
   return kinds.classic.length === 0 && kinds.unclaimed.length === 0 ? "module" : undefined;
 }
+
+export function angularFileSourceTypes(
+  kinds: AngularScriptKinds,
+  files: readonly string[],
+): Map<string, SourceType> {
+  const module = new Set(kinds.module);
+  const classic = new Set(kinds.classic);
+  const out = new Map<string, SourceType>();
+  for (const file of files) {
+    const path = resolve(file);
+    if (module.has(path)) out.set(file, "module");
+    else if (classic.has(path)) out.set(file, "script");
+  }
+  return out;
+}

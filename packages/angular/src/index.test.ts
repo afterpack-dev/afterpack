@@ -8,12 +8,16 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __reset, __setProcessResult, __setVersion, engineCalls } from "../../../test/core-fake.js";
 import { findAngularBrowserDir } from "./browser-dir.js";
 import { afterpackAngular, angularHashToken } from "./index.js";
-import { angularSourceType, classifyAngularScripts } from "./source-type.js";
+import {
+  angularFileSourceTypes,
+  angularSourceType,
+  classifyAngularScripts,
+} from "./source-type.js";
 
 let root: string;
 let browserDir: string;
@@ -361,6 +365,21 @@ describe("classifyAngularScripts", () => {
     expect(angularSourceType(kinds)).toBeUndefined();
   });
 
+  it("maps each classified file, under the caller's own path spelling, to its sourceType", () => {
+    writeAngularOutput(browserDir, '<script src="scripts-GLOB0001.js" defer></script>');
+    writeFileSync(join(browserDir, "scripts-GLOB0001.js"), "var legacyGlobal=1;");
+    mkdirSync(join(browserDir, "vendor"));
+    writeFileSync(join(browserDir, "vendor", "copied.js"), "var copied=1;");
+    const files = ["main-MAIN0001.js", "scripts-GLOB0001.js", join("vendor", "copied.js")].map(
+      (name) => relative(process.cwd(), join(browserDir, name)),
+    );
+    const types = angularFileSourceTypes(classifyAngularScripts(browserDir, files), files);
+    expect([...types]).toEqual([
+      [files[0], "module"],
+      [files[1], "script"],
+    ]);
+  });
+
   it("withholds module from output no HTML loads as a module", () => {
     writeFileSync(join(browserDir, "index.html"), '<script src="main.js"></script>');
     writeFileSync(join(browserDir, "main.js"), "var a=1;");
@@ -394,6 +413,76 @@ describe("afterpackAngular sourceType", () => {
     writeAngularOutput(browserDir);
     await afterpackAngular({ cwd: root });
     expect(engineCalls[0].config.sourceType).toBeUndefined();
+  });
+});
+
+describe("afterpackAngular per-file sourceType", () => {
+  const kindsSent = () =>
+    Object.fromEntries(
+      engineCalls.map((call) => [call.path.split("-")[0].split(".")[0], call.sourceType]),
+    );
+
+  function writeMixedOutput(): void {
+    writeAngularOutput(browserDir, '<script src="scripts-GLOB0001.js" defer></script>');
+    writeFileSync(join(browserDir, "scripts-GLOB0001.js"), "var legacyGlobal=1;");
+  }
+
+  it("sends each file's own sourceType for a build that mixes modules and classic scripts", async () => {
+    __setVersion("0.2.5");
+    writeMixedOutput();
+    await afterpackAngular({ cwd: root });
+    expect(kindsSent()).toEqual({
+      chunk: "module",
+      main: "module",
+      polyfills: "module",
+      scripts: "script",
+      worker: "module",
+    });
+    expect(engineCalls).toHaveLength(7);
+    expect(engineCalls.filter((c) => c.path.startsWith("chunk")).map((c) => c.sourceType)).toEqual([
+      "module",
+      "module",
+      "module",
+    ]);
+    expect(engineCalls[0].config.sourceType).toBeUndefined();
+  });
+
+  it("sends module per file beside the build-level module for an all-module build", async () => {
+    __setVersion("0.2.5");
+    writeAngularOutput(browserDir);
+    await afterpackAngular({ cwd: root });
+    expect(engineCalls.map((c) => c.sourceType)).toEqual(Array(6).fill("module"));
+    expect(engineCalls[0].config.sourceType).toBe("module");
+  });
+
+  it("leaves a file it cannot classify to the engine", async () => {
+    __setVersion("0.2.5");
+    writeAngularOutput(browserDir);
+    mkdirSync(join(browserDir, "vendor"));
+    writeFileSync(join(browserDir, "vendor", "copied.js"), "var copied=1;");
+    await afterpackAngular({ cwd: root });
+    const copied = engineCalls.find((c) => c.path === "vendor/copied.js");
+    expect(copied).toBeDefined();
+    expect(copied?.sourceType).toBeUndefined();
+    expect(engineCalls.filter((c) => c.sourceType === "module")).toHaveLength(6);
+    expect(engineCalls[0].config.sourceType).toBeUndefined();
+  });
+
+  it("sends no per-file sourceType on an engine older than 0.2.5", async () => {
+    __setVersion("0.2.4");
+    writeMixedOutput();
+    await afterpackAngular({ cwd: root });
+    expect(engineCalls).toHaveLength(7);
+    expect(engineCalls.every((c) => c.sourceType === undefined)).toBe(true);
+    expect(engineCalls[0].config.sourceType).toBeUndefined();
+  });
+
+  it("lets a configured sourceType decide for every file", async () => {
+    __setVersion("0.2.5");
+    writeMixedOutput();
+    await afterpackAngular({ cwd: root, sourceType: "script" });
+    expect(engineCalls.every((c) => c.sourceType === undefined)).toBe(true);
+    expect(engineCalls[0].config.sourceType).toBe("script");
   });
 });
 
