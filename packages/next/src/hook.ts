@@ -173,7 +173,7 @@ export async function runAfterpackHook(input: AfterpackHookInput): Promise<void>
 
 function warnIfBuildIdPinned(buildId: string, diagnosticsLevel: string | undefined): void {
   if (diagnosticsLevel === "none") return;
-  if (!/^[0-9a-z]{16,}$/i.test(buildId)) {
+  if (!/^[0-9a-z_-]{16,}$/i.test(buildId)) {
     console.warn(
       `[${LABEL}] this build's id "${buildId}" is not a random Next id, so \`static/${buildId}/` +
         "_buildManifest.js` and `_ssgManifest.js` keep one immutable URL across releases while " +

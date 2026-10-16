@@ -439,13 +439,16 @@ describe("runAfterpackHook content-hashed names", () => {
     );
   });
 
-  it("stays quiet about a random Next build id", async () => {
+  it.each([
+    "a1b2c3d4e5f60718",
+    "kN3_vQ8-pX2aB7cD9eF1g",
+  ])("stays quiet about a random Next build id (%s)", async (id) => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const p = project("webpack");
     chunk(p, "283.721f6d989c3698cc.js", "var lazy=1;");
     writeFileSync(
       join(p.distDir, "build-manifest.json"),
-      JSON.stringify({ lowPriorityFiles: ["static/a1b2c3d4e5f60718/_buildManifest.js"] }),
+      JSON.stringify({ lowPriorityFiles: [`static/${id}/_buildManifest.js`] }),
     );
     await runAfterpackHook({ metadata: p, options: { seed: 7 }, engine, env });
     expect(warn.mock.calls.map(([m]) => String(m)).some((m) => m.includes("generateBuildId"))).toBe(
