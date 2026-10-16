@@ -53,7 +53,8 @@ Without a key, AfterPack runs on your machine with the full pipeline at any pres
 [`AFTERPACK_KEY`](https://www.afterpack.dev/docs/config#key) in your environment and the same plugin
 builds in AfterPack's cloud instead, which adds per-region
 [directives](https://www.afterpack.dev/docs/directives) and two hardening transforms you can turn
-on: self-integrity (anti-tamper) and comparison hardening. See [AfterPack
+on: self-integrity, which detects edits to its own check table only, not edits
+elsewhere in your code, and comparison hardening. See [AfterPack
 Pro](https://www.afterpack.dev/docs/pro).
 
 ## Links

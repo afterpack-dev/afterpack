@@ -201,7 +201,8 @@ Lists are sorted and there are no timestamps, so two runs of one build give iden
 
 Without a key, builds run locally with the full pipeline at any preset. With a Pro key, the same
 command builds in AfterPack's cloud instead, which adds two hardening transforms you can turn on:
-self-integrity (anti-tamper) and comparison hardening.
+self-integrity, which detects edits to its own check table only, not edits
+elsewhere in your code, and comparison hardening.
 
 - Set it as `AFTERPACK_KEY` in the environment (a CI secret), or [`key`][key] in an uncommitted
   `afterpack.json`.

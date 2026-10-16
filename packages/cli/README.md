@@ -163,7 +163,8 @@ and sends everything else to stderr. Use it in CI and scripts. `verify` and `aud
 Without a key, AfterPack runs on your machine with the full pipeline at any preset. Set
 [`AFTERPACK_KEY`][key] in your environment (or [`key`][key] in `afterpack.json`) and the same
 command builds in AfterPack's cloud instead, which adds two hardening transforms you can turn on:
-self-integrity (anti-tamper) and comparison hardening. If the cloud cannot be reached, the run
+self-integrity, which detects edits to its own check table only, not edits
+elsewhere in your code, and comparison hardening. If the cloud cannot be reached, the run
 fails; it never falls back to a local build. Never commit the key. See [AfterPack
 Pro](https://www.afterpack.dev/docs/pro).
 

@@ -27,7 +27,7 @@ Without a key, AfterPack runs locally with the full pipeline at any preset.
 [`@afterpack/wasm`](https://www.npmjs.com/package/@afterpack/wasm) runs the same engine inside your
 own Cloudflare Worker, so a Worker can reshape JavaScript per request. With a
 [Pro](https://www.afterpack.dev/docs/pro) key, the same packages send the build to AfterPack's cloud
-for surgical per-region protection and anti-tamper. To try it without installing anything, use the
+for per-region presets and two opt-in hardening transforms. To try it without installing anything, use the
 [playground](https://www.afterpack.dev/playground).
 
 ## Framework plugins
