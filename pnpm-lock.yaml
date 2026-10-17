@@ -27,8 +27,8 @@ importers:
   packages/angular:
     dependencies:
       '@afterpack/core':
-        specifier: ~0.2.6
-        version: 0.2.6
+        specifier: ~0.2.7
+        version: 0.2.7
       '@afterpack/integration-utils':
         specifier: workspace:*
         version: link:../integration-utils
@@ -83,8 +83,8 @@ importers:
   packages/cli:
     dependencies:
       '@afterpack/core':
-        specifier: ~0.2.6
-        version: 0.2.6
+        specifier: ~0.2.7
+        version: 0.2.7
       '@afterpack/integration-utils':
         specifier: workspace:*
         version: link:../integration-utils
@@ -136,8 +136,8 @@ importers:
   packages/esbuild:
     dependencies:
       '@afterpack/core':
-        specifier: ~0.2.6
-        version: 0.2.6
+        specifier: ~0.2.7
+        version: 0.2.7
       '@afterpack/integration-utils':
         specifier: workspace:*
         version: link:../integration-utils
@@ -189,8 +189,8 @@ importers:
   packages/next:
     dependencies:
       '@afterpack/core':
-        specifier: ~0.2.6
-        version: 0.2.6
+        specifier: ~0.2.7
+        version: 0.2.7
       '@afterpack/integration-utils':
         specifier: workspace:*
         version: link:../integration-utils
@@ -248,8 +248,8 @@ importers:
   packages/parcel:
     dependencies:
       '@afterpack/core':
-        specifier: ~0.2.6
-        version: 0.2.6
+        specifier: ~0.2.7
+        version: 0.2.7
       '@afterpack/integration-utils':
         specifier: workspace:*
         version: link:../integration-utils
@@ -290,8 +290,8 @@ importers:
   packages/rollup:
     dependencies:
       '@afterpack/core':
-        specifier: ~0.2.6
-        version: 0.2.6
+        specifier: ~0.2.7
+        version: 0.2.7
       '@afterpack/integration-utils':
         specifier: workspace:*
         version: link:../integration-utils
@@ -380,8 +380,8 @@ importers:
   packages/vite:
     dependencies:
       '@afterpack/core':
-        specifier: ~0.2.6
-        version: 0.2.6
+        specifier: ~0.2.7
+        version: 0.2.7
       '@afterpack/integration-utils':
         specifier: workspace:*
         version: link:../integration-utils
@@ -439,8 +439,8 @@ importers:
   packages/webpack:
     dependencies:
       '@afterpack/core':
-        specifier: ~0.2.6
-        version: 0.2.6
+        specifier: ~0.2.7
+        version: 0.2.7
       '@afterpack/integration-utils':
         specifier: workspace:*
         version: link:../integration-utils
@@ -466,50 +466,50 @@ importers:
 
 packages:
 
-  '@afterpack/core-darwin-arm64@0.2.6':
-    resolution: {integrity: sha512-e22qX+WEBjSJdVjwmRHdrAjH4nHPnGqaxV+sPromvO0dJg1iQg1IYbS6DRqrRml3SQw55XVMe+Un4hz11DfRVQ==}
+  '@afterpack/core-darwin-arm64@0.2.7':
+    resolution: {integrity: sha512-AyvycGOTtERwQiXLwfSwFQlsT8qn1ndAMClva81zCoq/hHDe+M1gnN6Gu/apYV/u0rhgNDH1ESrQbpL7nzMsxA==}
     engines: {node: '>= 18'}
     cpu: [arm64]
     os: [darwin]
 
-  '@afterpack/core-darwin-x64@0.2.6':
-    resolution: {integrity: sha512-Ood0xxni6tx0TKVegVdSxOo4t52JSQ4lLfslGNQRHv8DTd6Pczd3sRJ609l2f+XIk7VE7RDTX18ADxeiyOGnpA==}
+  '@afterpack/core-darwin-x64@0.2.7':
+    resolution: {integrity: sha512-FsgbwATMCqgQuKhyH+9nZlTUxGOQU4hN4tnnkcdb6s93eXApVR4fqnt02yCwV7YO5nh85s6ZOuEZb0mNsoAYAg==}
     engines: {node: '>= 18'}
     cpu: [x64]
     os: [darwin]
 
-  '@afterpack/core-linux-arm64-gnu@0.2.6':
-    resolution: {integrity: sha512-ysR5gxBXQbmEbE3GIrdayxSwjL4eqWWZaPZD0o2yJsHtyTn/L/Z1Odo/IPjpL9/+NJWvW7QbFki1rqY/9h1M1A==}
+  '@afterpack/core-linux-arm64-gnu@0.2.7':
+    resolution: {integrity: sha512-m6SYJxX8aZ4LDEOc2agi09BeG7HJl/uudIcP8HWrUh6KzAr8E8B1o3htC2HcwbmMxVJNx9VE5eIxctSoIymmxQ==}
     engines: {node: '>= 18'}
     cpu: [arm64]
     os: [linux]
 
-  '@afterpack/core-linux-arm64-musl@0.2.6':
-    resolution: {integrity: sha512-QC9WVBSrhEwPs7iC00chX1whF2dW9IgvUnDxG8s7V1QYpQKGdWBMP5ZkZZkUrtT1WGH2HOrHbO78Ms9+xVYr6w==}
+  '@afterpack/core-linux-arm64-musl@0.2.7':
+    resolution: {integrity: sha512-37Pp63zstMOOE1HfPL3If98TalHrVDfBjq341SCPaC8D/dsujluDSLNzS0TR0FqVAKye5zO0vCVoHtK5BIT5ng==}
     engines: {node: '>= 18'}
     cpu: [arm64]
     os: [linux]
 
-  '@afterpack/core-linux-x64-gnu@0.2.6':
-    resolution: {integrity: sha512-xjAJWnD58zo8RdPNr0tyBo4rifamn7yfXlfAbjnpCI3WPxQFutrjwuplIz+TV3E57sjw9CGbDLYoSl32w198gg==}
+  '@afterpack/core-linux-x64-gnu@0.2.7':
+    resolution: {integrity: sha512-z4D5APJDbN2TZmTboDiQlqYzi6xLxY/bYVBCsvSk9eWfsdKRiJQrjV0S049h0lNpPKaLso8YcAL8xLGDQ2Id/A==}
     engines: {node: '>= 18'}
     cpu: [x64]
     os: [linux]
 
-  '@afterpack/core-linux-x64-musl@0.2.6':
-    resolution: {integrity: sha512-OY8zF1brTKOKkl4i78Yut4dl4FoogI7vrSlSwhpBNgcsPVZUYwUUqUgxUqUjwn3HKQ+/y82tZztzQXODNhiGYg==}
+  '@afterpack/core-linux-x64-musl@0.2.7':
+    resolution: {integrity: sha512-PWmvff10bcfmcdzvVM4AA/QHg7tRABd0bd0JOVJYj2ZFG3VYeGUj2vNQWe/GRbLl+EGOu5kBwv2wueqvsrpyyQ==}
     engines: {node: '>= 18'}
     cpu: [x64]
     os: [linux]
 
-  '@afterpack/core-win32-x64-msvc@0.2.6':
-    resolution: {integrity: sha512-Lf5opJ3slFjk4hBSzJvRAPo0c6259EiuNtTTmobSgIQklgle+/ju/G2bBt5v9ZZSGqD2TKYjVtVtlwui+UXVAA==}
+  '@afterpack/core-win32-x64-msvc@0.2.7':
+    resolution: {integrity: sha512-3z4y2dwPH4DJXPy/Lflz6g29yxanrUWrYzcF+f6DTXRuZwzuYLSopnSWUkuf168wAGfatHDLRom5Ax1BOhjRww==}
     engines: {node: '>= 18'}
     cpu: [x64]
     os: [win32]
 
-  '@afterpack/core@0.2.6':
-    resolution: {integrity: sha512-HwRRsM5X3djbgZ8/+YBh7IETY4TJC/GIkNzW0aStHmB8lJqESs+Fsg3OknAwDM7aLLLdh3VWf1ywMsJWuj2GIw==}
+  '@afterpack/core@0.2.7':
+    resolution: {integrity: sha512-/WZ38kzj0EySabwYUCkA1vDLASwN/9Vd/M8SKzC3Q6J4Av9rZyQECJPpr+sCl6nGebJ4WjytPL6NaGGXmXqmaA==}
     engines: {node: '>= 18'}
 
   '@astrojs/compiler@4.0.0':
@@ -6256,36 +6256,36 @@ packages:
 
 snapshots:
 
-  '@afterpack/core-darwin-arm64@0.2.6':
+  '@afterpack/core-darwin-arm64@0.2.7':
     optional: true
 
-  '@afterpack/core-darwin-x64@0.2.6':
+  '@afterpack/core-darwin-x64@0.2.7':
     optional: true
 
-  '@afterpack/core-linux-arm64-gnu@0.2.6':
+  '@afterpack/core-linux-arm64-gnu@0.2.7':
     optional: true
 
-  '@afterpack/core-linux-arm64-musl@0.2.6':
+  '@afterpack/core-linux-arm64-musl@0.2.7':
     optional: true
 
-  '@afterpack/core-linux-x64-gnu@0.2.6':
+  '@afterpack/core-linux-x64-gnu@0.2.7':
     optional: true
 
-  '@afterpack/core-linux-x64-musl@0.2.6':
+  '@afterpack/core-linux-x64-musl@0.2.7':
     optional: true
 
-  '@afterpack/core-win32-x64-msvc@0.2.6':
+  '@afterpack/core-win32-x64-msvc@0.2.7':
     optional: true
 
-  '@afterpack/core@0.2.6':
+  '@afterpack/core@0.2.7':
     optionalDependencies:
-      '@afterpack/core-darwin-arm64': 0.2.6
-      '@afterpack/core-darwin-x64': 0.2.6
-      '@afterpack/core-linux-arm64-gnu': 0.2.6
-      '@afterpack/core-linux-arm64-musl': 0.2.6
-      '@afterpack/core-linux-x64-gnu': 0.2.6
-      '@afterpack/core-linux-x64-musl': 0.2.6
-      '@afterpack/core-win32-x64-msvc': 0.2.6
+      '@afterpack/core-darwin-arm64': 0.2.7
+      '@afterpack/core-darwin-x64': 0.2.7
+      '@afterpack/core-linux-arm64-gnu': 0.2.7
+      '@afterpack/core-linux-arm64-musl': 0.2.7
+      '@afterpack/core-linux-x64-gnu': 0.2.7
+      '@afterpack/core-linux-x64-musl': 0.2.7
+      '@afterpack/core-win32-x64-msvc': 0.2.7
 
   '@astrojs/compiler@4.0.0': {}
 
