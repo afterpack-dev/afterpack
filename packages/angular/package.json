@@ -33,7 +33,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@afterpack/core": "~0.2.7",
+    "@afterpack/core": "~0.2.8",
     "@afterpack/integration-utils": "workspace:*"
   },
   "devDependencies": {
