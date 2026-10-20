@@ -1,7 +1,7 @@
 {
   "framework": "vue3-vite",
   "frameworkClass": "spa",
-  "description": "Vue 3 + Vite SPA, obfuscated automatically via @afterpack/vue (the thin wrapper over @afterpack/vite). Proves a Vue single-file-component build survives obfuscation: renders + the reactive counter interaction works in chromium.",
+  "description": "Vue 3 + Vite SPA, obfuscated automatically via @afterpack/vue (the thin wrapper over @afterpack/vite): Vue Router navigation, a zod-validated form, a reactive() store whose state survives navigation, notes persisted to localStorage, and a lazily loaded report route that reads them through a class with private fields and getters.",
   "seed": 903841276,
   "deterministicOutput": true,
   "build": {
@@ -12,12 +12,12 @@
     "note": "obfuscation runs automatically via @afterpack/vue's closeBundle hook (vite.config.ts) -- no separate step"
   },
   "obfuscation": {
-    "minFiles": 1,
+    "minFiles": 2,
     "passes": 1
   },
   "hashedNames": {
     "pattern": "-[A-Za-z0-9_-]{8}\\.js$",
-    "minRenamed": 1
+    "minRenamed": 2
   },
   "smoke": {
     "routes": [
@@ -30,6 +30,20 @@
         "selectors": {
           "[data-testid=\"title\"]": "Vue 3 + Vite fixture",
           "[data-testid=\"intro\"]": "AfterPack framework-integration smoke fixture."
+        }
+      },
+      {
+        "path": "/notes",
+        "status": 200,
+        "selectors": {
+          "h1": "Notes"
+        }
+      },
+      {
+        "path": "/reports",
+        "status": 200,
+        "selectors": {
+          "[data-testid=\"report-summary\"]": "0 notes, 0 words"
         }
       }
     ],

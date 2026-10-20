@@ -1,7 +1,7 @@
 {
   "framework": "sveltekit",
   "frameworkClass": "ssg",
-  "description": "Minimal SvelteKit app with the static adapter (SSG), obfuscated via @afterpack/sveltekit (over @afterpack/vite). @afterpack runs on Vite's closeBundle, so the client bundle is obfuscated before the static adapter copies it into build/. Proves a prerendered SvelteKit page hydrates + the counter interaction works in chromium with the obfuscated client.",
+  "description": "A SvelteKit notes app with the static adapter (SSG), obfuscated via @afterpack/sveltekit (over @afterpack/vite): client-side navigation between prerendered routes, a zod-validated form, module-level $state shared across routes, notes persisted to localStorage, and a report route with a universal load function that reads the notes through a class with private fields and getters. @afterpack runs on Vite closeBundle, so the client bundle is obfuscated before the static adapter copies it into build/.",
   "seed": 517293846,
   "deterministicOutput": true,
   "build": {
@@ -9,7 +9,7 @@
     "bundles": [
       "client"
     ],
-    "note": "vite build (via SvelteKit) obfuscates the client bundle on closeBundle; adapter-static copies it into build/. version.name pinned in svelte.config.js for determinism."
+    "note": "vite build (via SvelteKit) obfuscates the client bundle on closeBundle; adapter-static copies it into build/. version.name pinned in svelte.config.js for determinism. AFTERPACK_E2E_DIST_DIR and AFTERPACK_E2E_KIT_DIR move the baseline build beside it."
   },
   "obfuscation": {
     "minFiles": 27,
@@ -30,6 +30,20 @@
         "selectors": {
           "[data-testid=\"title\"]": "SvelteKit fixture",
           "[data-testid=\"intro\"]": "AfterPack framework-integration smoke fixture."
+        }
+      },
+      {
+        "path": "/notes",
+        "status": 200,
+        "selectors": {
+          "h1": "Notes"
+        }
+      },
+      {
+        "path": "/reports",
+        "status": 200,
+        "selectors": {
+          "[data-testid=\"report-summary\"]": "0 notes, 0 words"
         }
       }
     ],

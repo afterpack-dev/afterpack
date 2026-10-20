@@ -18,3 +18,5 @@ pnpm-lock.yaml
 yarn.lock
 test-results/
 playwright-report/
+build-baseline/
+.svelte-kit-baseline/

@@ -1,4 +1,6 @@
 ---
+import { ClientRouter } from "astro:transitions";
+
 interface Props {
   title: string;
 }
@@ -12,8 +14,14 @@ const { title } = Astro.props;
     <meta name="viewport" content="width=device-width" />
     <meta name="generator" content={Astro.generator} />
     <title>{title}</title>
+    <ClientRouter />
   </head>
   <body>
+    <nav aria-label="Main">
+      <a href="/">Home</a>
+      <a href="/notes">Notes</a>
+      <a href="/reports">Reports</a>
+    </nav>
     <main>
       <slot />
     </main>

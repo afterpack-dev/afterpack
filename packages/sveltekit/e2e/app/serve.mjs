@@ -4,7 +4,10 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const port = Number(process.argv[2] || 8080);
-const root = join(fileURLToPath(new URL(".", import.meta.url)), "build");
+const root = join(
+  fileURLToPath(new URL(".", import.meta.url)),
+  process.env.AFTERPACK_E2E_DIST_DIR || "build",
+);
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -29,8 +32,12 @@ createServer(async (req, res) => {
       res.writeHead(403).end("Forbidden");
       return;
     }
-    const info = await stat(filePath);
-    const target = info.isDirectory() ? join(filePath, "index.html") : filePath;
+    const info = await stat(filePath).catch(() => null);
+    const target = info?.isDirectory()
+      ? join(filePath, "index.html")
+      : info
+        ? filePath
+        : `${filePath}.html`;
     const body = await readFile(target);
     res.writeHead(200, { "Content-Type": MIME[extname(target)] ?? "application/octet-stream" });
     res.end(body);

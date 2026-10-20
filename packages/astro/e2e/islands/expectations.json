@@ -1,7 +1,7 @@
 {
   "framework": "astro-islands",
   "frameworkClass": "ssg",
-  "description": "Astro 6 with a React island. Compiler-based: the .astro compiler regenerates code, so directives in .astro files need pre-compile capture, before the compiler discards the original source. This fixture builds in static (SSG) mode.",
+  "description": "Astro 6 notes site with React islands and the ClientRouter: in-place navigation between static pages, a zod-validated form island, a module store that islands on different pages share through useSyncExternalStore, notes persisted to localStorage, and a client:visible report island that reads them through a class with private fields and getters. Compiler-based: the .astro compiler regenerates code, so directives in .astro files need pre-compile capture, before the compiler discards the original source. This fixture builds in static (SSG) mode.",
   "seed": 730185264,
   "deterministicOutput": true,
   "build": {
@@ -41,6 +41,20 @@
         "selectors": {
           "[data-testid=\"title\"]": "About AfterPack"
         }
+      },
+      {
+        "path": "/notes",
+        "status": 200,
+        "selectors": {
+          "h1": "Notes"
+        }
+      },
+      {
+        "path": "/reports",
+        "status": 200,
+        "selectors": {
+          "[data-testid=\"report-summary\"]": "0 notes, 0 words"
+        }
       }
     ],
     "interactions": [
@@ -49,7 +63,7 @@
         "description": "React island hydrates via client:load; counter increments on click.",
         "click": "[data-testid=\"counter\"]",
         "expectTextContains": [
-          "island count is 1 (odd)"
+          "count is 1 (odd)"
         ]
       }
     ],

@@ -166,6 +166,18 @@ const journey: ScenarioSteps = async ({ page, checkpoint, inPlace }) => {
 test("the notes journey matches the baseline", { tag: "@scenario" }, scenario(journey));
 ```
 
+The fixtures that have a baseline (`vite-react`, `vue-vite`, `nuxt-app`, `sveltekit-app`,
+`angular-app`, `astro-islands` and both `next-app` legs) are small apps rather than pages. All but
+`next-app` are the same notes app in their own framework's idiom: a nav labelled Main with Home,
+Notes and Reports; a counter on Home whose state survives navigation; a validated Notes form; a
+Reports route loaded on demand; and notes that survive a reload. Their specs share the journeys in
+`e2e/helpers/notes-app.ts`, so a new fixture of that shape needs only
+`scenario(notesJourney("<home title>"))` and `scenario(notesReloadJourney)`. Those journeys are
+tagged `@scenario` and run in the full lane; `vite-react` and `next-app` also run theirs in the
+quick lane. Checkpoint before every reload or `page.goto`: a framework's idle-time prefetch (Nuxt
+fetches its payloads and app manifest that way) that a new document cuts off never settles, or lands
+in only one build's requests.
+
 Each test attaches both recordings (`baseline.json`, `protected.json`) to the report.
 `vite-react.spec.ts` also shows the parity check failing on a protected bundle altered to log an
 error, make an extra request and render extra text. Use `recordScenario` and `parityProblems` the

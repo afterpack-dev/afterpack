@@ -122,7 +122,8 @@ const SPECS: FixtureSpec[] = [
     targets: { root: "dist" },
     port: 4305,
     serve: "npx astro preview --port {port}",
-    weight: 15,
+    baseline: { env: { AFTERPACK_E2E_DIST_DIR: "dist-baseline" }, receipts: ["dist-baseline"] },
+    weight: 20,
   },
   {
     name: "svelte-app",
@@ -141,7 +142,14 @@ const SPECS: FixtureSpec[] = [
     receipts: ["build", ".svelte-kit/output/server"],
     port: 4307,
     serve: "node serve.mjs {port}",
-    weight: 15,
+    baseline: {
+      env: {
+        AFTERPACK_E2E_DIST_DIR: "build-baseline",
+        AFTERPACK_E2E_KIT_DIR: ".svelte-kit-baseline",
+      },
+      receipts: ["build-baseline", ".svelte-kit-baseline/output/server"],
+    },
+    weight: 20,
   },
   {
     name: "vue-vite",
@@ -150,7 +158,12 @@ const SPECS: FixtureSpec[] = [
     targets: { root: "dist" },
     port: 4308,
     serve: "npx vite preview --port {port} --strictPort",
-    weight: 8,
+    baseline: {
+      build: "npm run build -- --outDir dist-baseline --emptyOutDir",
+      serve: "npx vite preview --port {port} --strictPort --outDir dist-baseline",
+      receipts: ["dist-baseline"],
+    },
+    weight: 10,
   },
   {
     name: "nuxt-app",
@@ -160,7 +173,14 @@ const SPECS: FixtureSpec[] = [
     receipts: [".nuxt/dist/client", ".nuxt/dist/server"],
     port: 4309,
     serve: "node serve.mjs {port}",
-    weight: 25,
+    baseline: {
+      env: {
+        AFTERPACK_E2E_BUILD_DIR: ".nuxt-baseline",
+        AFTERPACK_E2E_OUTPUT_DIR: ".output-baseline",
+      },
+      receipts: [".nuxt-baseline/dist/client", ".nuxt-baseline/dist/server"],
+    },
+    weight: 35,
   },
   {
     name: "angular-app",
@@ -169,7 +189,11 @@ const SPECS: FixtureSpec[] = [
     targets: { root: "dist/angular-fixture/browser" },
     port: 4310,
     serve: "node serve.mjs {port}",
-    weight: 25,
+    baseline: {
+      env: { AFTERPACK_E2E_DIST_DIR: "dist-baseline" },
+      receipts: ["dist-baseline/angular-fixture/browser"],
+    },
+    weight: 35,
   },
   {
     name: "parcel-app",

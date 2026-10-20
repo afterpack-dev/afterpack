@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { increment, useNotebook } from "../lib/notebook";
 
 // A canonical AfterPack directive span. Astro's compiler + Vite islands
 // pipeline strips this comment before AfterPack runs
@@ -7,15 +7,15 @@ import { useState } from "react";
 // @afterpack:begin preset=hard
 function describe(count: number): string {
   const parity = count % 2 === 0 ? "even" : "odd";
-  return `island count is ${count} (${parity})`;
+  return `count is ${count} (${parity})`;
 }
 // @afterpack:end
 
 export default function Counter() {
-  const [count, setCount] = useState(0);
+  const { count } = useNotebook();
 
   return (
-    <button type="button" data-testid="counter" onClick={() => setCount((c) => c + 1)}>
+    <button type="button" data-testid="counter" onClick={increment}>
       {describe(count)}
     </button>
   );

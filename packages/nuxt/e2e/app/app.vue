@@ -1,16 +1,18 @@
 <script setup>
-import { computed, ref } from "vue";
+import { onMounted } from "vue";
 
-const count = ref(0);
-const parity = computed(() => (count.value % 2 === 0 ? "even" : "odd"));
+const { restore } = useNotebook();
+
+onMounted(restore);
 </script>
 
 <template>
+  <nav aria-label="Main">
+    <NuxtLink to="/">Home</NuxtLink>
+    <NuxtLink to="/notes">Notes</NuxtLink>
+    <NuxtLink to="/reports">Reports</NuxtLink>
+  </nav>
   <main>
-    <h1 data-testid="title">Nuxt 3 fixture</h1>
-    <p data-testid="intro">AfterPack framework-integration smoke fixture.</p>
-    <button type="button" data-testid="counter" @click="count++">
-      count is {{ count }} ({{ parity }})
-    </button>
+    <NuxtPage />
   </main>
 </template>

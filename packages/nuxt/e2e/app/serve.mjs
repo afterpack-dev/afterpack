@@ -4,7 +4,11 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const port = Number(process.argv[2] || 8080);
-const root = join(fileURLToPath(new URL(".", import.meta.url)), ".output", "public");
+const root = join(
+  fileURLToPath(new URL(".", import.meta.url)),
+  process.env.AFTERPACK_E2E_OUTPUT_DIR || ".output",
+  "public",
+);
 
 const MIME = {
   ".html": "text/html; charset=utf-8",

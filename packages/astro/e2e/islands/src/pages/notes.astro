@@ -1,0 +1,9 @@
+---
+import NotesForm from "../components/NotesForm.tsx";
+import Base from "../layouts/Base.astro";
+---
+
+<Base title="Notes">
+  <h1>Notes</h1>
+  <NotesForm client:load />
+</Base>

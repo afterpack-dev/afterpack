@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { expectObfuscationPass, readBuildLog } from "@e2e/helpers/build-log.js";
 import { readExpectations, smokeOf } from "@e2e/helpers/expectations.js";
 import { candidateLaneTests } from "@e2e/helpers/lanes.js";
+import { notesJourney, notesReloadJourney } from "@e2e/helpers/notes-app.js";
 import { baseURLOf, fixture } from "@e2e/helpers/registry.js";
 import {
   parityProblems,
@@ -22,79 +23,10 @@ import { hashedNamesTest } from "@e2e/helpers/hashed-names.js";
 const app = fixture("vite-react");
 const expectations = readExpectations(app);
 
-const TITLE_ERROR = "Give the note a title of at least 3 characters.";
-const BODY_ERROR = "Keep the note under 140 characters.";
-
 const firstVisit: ScenarioSteps = async ({ page, checkpoint }) => {
   await page.goto("/");
   await expect(page.getByTestId("title")).toHaveText("Vite + React fixture");
   await checkpoint("first visit");
-};
-
-const noteJourney: ScenarioSteps = async ({ page, checkpoint, inPlace }) => {
-  await page.goto("/");
-  await page.getByTestId("counter").click();
-  await page.getByTestId("counter").click();
-  await expect(page.getByTestId("counter")).toHaveText("count is 2 (even)");
-
-  await inPlace("the Notes link", async () => {
-    await page.getByRole("link", { name: "Notes" }).click();
-    await expect(page.getByRole("heading", { name: "Notes" })).toBeVisible();
-  });
-  await expect(page).toHaveURL(/\/notes$/);
-
-  await page.getByRole("button", { name: "Add note" }).click();
-  await expect(page.getByRole("alert")).toHaveText([TITLE_ERROR]);
-  await page.getByLabel("Title").fill("Hi");
-  await page.getByLabel("Body").fill("x".repeat(141));
-  await page.getByRole("button", { name: "Add note" }).click();
-  await expect(page.getByRole("alert")).toHaveText([TITLE_ERROR, BODY_ERROR]);
-  await checkpoint("both fields rejected");
-
-  await page.getByLabel("Title").fill("Groceries");
-  await page.getByLabel("Body").fill("Milk and bread");
-  await page.getByRole("button", { name: "Add note" }).click();
-  await expect(page.getByRole("status")).toHaveText("Saved note 1: Groceries");
-  await expect(page.getByRole("alert")).toHaveCount(0);
-  await checkpoint("note saved");
-
-  await inPlace("the Reports link to a lazily loaded route", async () => {
-    await page.getByRole("link", { name: "Reports" }).click();
-    await expect(page.getByTestId("report-summary")).toHaveText("1 note, 4 words");
-  });
-  await expect(page.getByTestId("report-longest")).toHaveText("Longest title: Groceries");
-  await checkpoint("report");
-
-  await inPlace("history back", async () => {
-    await page.goBack();
-    await expect(page.getByRole("heading", { name: "Notes" })).toBeVisible();
-  });
-  await expect(page.getByRole("list", { name: "Saved notes" })).toContainText("Groceries");
-  await inPlace("history forward", async () => {
-    await page.goForward();
-    await expect(page.getByTestId("report-summary")).toHaveText("1 note, 4 words");
-  });
-
-  await inPlace("the Home link", async () => {
-    await page.getByRole("link", { name: "Home" }).click();
-    await expect(page.getByTestId("counter")).toHaveText("count is 2 (even)");
-  });
-  await checkpoint("home keeps its count");
-};
-
-const reloadJourney: ScenarioSteps = async ({ page, checkpoint }) => {
-  await page.goto("/notes");
-  await page.getByLabel("Title").fill("Persisted");
-  await page.getByLabel("Body").fill("Survives a reload");
-  await page.getByRole("button", { name: "Add note" }).click();
-  await expect(page.getByRole("status")).toHaveText("Saved note 1: Persisted");
-
-  await page.reload();
-  await expect(page.getByRole("status")).toHaveText("");
-  await expect(page.getByRole("list", { name: "Saved notes" })).toContainText("Survives a reload");
-  await page.goto("/reports");
-  await expect(page.getByTestId("report-summary")).toHaveText("1 note, 4 words");
-  await checkpoint("report after reload");
 };
 
 test.describe("Vite 8 builds a React 19 SPA", { tag: "@quick" }, () => {
@@ -131,13 +63,13 @@ test.describe("Vite 8 builds a React 19 SPA, as a user drives it", { tag: "@quic
   test(
     "navigating, validating the form and opening the lazy report match the baseline",
     { tag: "@scenario" },
-    scenario(noteJourney),
+    scenario(notesJourney("Vite + React fixture")),
   );
 
   test(
     "notes saved to localStorage survive a reload, as in the baseline",
     { tag: "@scenario" },
-    scenario(reloadJourney),
+    scenario(notesReloadJourney),
   );
 
   test("the parity check fails a protected build that logs, fetches or renders something new", async ({

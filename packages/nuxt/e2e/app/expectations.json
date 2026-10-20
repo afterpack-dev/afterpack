@@ -1,7 +1,7 @@
 {
   "framework": "nuxt",
   "frameworkClass": "ssg",
-  "description": "A minimal Nuxt 3 static/prerendered app, obfuscated via @afterpack/nuxt (a real defineNuxtModule that registers @afterpack/vite on Nuxt's Vite config). @afterpack runs on Vite's closeBundle, so the client bundle is obfuscated before nitro prerenders into .output/public. Proves a prerendered Nuxt page hydrates + the reactive counter interaction works in chromium with the obfuscated client.",
+  "description": "A prerendered Nuxt 3 notes app, obfuscated via @afterpack/nuxt (a real defineNuxtModule that registers @afterpack/vite on Nuxt Vite config): NuxtLink navigation between prerendered pages, a zod-validated form, useState shared across pages, notes persisted to localStorage, and a report page that renders a Lazy-prefixed component reading the notes through a class with private fields and getters. @afterpack runs on Vite closeBundle, so the client bundle is obfuscated before nitro prerenders into .output/public.",
   "seed": 750318264,
   "deterministicOutput": true,
   "build": {
@@ -9,7 +9,7 @@
     "bundles": [
       "client"
     ],
-    "note": "nuxt generate obfuscates the client bundle on closeBundle (via @afterpack/nuxt -> @afterpack/vite); buildId pinned in nuxt.config.ts for determinism"
+    "note": "nuxt generate obfuscates the client bundle on closeBundle (via @afterpack/nuxt -> @afterpack/vite); buildId pinned in nuxt.config.ts for determinism. AFTERPACK_E2E_BUILD_DIR and AFTERPACK_E2E_OUTPUT_DIR move the baseline build beside it."
   },
   "obfuscation": {
     "minFiles": 13,
@@ -30,6 +30,20 @@
         "selectors": {
           "[data-testid=\"title\"]": "Nuxt 3 fixture",
           "[data-testid=\"intro\"]": "AfterPack framework-integration smoke fixture."
+        }
+      },
+      {
+        "path": "/notes",
+        "status": 200,
+        "selectors": {
+          "h1": "Notes"
+        }
+      },
+      {
+        "path": "/reports",
+        "status": 200,
+        "selectors": {
+          "[data-testid=\"report-summary\"]": "0 notes, 0 words"
         }
       }
     ],

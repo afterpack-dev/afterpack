@@ -4,15 +4,15 @@ const expectations = JSON.parse(
   readFileSync(new URL("./expectations.json", import.meta.url), "utf8"),
 );
 
-// Minimal Nuxt 3 static/prerendered app. `@afterpack/nuxt` registers
-// `@afterpack/vite` on Nuxt's Vite config, obfuscating the client bundle on
-// closeBundle; nuxt generate then prerenders into .output/public. buildId is
-// pinned for deterministic output across repeated builds.
 export default defineNuxtConfig({
   modules: ["@afterpack/nuxt"],
   afterpack: { seed: Number(process.env.AFTERPACK_E2E_SEED || expectations.seed) },
   ssr: true,
   buildId: "afterpack-fixture",
+  buildDir: process.env.AFTERPACK_E2E_BUILD_DIR || ".nuxt",
   compatibilityDate: "2024-11-01",
-  nitro: { prerender: { routes: ["/"], crawlLinks: false } },
+  nitro: {
+    output: { dir: process.env.AFTERPACK_E2E_OUTPUT_DIR || ".output" },
+    prerender: { routes: ["/", "/notes", "/reports"], crawlLinks: false },
+  },
 });

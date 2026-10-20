@@ -7,12 +7,17 @@ import { afterpackAngular } from "@afterpack/angular";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const expectations = JSON.parse(readFileSync(join(HERE, "expectations.json"), "utf8"));
 const ng = join(HERE, "node_modules", "@angular", "cli", "bin", "ng.js");
+const distDir = process.env.AFTERPACK_E2E_DIST_DIR || "dist";
 
-execFileSync(process.execPath, [ng, "build", "--configuration", "production"], {
-  cwd: HERE,
-  stdio: "inherit",
-  env: { ...process.env, NG_CLI_ANALYTICS: "false" },
-});
+execFileSync(
+  process.execPath,
+  [ng, "build", "--configuration", "production", "--output-path", `${distDir}/angular-fixture`],
+  {
+    cwd: HERE,
+    stdio: "inherit",
+    env: { ...process.env, NG_CLI_ANALYTICS: "false" },
+  },
+);
 
 if (process.env.AFTERPACK_build_autorun !== "false") {
   await afterpackAngular({ cwd: HERE, seed: Number(process.env.AFTERPACK_E2E_SEED || expectations.seed), protectionMap: true });

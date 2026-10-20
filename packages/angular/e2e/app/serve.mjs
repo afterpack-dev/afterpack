@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const port = Number(process.argv[2] || 8080);
 const root = join(
   fileURLToPath(new URL(".", import.meta.url)),
-  "dist",
+  process.env.AFTERPACK_E2E_DIST_DIR || "dist",
   "angular-fixture",
   "browser",
 );

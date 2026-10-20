@@ -1,13 +1,13 @@
 import adapter from "@sveltejs/adapter-static";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 
-// Static (SSG) SvelteKit app. `version.name` is pinned so repeat builds are
-// byte-identical (SvelteKit defaults it to Date.now(), which the harness's
-// determinism check would otherwise flag).
+const distDir = process.env.AFTERPACK_E2E_DIST_DIR || "build";
+
 export default {
   preprocess: vitePreprocess(),
   kit: {
-    adapter: adapter(),
+    adapter: adapter({ pages: distDir, assets: distDir }),
+    outDir: process.env.AFTERPACK_E2E_KIT_DIR || ".svelte-kit",
     version: { name: "afterpack-fixture" },
   },
 };
