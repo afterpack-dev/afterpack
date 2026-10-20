@@ -2786,7 +2786,7 @@ async function afterpackInflateBase64Gzip(b64) {
   function weakBreakdown(weak, leaks) {
     var parts = [];
     if (leaks > 0) parts.push(plural(leaks, "readable string", "readable strings"));
-    if (weak - leaks > 0) parts.push(plural(weak - leaks, "other readable text", "other readable texts"));
+    if (weak - leaks > 0) parts.push(plural(weak - leaks, "readable text fragment", "readable text fragments"));
     return parts.join(", ");
   }
   function propertyNamesNote(n) {
