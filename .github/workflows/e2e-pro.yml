@@ -8,7 +8,7 @@ name: E2E Pro
 # - `candidate` tests the candidate's own Pro engine, so it runs once the API
 #   serves the engine built from the candidate's commit. The job checks that
 #   first, from the API's /v1/version, and fails while the API serves any
-#   other engine.
+#   other engine. It is dispatched by hand: no release step sends it yet.
 # - `served` tests the candidate as the client of the Pro engine the API
 #   serves now, which the candidate's release gate runs before its own Pro
 #   engine can reach the API. The served engine must be a clean build.
