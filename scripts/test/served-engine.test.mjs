@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { releaseOf, servedEngineProblems } from "../lib/engine.mjs";
+import { releaseOf, servedEngineCheck, servedEngineProblems } from "../lib/engine.mjs";
 
 const SHA = "a".repeat(40);
 const OTHER = "b".repeat(40);
@@ -61,5 +61,46 @@ describe("the engine an API serves for a candidate", () => {
     assert.equal(releaseOf("0.2.2-rc.202610011200"), "0.2.2");
     assert.equal(releaseOf("0.2.2+build.7"), "0.2.2");
     assert.equal(releaseOf("1.0.0"), "1.0.0");
+  });
+});
+
+describe("the engine a Pro run tests", () => {
+  it("is the candidate's own at its release in candidate mode", () => {
+    assert.deepEqual(servedEngineCheck(served({}), { engine: "candidate", ...candidate }), {
+      problems: [],
+      engineVersion: "0.2.2",
+    });
+    assert.deepEqual(
+      servedEngineCheck(served({ engineSourceSha: OTHER }), { engine: "candidate", ...candidate }),
+      { problems: [`the API serves the engine built from ${OTHER}, not the candidate's ${SHA}`] },
+    );
+  });
+
+  it("is whatever clean engine the API serves in served mode, at its own version", () => {
+    const check = (info, fields = {}) =>
+      servedEngineCheck(info, { engine: "served", ...candidate, sha: "", ...fields });
+    assert.deepEqual(check(served({ engineVersion: "0.2.1", engineSourceSha: OTHER })), {
+      problems: [],
+      engineVersion: "0.2.1",
+    });
+    assert.deepEqual(check(served({ engineSourceDirty: true })), {
+      problems: ["the API does not report its engine as built from a clean tree"],
+    });
+    assert.deepEqual(check(served({ engineSourceSha: "ce3b695", engineVersion: null })), {
+      problems: [
+        "the API does not name the commit its engine was built from",
+        "the API's engine version (none) is not a version",
+      ],
+    });
+    assert.deepEqual(check(null), { problems: ["the API answered no version document"] });
+    assert.deepEqual(check(served({}), { version: "latest" }), {
+      problems: ["'latest' is not a version"],
+    });
+  });
+
+  it("refuses a mode it does not know", () => {
+    assert.deepEqual(servedEngineCheck(served({}), { engine: "any", ...candidate }), {
+      problems: ["'any' is not an engine mode: expected candidate or served"],
+    });
   });
 });

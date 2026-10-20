@@ -131,6 +131,38 @@ export function servedEngineProblems(info, { version, sha }) {
   return problems;
 }
 
+export const ENGINE_MODES = ["candidate", "served"];
+
+export function servedReleaseProblems(info) {
+  if (info === null || typeof info !== "object") return ["the API answered no version document"];
+  const problems = [];
+  if (!SOURCE_SHA.test(String(info.engineSourceSha ?? ""))) {
+    problems.push("the API does not name the commit its engine was built from");
+  }
+  if (info.engineSourceDirty !== false) {
+    problems.push("the API does not report its engine as built from a clean tree");
+  }
+  if (!SEMVER.test(String(info.engineVersion ?? ""))) {
+    problems.push(`the API's engine version ${info.engineVersion ?? "(none)"} is not a version`);
+  }
+  return problems;
+}
+
+export function servedEngineCheck(info, { engine, version, sha }) {
+  if (!ENGINE_MODES.includes(engine)) {
+    return {
+      problems: [`'${engine}' is not an engine mode: expected ${ENGINE_MODES.join(" or ")}`],
+    };
+  }
+  if (engine === "candidate") {
+    const problems = servedEngineProblems(info, { version, sha });
+    return problems.length > 0 ? { problems } : { problems, engineVersion: releaseOf(version) };
+  }
+  if (!SEMVER.test(version)) return { problems: [`'${version}' is not a version`] };
+  const problems = servedReleaseProblems(info);
+  return problems.length > 0 ? { problems } : { problems, engineVersion: info.engineVersion };
+}
+
 export function tarballRestampDifferences(rcFile, stableFile, version) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "restamp-"));
   try {

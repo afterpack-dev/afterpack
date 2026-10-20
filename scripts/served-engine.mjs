@@ -1,6 +1,7 @@
-import { CORE, releaseOf, servedEngineProblems } from "./lib/engine.mjs";
+import { CORE, servedEngineCheck } from "./lib/engine.mjs";
 import { appendFile } from "./lib/registry.mjs";
 
+const engine = (process.env.ENGINE ?? "").trim() || "candidate";
 const version = (process.env.VERSION ?? "").replace(/^v/, "");
 const sha = (process.env.SHA ?? "").trim().toLowerCase();
 const api = (process.env.AFTERPACK_API_URL ?? "").replace(/\/+$/, "");
@@ -19,18 +20,31 @@ try {
   console.error(`GET /v1/version failed: ${error.message}`);
 }
 
-const problems = servedEngineProblems(info, { version, sha });
+const { problems, engineVersion } = servedEngineCheck(info, { engine, version, sha });
 if (problems.length > 0) {
   for (const problem of problems) console.error(`::error::${problem}`);
-  console.error(
-    `${CORE}@${version} cannot be tested on the Pro engine until the API serves the engine built from ${sha}`,
-  );
+  if (engine === "candidate") {
+    console.error(
+      `${CORE}@${version} cannot be tested on the Pro engine until the API serves the engine built from ${sha}`,
+    );
+  }
   process.exit(1);
 }
 
-console.log(`the API serves engine ${info.engineVersion} built from ${sha}`);
-appendFile("GITHUB_OUTPUT", `version=${version}\nengine_version=${releaseOf(version)}\n`);
-appendFile(
-  "GITHUB_STEP_SUMMARY",
-  `The API serves the Pro engine \`${info.engineVersion}\` built from \`${sha}\`, the source of \`${CORE}@${version}\`.\n\n`,
-);
+const builtFrom = info.engineSourceSha;
+appendFile("GITHUB_OUTPUT", `version=${version}\nengine_version=${engineVersion}\n`);
+if (engine === "candidate") {
+  console.log(`the API serves engine ${info.engineVersion} built from ${builtFrom}`);
+  appendFile(
+    "GITHUB_STEP_SUMMARY",
+    `The API serves the Pro engine \`${info.engineVersion}\` built from \`${builtFrom}\`, the source of \`${CORE}@${version}\`.\n\n`,
+  );
+} else {
+  console.log(
+    `testing ${CORE}@${version} as the client of the served engine ${info.engineVersion} built from ${builtFrom}`,
+  );
+  appendFile(
+    "GITHUB_STEP_SUMMARY",
+    `\`${CORE}@${version}\` is the client of the Pro engine the API serves now: \`${info.engineVersion}\` built from \`${builtFrom}\`, not the candidate's own Pro engine.\n\n`,
+  );
+}

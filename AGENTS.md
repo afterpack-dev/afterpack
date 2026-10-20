@@ -38,7 +38,8 @@ scripts/                set-version.ts, release-plan.mjs, bump-engine.mjs, npm-r
 .github/ISSUE_TEMPLATE/ bug report form, issue config
 .github/workflows/e2e-candidate.yml   the full and preset e2e lanes on an unreleased engine,
                                       run by dispatch
-.github/workflows/e2e-pro.yml         the Pro e2e lane, once the API serves that engine's Pro build
+.github/workflows/e2e-pro.yml         the Pro e2e lane: on the Pro engine the API serves, or on a
+                                      candidate's own Pro build once the API serves it
 .github/actions/        e2e-fixtures: fixture installs (cached) and Playwright browsers;
                         candidate-workspace: the workspace on an unreleased @afterpack/core
 .github/PULL_REQUEST_TEMPLATE.md   the PR gate checklist

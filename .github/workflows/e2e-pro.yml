@@ -2,18 +2,26 @@ name: E2E Pro
 
 # Runs the scenarios of vite-react and both next-app legs built on the Pro
 # cloud engine, with an engine candidate as the client. With a key the
-# candidate only sends the bundle to the API, which runs its own engine, so
-# the lane tests the candidate only once the API serves the Pro engine built
-# from the candidate's commit. The job checks that first, from the API's
-# /v1/version, and fails while the API serves any other engine. Every
-# receipt must then name the cloud engine at the candidate's release, and
-# every build must have sent the engine a directive region.
+# candidate only sends the bundle to the API, which runs its own engine.
+# Two modes, named by `engine`:
+#
+# - `candidate` tests the candidate's own Pro engine, so it runs once the API
+#   serves the engine built from the candidate's commit. The job checks that
+#   first, from the API's /v1/version, and fails while the API serves any
+#   other engine.
+# - `served` tests the candidate as the client of the Pro engine the API
+#   serves now, which the candidate's release gate runs before its own Pro
+#   engine can reach the API. The served engine must be a clean build.
+#
+# Every receipt must then name the cloud engine at the tested engine's
+# version, and every build must have sent the engine a directive region.
 #
 # Triggered by a repository_dispatch of type `e2e-pro` whose client_payload
-# carries `version`, `sha` (the commit the candidate's engine was built
-# from) and optionally `id`, which lands in the run name so the dispatcher
-# can find its run, or by hand. It never runs on a pull request. No step
-# uploads the candidate, and no cache it writes holds it.
+# carries `version`, `engine` (`candidate` when absent), `sha` (the commit
+# the candidate's engine was built from; candidate mode only) and optionally
+# `id`, which lands in the run name so the dispatcher can find its run, or by
+# hand. It never runs on a pull request. No step uploads the candidate, and
+# no cache it writes holds it.
 #
 # The job runs in the `staging-pro` environment, which must be limited to
 # the default branch and hold the secrets AFTERPACK_KEY, ENGINE_REGISTRY and
@@ -25,9 +33,17 @@ on:
         description: "The @afterpack/core candidate, e.g. 0.2.2-rc.202610011200"
         required: true
         type: string
-      sha:
-        description: "The commit the candidate's engine was built from (40 hex characters)"
+      engine:
+        description: "candidate: the candidate's own Pro engine, once the API serves it; served: the Pro engine the API serves now"
         required: true
+        type: choice
+        default: candidate
+        options:
+          - candidate
+          - served
+      sha:
+        description: "The commit the candidate's engine was built from (40 hex characters; candidate mode only)"
+        required: false
         type: string
   repository_dispatch:
     types: [e2e-pro]
@@ -43,7 +59,7 @@ permissions:
 
 jobs:
   pro:
-    name: Scenarios on the Pro engine of ${{ github.event.client_payload.version || inputs.version }}
+    name: Pro scenarios with ${{ github.event.client_payload.version || inputs.version }} as the client (${{ github.event.client_payload.engine || inputs.engine || 'candidate' }} engine)
     runs-on: ubuntu-latest
     environment: staging-pro
     timeout-minutes: 30
@@ -61,9 +77,10 @@ jobs:
         with:
           node-version: 22
 
-      - name: Require the API to serve the candidate's Pro engine
+      - name: Resolve the Pro engine under test
         id: engine
         env:
+          ENGINE: ${{ github.event.client_payload.engine || inputs.engine || 'candidate' }}
           VERSION: ${{ github.event.client_payload.version || inputs.version }}
           SHA: ${{ github.event.client_payload.sha || inputs.sha }}
           AFTERPACK_API_URL: ${{ vars.AFTERPACK_API_URL }}
