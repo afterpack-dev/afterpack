@@ -90,7 +90,8 @@ that fixture's other browsers. To repeat one Firefox test, select only that brow
    smoke check dismisses that message only when it was raised while the page was leaving for
    another document, or when Playwright saw the request for that URL cancelled. The same message
    for a fetch refused at any other time, such as a real CORS failure, still fails the check;
-   next-app's full suite proves that in WebKit.
+   next-app's full suite proves that in WebKit. A route that expects 200 also passes with a 304:
+   Firefox revalidates a page the app already prefetched, as `astro-islands` does on load.
 
    An app that wires itself only after the page's load event declares `smoke.readySelector` in
    its `expectations.json` and matches it once it is wired: `cli-requirejs-amd`, whose modules

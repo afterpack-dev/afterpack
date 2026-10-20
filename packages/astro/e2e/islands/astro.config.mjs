@@ -11,6 +11,6 @@ const distDir = process.env.AFTERPACK_E2E_DIST_DIR || "dist";
 export default defineConfig({
   outDir: distDir,
   cacheDir: `node_modules/.astro-${distDir}`,
-  prefetch: false,
+  prefetch: { prefetchAll: true, defaultStrategy: "load" },
   integrations: [react(), afterpack({ seed: Number(process.env.AFTERPACK_E2E_SEED || expectations.seed) })],
 });

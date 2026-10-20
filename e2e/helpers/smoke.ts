@@ -81,6 +81,11 @@ async function contentContains(page: Page, needle: string, where: string): Promi
     .toBe(true);
 }
 
+function servedStatus(response: Response | null, expected: number): number | undefined {
+  const status = response?.status();
+  return status === 304 && expected === 200 ? 200 : status;
+}
+
 async function waitUntilReady(
   page: Page,
   response: Response | null,
@@ -108,7 +113,9 @@ export async function visitRoutes(
 ): Promise<void> {
   for (const route of smoke.routes) {
     const response = await page.goto(`${baseURL}${route.path}`);
-    expect(response?.status(), `${route.path}: unexpected status`).toBe(route.status);
+    expect(servedStatus(response, route.status), `${route.path}: unexpected status`).toBe(
+      route.status,
+    );
     await waitUntilReady(page, response, smoke, route.path);
     for (const needle of route.textContains ?? []) {
       await contentContains(page, needle, route.path);
