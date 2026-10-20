@@ -149,7 +149,7 @@ importers:
         specifier: ^22.0.0
         version: 22.20.4
       esbuild:
-        specifier: '>=0.17.0'
+        specifier: '>=0.25.0'
         version: 0.28.2
       tsdown:
         specifier: ^0.11.0
