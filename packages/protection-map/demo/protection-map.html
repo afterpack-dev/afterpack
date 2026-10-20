@@ -881,6 +881,10 @@ body.is-resizing .pane-resizer::before { transition: none; }
 .weakspot-sample { flex: 1 1 auto; min-width: 0; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-primary); overflow-wrap: anywhere; white-space: pre-wrap; }
 .weakspot-body { padding: 8px 10px 10px; border-top: 1px dashed var(--border); }
 .weakspot-reason { font-size: 11px; color: var(--text-secondary); margin: 0 0 6px; }
+.weakspot-times { flex: 0 0 auto; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); }
+.weakspot-names { font-size: 11px; color: var(--text-muted); margin: 8px 0 0; }
+.weakspot-names-icon { margin-right: 4px; }
+.weakspots-section.is-empty.is-collapsed .weakspot-names { display: none; }
 .empty-note-ok { font-size: 11.5px; color: var(--text-muted); font-style: normal; margin: 0; }
 .empty-note-ok .ok-check { color: var(--brand); font-weight: 700; margin-right: 4px; }
 
@@ -1143,7 +1147,7 @@ details[open] > .details-summary::before { transform: rotate(90deg); }
         <button type="button" id="filter-all" data-filter="all" aria-pressed="true" data-tip="Every file in this build.">All</button>
         <button type="button" id="filter-app" data-filter="app" aria-pressed="false" data-tip="Your own code.">App</button>
         <button type="button" id="filter-vendor" data-filter="vendor" aria-pressed="false" data-tip="Third-party packages (node_modules)." data-doc="thirdParty">Vendor</button>
-        <button type="button" id="filter-weak" data-filter="weak" aria-pressed="false" data-tip="Only files with a weak spot: text still readable in your output." data-doc="lightDefault">Weak</button>
+        <button type="button" id="filter-weak" data-filter="weak" aria-pressed="false" data-tip="Only files with a weak spot: a string still readable in your output." data-doc="lightDefault">Weak</button>
         <button type="button" id="filter-marked" data-filter="marked" aria-pressed="false" data-tip="Only files with an @afterpack directive." data-doc="directives">Marked</button>
       </div>
       <p class="tree-note" id="deeplink-note" hidden></p>
@@ -1200,7 +1204,7 @@ details[open] > .details-summary::before { transform: rotate(90deg); }
           <button type="button" class="rail-section-head" id="weakspots-head" aria-expanded="false" aria-controls="weakspots-list">
             <span class="eyebrow" id="weakspots-title">Weak spots</span>
           </button>
-          <span class="info-dot" id="weakspots-info" tabindex="0" role="img" aria-label="About weak spots" data-tip="Text from your source that is still readable in your output. Strings are worth fixing; property names usually have to stay." data-doc="lightDefault">i</span>
+          <span class="info-dot" id="weakspots-info" tabindex="0" role="img" aria-label="About weak spots" data-tip="Strings from your source that are still readable in your output, each listed once. Property names usually have to stay, so they are counted here but not listed." data-doc="lightDefault">i</span>
         </div>
         <div id="weakspots-list" style="margin-top:8px"></div>
       </div>
@@ -1513,6 +1517,7 @@ async function afterpackInflateBase64Gzip(b64) {
     return key.charAt(0).toLowerCase() + key.slice(1);
   }
   function mechanismText(code) { return MECHANISM[mechanismKey(code)] || ""; }
+  function isPropertyNameSpot(s) { return !!(s && (s.raw || s).severity === "propertyName"); }
 
   function classChipHtml(cls, ghost, labelOverride, noTip) {
     var meta = CLASS_META[cls] || { label: cls || "Protected" };
@@ -2028,16 +2033,14 @@ async function afterpackInflateBase64Gzip(b64) {
   }
 
   function directiveKindOf(keyword) {
-    return keyword === "skip" || keyword === "hardened" || keyword === "destroy"
-      ? keyword
-      : "custom";
+    return keyword === "skip" ? "skip" : "custom";
   }
 
   function clampDirectivesToEndMarkers(source, directives) {
     if (!directives.length) return;
     var allowed = { end: true };
     directives.forEach(function (d) { allowed[d.keyword] = true; });
-    var markers = [], re = /@afterpack[ \t]+([A-Za-z][\w-]*)/g, m;
+    var markers = [], re = /@afterpack[ \t]+([A-Za-z][\w.-]*)/g, m;
     while ((m = re.exec(source)) !== null) {
       if (allowed[m[1]] === true) markers.push({ start: m.index, end: m.index + m[0].length, keyword: m[1] });
     }
@@ -2277,8 +2280,10 @@ async function afterpackInflateBase64Gzip(b64) {
     var displayPath = isMachineryFile ? "(AfterPack runtime)" : (fdoc.file && fdoc.file.path) || null;
     var displayName = displayPath ? displayPath.split(/[\\/]+/).pop() : "(unnamed file " + (fileIdx + 1) + ")";
     var leakCount = (fdoc.aggregate && fdoc.aggregate.leakCount) || 0;
-    var weakSpotCount = spotlights.length ||
-      ((fdoc.aggregate && fdoc.aggregate.weakRegions) || 0);
+    var propertyNameCount = spotlights.length
+      ? spotlights.filter(isPropertyNameSpot).length
+      : Math.max(0, ((fdoc.aggregate && fdoc.aggregate.weakRegions) || 0) - leakCount);
+    var weakSpotCount = spotlights.length ? spotlights.length - propertyNameCount : leakCount;
 
     var coverage = { protected: 0, hidden: 0, renamed: 0, readable: 0, plain: 0, total: sourceLen };
     mergedRuns.forEach(function (run) {
@@ -2302,7 +2307,7 @@ async function afterpackInflateBase64Gzip(b64) {
       renamedRanges: renamedRanges, extractedRanges: extractedRanges, directives: directives, declRanges: declRanges,
       renamedCount: (fdoc.aggregate && fdoc.aggregate.renamedCount != null) ? fdoc.aggregate.renamedCount : renamedRanges.length,
       extractedCount: (fdoc.aggregate && fdoc.aggregate.extractedCount != null) ? fdoc.aggregate.extractedCount : extractedRanges.length,
-      leakCount: leakCount, weakSpotCount: weakSpotCount,
+      leakCount: leakCount, weakSpotCount: weakSpotCount, propertyNameCount: propertyNameCount,
       displayPath: displayPath, displayName: displayName
     };
   }
@@ -2577,7 +2582,7 @@ async function afterpackInflateBase64Gzip(b64) {
       if (!any) { f.__markers = []; return f.__markers; }
       allowed.end = true;
       var out = [];
-      var re = /@afterpack[ \t]+([A-Za-z][\w-]*)/g;
+      var re = /@afterpack[ \t]+([A-Za-z][\w.-]*)/g;
       var m;
       while ((m = re.exec(f.source)) !== null) {
         if (allowed[m[1]] !== true) continue;
@@ -2781,8 +2786,11 @@ async function afterpackInflateBase64Gzip(b64) {
   function weakBreakdown(weak, leaks) {
     var parts = [];
     if (leaks > 0) parts.push(plural(leaks, "readable string", "readable strings"));
-    if (weak - leaks > 0) parts.push(plural(weak - leaks, "readable property name", "readable property names"));
+    if (weak - leaks > 0) parts.push(plural(weak - leaks, "other readable text", "other readable texts"));
     return parts.join(", ");
+  }
+  function propertyNamesNote(n) {
+    return n > 0 ? plural(n, "property name stays", "property names stay") + " readable, as property names usually must." : "";
   }
   function weakBadgeHtml(weak, leaks, scope) {
     if (!weak) return "";
@@ -2924,15 +2932,15 @@ async function afterpackInflateBase64Gzip(b64) {
     if (titleEl) titleEl.textContent = "Files (" + FILES.length + ")";
     var el = document.getElementById("workspace-summary");
     if (!el) return;
-    var weak = 0, leaks = 0, filesWith = 0;
+    var weak = 0, leaks = 0, filesWith = 0, names = 0;
     FILES.forEach(function (f) {
-      weak += f.weakSpotCount; leaks += f.leakCount;
+      weak += f.weakSpotCount; leaks += f.leakCount; names += f.propertyNameCount;
       if (f.weakSpotCount > 0) filesWith++;
     });
     el.textContent = weak > 0 ? plural(weak, "weak spot", "weak spots") : "";
     if (weak > 0) {
       el.setAttribute("data-tip", plural(weak, "weak spot", "weak spots") + " in " + plural(filesWith, "file", "files") + ": " +
-        weakBreakdown(weak, leaks) + ". The Weak filter lists these files.");
+        weakBreakdown(weak, leaks) + ". The Weak filter lists these files." + (names > 0 ? " " + propertyNamesNote(names) : ""));
       el.setAttribute("data-doc", "lightDefault");
     } else {
       el.removeAttribute("data-tip");
@@ -3006,8 +3014,9 @@ async function afterpackInflateBase64Gzip(b64) {
 
     var leaks = file.leakCount, weak = file.weakSpotCount;
     rows.push({ k: "Weak spots", v: fmtNum(weak) + (leaks > 0 ? " ⚠" : ""), warn: leaks > 0, doc: "lightDefault",
-      tip: weak > 0 ? "Text still readable in your output: " + weakBreakdown(weak, leaks) + ". Listed below."
-        : "No readable text from this file was found in your output." });
+      tip: (weak > 0 ? "Text still readable in your output: " + weakBreakdown(weak, leaks) + ". Listed below."
+        : "No readable string from this file was found in your output.") +
+        (file.propertyNameCount > 0 ? " " + propertyNamesNote(file.propertyNameCount) : "") });
 
     if (f.inflationRatio != null) {
       rows.push({ k: "Size", v: (f.outputSizeEstimated ? "≈" : "") + f.inflationRatio.toFixed(2) + "×", doc: "sizeBudget",
@@ -3073,11 +3082,9 @@ async function afterpackInflateBase64Gzip(b64) {
 
   var DIRECTIVE_LEGEND_META = {
     skip: "skip: keep this readable",
-    hardened: "hardened: stronger protection",
-    destroy: "destroy: strongest protection",
-    custom: "custom: its own settings, such as preset=hard"
+    custom: "preset=hard, complexity=8, …: this code's own settings"
   };
-  var DIRECTIVE_LEGEND_ORDER = ["skip", "hardened", "destroy", "custom"];
+  var DIRECTIVE_LEGEND_ORDER = ["skip", "custom"];
   function renderDirectiveLegend() {
     var present = {};
     FILES.forEach(function (f) {
@@ -3156,12 +3163,40 @@ async function afterpackInflateBase64Gzip(b64) {
     rail.classList.toggle("inspector-section-collapsed", !!(insp && insp.classList.contains("is-collapsed")));
   }
 
+  function weakSpotGroups(file) {
+    var groups = [], byKey = {};
+    file.spotlights.forEach(function (s) {
+      if (isPropertyNameSpot(s)) return;
+      var key = (s.raw.severity || "") + "\u0000" + (s.raw.sample || "");
+      var g = byKey[key];
+      if (!g) {
+        g = byKey[key] = { first: s, members: [] };
+        groups.push(g);
+      }
+      g.members.push(s);
+    });
+    groups.forEach(function (g) {
+      g.positioned = g.members.filter(function (s) { return s.positioned; });
+    });
+    return groups;
+  }
+  function propertyNamesRowHtml(file) {
+    var n = file.propertyNameCount;
+    if (!n) return "";
+    var help = SEVERITY_HELP.propertyName;
+    return '<p class="weakspot-names" data-property-names="' + n + '">' +
+      '<span class="weakspot-names-icon" aria-hidden="true">' + SEVERITY_ICON.propertyName + "</span>" +
+      escapeHtml(propertyNamesNote(n) + " Marked in the code, not listed here.") +
+      (help ? " " + docLinkHtml(help.doc, help.label) : "") + "</p>";
+  }
+
   function renderWeakSpots(file) {
     var titleEl = document.getElementById("weakspots-title");
     var infoEl = document.getElementById("weakspots-info");
     var list = document.getElementById("weakspots-list");
     if (!titleEl || !list) return;
-    if (!file.spotlights.length) {
+    var groups = weakSpotGroups(file);
+    if (!groups.length) {
       titleEl.textContent = "Weak spots (0)";
       if (infoEl) infoEl.style.display = "none";
       list.style.marginTop = "0";
@@ -3169,35 +3204,45 @@ async function afterpackInflateBase64Gzip(b64) {
       FILES.forEach(function (f) { if (f.fileIdx !== file.fileIdx) elsewhere += f.weakSpotCount; });
       list.innerHTML = '<p class="empty-note-ok"><span class="ok-check">✓</span>None in this file.' +
         (elsewhere > 0 ? " " + escapeHtml(plural(elsewhere, "weak spot", "weak spots")) + " in other files: use the <strong>Weak</strong> filter." : "") +
-        "</p>";
+        "</p>" + propertyNamesRowHtml(file);
       setWeakSpotsEmpty(true);
       return;
     }
     setWeakSpotsEmpty(false);
-    titleEl.textContent = "Weak spots (" + file.spotlights.length + ")";
+    titleEl.textContent = "Weak spots (" + file.weakSpotCount + ")";
     if (infoEl) infoEl.style.display = "";
     list.style.marginTop = "8px";
-    list.innerHTML = file.spotlights.map(function (s) {
+    list.innerHTML = groups.map(function (g) {
+      var s = g.first;
       var sev = s.raw.severity;
       var icon = SEVERITY_ICON[sev] || "⚠";
       var why = mechanismText(s.raw.mechanism);
       var help = SEVERITY_HELP[sev];
-      var actions = (s.positioned ? '<button type="button" class="mini-btn" data-jump-spotlight="' + s.idx + '">Show in code</button>' : "") +
+      var times = g.members.length;
+      var jumpTo = g.positioned.length ? g.positioned[0] : null;
+      var jumpAll = g.positioned.map(function (p) { return p.idx; }).join(",");
+      var actions = (jumpTo ? '<button type="button" class="mini-btn" data-jump-spotlight="' + jumpTo.idx + '"' +
+          (g.positioned.length > 1 ? ' data-jump-cycle="' + jumpAll + '"' : "") + ">" +
+          "Show in code</button>" : "") +
         (help ? docLinkHtml(help.doc, help.label) : "");
-      return '<details class="weakspot" data-spot-idx="' + s.idx + '">' +
+      return '<details class="weakspot" data-spot-idx="' + s.idx + '"' + (times > 1 ? ' data-spot-count="' + times + '"' : "") + ">" +
         '<summary class="weakspot-summary">' +
           '<span class="weakspot-sev pill pill-' + escapeAttr(sev || "") + '" title="' + escapeAttr(SEVERITY_LABEL[sev] || "Readable text") + '">' + icon + "</span>" +
           '<span class="weakspot-sample">' + escapeHtml(s.raw.sample || "") + "</span>" +
+          (times > 1 ? '<span class="weakspot-times" title="' + escapeAttr(plural(times, "place", "places") + " in this file") + '">×' + times + "</span>" : "") +
         "</summary>" +
         '<div class="weakspot-body">' +
           '<p class="weakspot-reason">' + escapeHtml(SEVERITY_BODY[sev] || SEVERITY_BODY.weak) + "</p>" +
+          (times > 1 ? '<p class="weakspot-reason">' + escapeHtml("It appears in " + plural(times, "place", "places") + " in this file." +
+            (g.positioned.length > 1 ? " Show in code steps through them." : "")) + "</p>" : "") +
           (why ? '<p class="weakspot-reason">' + escapeHtml(why) + "</p>" : "") +
-          (s.positioned ? "" : '<p class="weakspot-reason">' + escapeHtml(INSP_COPY.noPosition) + "</p>") +
+          (jumpTo ? "" : '<p class="weakspot-reason">' + escapeHtml(INSP_COPY.noPosition) + "</p>") +
           (actions ? '<div class="insp-actions">' + actions + "</div>" : "") +
         "</div>" +
       "</details>";
-    }).join("");
+    }).join("") + propertyNamesRowHtml(file);
   }
+
 
   function groupLineage(lineage) {
     var groups = [], byName = Object.create(null);
@@ -3594,6 +3639,15 @@ async function afterpackInflateBase64Gzip(b64) {
     var dl = tokEl.dataset.declIdx == null || tokEl.dataset.declIdx === "" ? null : Number(tokEl.dataset.declIdx);
     selectFromRun(r, s, rn, ex, cx, dl);
   }
+  function nextJumpIdx(btn) {
+    var idx = Number(btn.dataset.jumpSpotlight);
+    var cycle = (btn.dataset.jumpCycle || "").split(",").filter(Boolean).map(Number);
+    if (cycle.length > 1) {
+      var at = cycle.indexOf(idx);
+      btn.dataset.jumpSpotlight = String(cycle[(at + 1) % cycle.length]);
+    }
+    return idx;
+  }
   function jumpToSpotlight(idx) {
     var file = activeFile();
     var target = codeBody.querySelector('.tok[data-spotlight-idx="' + idx + '"]');
@@ -3979,7 +4033,7 @@ async function afterpackInflateBase64Gzip(b64) {
     }
     document.getElementById("weakspots-list").addEventListener("click", function (e) {
       var btn = e.target.closest("[data-jump-spotlight]");
-      if (btn) jumpToSpotlight(Number(btn.dataset.jumpSpotlight));
+      if (btn) jumpToSpotlight(nextJumpIdx(btn));
     });
     document.getElementById("inspector").addEventListener("click", function (e) {
       var jump = e.target.closest("[data-select-region]");

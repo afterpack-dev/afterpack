@@ -97,7 +97,7 @@ function docWithMachineryAsLastFile() {
           leakCount: 1,
           renamedCount: 1,
           extractedCount: 1,
-          directives: [{ keyword: "hardened", span: [450000, 450100], target: 90, floor: null }],
+          directives: [{ keyword: "preset", span: [450000, 450100], target: 90, floor: null }],
         },
       },
     ],
@@ -226,7 +226,7 @@ function docWithTree() {
   const page = 'const title = "Sign in";\nexport default function Page() { return title; }\n';
   const auth =
     'const TOKEN = "let-me-in";\nexport function signIn() { return JSON.stringify({ TOKEN }); }\n';
-  const keys = "/* @afterpack hardened */\nexport function derive(s) { return s * 31; }\n";
+  const keys = "/* @afterpack preset=hard */\nexport function derive(s) { return s * 31; }\n";
   const spot = (src, sample, severity) => ({
     span: [src.indexOf(sample), src.indexOf(sample) + sample.length],
     severity,
@@ -280,7 +280,7 @@ function docWithTree() {
         "src/lib/crypto/keys.ts",
         keys,
         [],
-        [{ keyword: "hardened", span: [0, keys.length - 1], target: 90, floor: null }],
+        [{ keyword: "preset", span: [0, keys.length - 1], target: 90, floor: null }],
       ),
     ],
   };
@@ -315,7 +315,7 @@ test("F. a directive marks its MARKER TEXT and its gutter, not the region", asyn
   );
   assert.match(
     html,
-    /<span class="dir-arg">[^<]*hardened[^<]*<\/span>/,
+    /<span class="dir-arg">[^<]*preset[^<]*<\/span>/,
     "the parameter carries the brand colour without the animation",
   );
 
@@ -326,12 +326,12 @@ test("F. a directive marks its MARKER TEXT and its gutter, not the region", asyn
     "the comment opener sits outside the marker span, in ordinary comment colour",
   );
 
-  const marked = [...html.matchAll(/<span [^>]*data-directive="hardened"[^>]*>/g)].map((m) => m[0]);
+  const marked = [...html.matchAll(/<span [^>]*data-directive="custom"[^>]*>/g)].map((m) => m[0]);
   assert.ok(marked.length > 0, "the marker's tokens still carry the directive");
   for (const tag of marked) {
     assert.ok(
       !/style="background:linear-gradient\(rgba\(/.test(tag),
-      `a hundreds-of-lines-long hardened block must not paint every token with a region-wide tint: ${tag}`,
+      `a hundreds-of-lines-long preset=hard block must not paint every token with a region-wide tint: ${tag}`,
     );
     assert.ok(!/box-shadow/.test(tag), `a ring came back on ${tag}`);
   }
@@ -398,7 +398,8 @@ test("F2. a directive over a stretch with no covering region: inert punctuation,
 
 test("G. weak spots are named consistently and the Weak facet selects them", async () => {
   const v = await loadViewer(docWithTree());
-  assert.equal(v.FILES.map((f) => f.weakSpotCount).join(","), "0,2,0");
+  assert.equal(v.FILES.map((f) => f.weakSpotCount).join(","), "0,1,0");
+  assert.equal(v.FILES.map((f) => f.propertyNameCount).join(","), "0,1,0");
   assert.equal(v.FILES.map((f) => f.leakCount).join(","), "0,1,0");
   assert.ok(!v.isWeakFile(v.FILES[0]) && v.isWeakFile(v.FILES[1]));
   assert.ok(
@@ -407,11 +408,14 @@ test("G. weak spots are named consistently and the Weak facet selects them", asy
   );
   assert.equal(
     v.byId("workspace-summary").textContent,
-    "2 weak spots",
-    "the tree header counts weak spots build-wide, under that name",
+    "1 weak spot",
+    "the tree header counts weak spots build-wide, under that name, and a property name is not one",
   );
   assert.match(v.byId("workspace-summary").getAttribute("data-tip"), /1 readable string/);
-  assert.match(v.byId("workspace-summary").getAttribute("data-tip"), /1 readable property name/);
+  assert.match(
+    v.byId("workspace-summary").getAttribute("data-tip"),
+    /1 property name stays readable/,
+  );
   const band = v.byId("file-summary-metrics").innerHTML;
   assert.ok(band.includes(">Weak spots<"), "the open file's band counts them under the same name");
   assert.ok(!/leaks?<\/span>/i.test(band), "the band never labels the count 'leaks'");
@@ -630,12 +634,12 @@ test("L. the weak-spots header states its count, at 0 and at N", async () => {
 
   const weak = await loadViewer(docWithTree(), { hash: "#file=src/lib/auth.ts" });
   assert.equal(weak.state.activeFileIdx, 1);
-  assert.equal(weak.byId("weakspots-title").textContent, "Weak spots (2)");
+  assert.equal(weak.byId("weakspots-title").textContent, "Weak spots (1)");
   assert.equal(weak.isSectionCollapsed("weakspots-section"), true, "still collapsed by default");
   assert.ok(!weak.byId("weakspots-section").classList.contains("is-empty"));
   assert.equal(
     weak.byId("weakspots-list").innerHTML.match(/class="weakspot"/g).length,
-    2,
+    1,
     "collapsed hides the body, not the count: the rows are still rendered underneath",
   );
 
@@ -1185,15 +1189,13 @@ test("Q2. the viewer reports coverage, never a chance of resisting deobfuscation
 
 test("R. a weak spot the map cannot place offers no jump, and says so", async () => {
   const doc = docWithTree();
-  doc.files[1].spotlights[1].span = null;
+  doc.files[1].spotlights[0].span = null;
   const v = await loadViewer(doc, { hash: "#file=src/lib/auth.ts" });
   const file = v.FILES[1];
-  assert.equal(file.spotlights[0].positioned, true);
-  assert.equal(file.spotlights[1].positioned, false);
+  assert.equal(file.spotlights[0].positioned, false);
   v.renderWeakSpots(file);
   const html = v.byId("weakspots-list").innerHTML;
-  assert.match(html, /data-jump-spotlight="0"/);
-  assert.ok(!/data-jump-spotlight="1"/.test(html), "no button that does nothing");
+  assert.ok(!/data-jump-spotlight=/.test(html), "no button that does nothing");
   assert.match(html, /can't point to where this sits in your source/);
 });
 
@@ -1312,4 +1314,193 @@ test("S2. a map from an engine without the declaration lane renders exactly as b
   assert.ok(!v.byId("inspector").innerHTML.includes("Also rewritten"));
   v.selectUnlit(DECL_SRC.indexOf("k"), "i", DECL_SRC.indexOf("k") + 1);
   assert.ok(!v.byId("inspector").innerHTML.includes("Also rewritten"));
+});
+
+function docWithDirectives(entries) {
+  return {
+    schemaVersion: 5,
+    spanUnits: "utf16",
+    engine: { version: "9.9.9" },
+    files: entries.map(([path, source, directives]) => ({
+      file: {
+        path,
+        sourceOrigin: "original",
+        vendor: false,
+        originalSource: source,
+        inputSize: source.length,
+        outputSize: 99,
+        outputSizeEstimated: false,
+        inflationRatio: 1.5,
+      },
+      regions: [region({ span: [0, source.length] })],
+      spotlights: [],
+      renamedSpans: [],
+      extractedSpans: [],
+      aggregate: { weakRegions: 0, leakCount: 0, renamedCount: 0, extractedCount: 0, directives },
+    })),
+  };
+}
+
+test("T. the viewer offers only the current directive vocabulary", async () => {
+  const template = readFileSync(new URL("./template.html", import.meta.url), "utf8");
+  assert.ok(!/\bhardened\b/.test(template), "the retired `hardened` keyword is gone");
+  assert.ok(!/["\s]destroy["\s:]/.test(template), "the retired `destroy` keyword is gone");
+
+  const skipSrc = "/* @afterpack skip */\nconst a = 1;\n/* @afterpack end */\n";
+  const presetSrc = "/* @afterpack preset=hard */\nconst b = 2;\n/* @afterpack end */\n";
+  const dottedSrc = "/* @afterpack strings.encode=off */\nconst c = 'x';\n/* @afterpack end */\n";
+  const legacySrc = "/* @afterpack hardened */\nconst d = 4;\n";
+  const span = (src) => [0, src.length - 1];
+  const v = await loadViewer(
+    docWithDirectives([
+      ["src/skip.js", skipSrc, [{ keyword: "skip", span: span(skipSrc), target: 0, floor: false }]],
+      [
+        "src/preset.js",
+        presetSrc,
+        [{ keyword: "preset", span: span(presetSrc), target: 8, floor: null }],
+      ],
+      [
+        "src/dotted.js",
+        dottedSrc,
+        [{ keyword: "strings.encode", span: span(dottedSrc), target: null, floor: false }],
+      ],
+      [
+        "src/legacy.js",
+        legacySrc,
+        [{ keyword: "hardened", span: span(legacySrc), target: 9, floor: null }],
+      ],
+    ]),
+  );
+  assert.deepEqual(
+    v.FILES.map((f) => f.directives[0].kind).join(","),
+    "skip,custom,custom,custom",
+    "skip is the one named kind; every key=value directive, and a map stored before the retirement, reads as its own settings",
+  );
+  v.renderDirectiveLegend();
+  const legend = v.byId("directive-legend").innerHTML;
+  assert.equal(legend.match(/directive-legend-row/g).length, 2);
+  assert.match(legend, /skip: keep this readable/);
+  assert.match(legend, /preset=hard/);
+  assert.ok(!/hardened|destroy/.test(legend), "the legend never offers a retired keyword");
+
+  v.state.activeFileIdx = 2;
+  v.paintCode(v.FILES[2]);
+  assert.match(
+    v.byId("code-body").innerHTML,
+    /<span class="dir-arg">[^<]*strings\.encode[^<]*<\/span>/,
+    "a dotted key is highlighted whole, not cut at the dot",
+  );
+});
+
+function docWithWeakSpots() {
+  const src =
+    'const a = "sk-live-1";\nconst b = "sk-live-1";\nconst c = "sk-live-1";\n' +
+    'const d = { push: 1, length: 2 };\nconst e = "hello";\n';
+  const names = "const o = { push: 1 };\nexport default o.push;\n";
+  const at = (s, text, from = 0) => {
+    const i = s.indexOf(text, from);
+    return [i, i + text.length];
+  };
+  const spot = (s, sample, severity, from) => ({
+    span: at(s, sample, from),
+    severity,
+    mechanism: "ReachableConst",
+    disposition: severity === "leak" ? "Leak" : "PropertyNameResidual",
+    sample,
+    bytes: sample.length,
+  });
+  const first = src.indexOf('"sk-live-1"');
+  const second = src.indexOf('"sk-live-1"', first + 1);
+  const third = src.indexOf('"sk-live-1"', second + 1);
+  const entry = (path, source, spotlights) => ({
+    file: {
+      path,
+      sourceOrigin: "original",
+      vendor: false,
+      originalSource: source,
+      inputSize: source.length,
+      outputSize: 99,
+      outputSizeEstimated: false,
+      inflationRatio: 1.5,
+    },
+    regions: [region({ span: [0, source.length] })],
+    spotlights,
+    renamedSpans: [],
+    extractedSpans: [],
+    aggregate: {
+      weakRegions: spotlights.length,
+      leakCount: spotlights.filter((s) => s.severity === "leak").length,
+      renamedCount: 0,
+      extractedCount: 0,
+    },
+  });
+  return {
+    schemaVersion: 5,
+    spanUnits: "utf16",
+    engine: { version: "9.9.9" },
+    files: [
+      entry("src/keys.js", src, [
+        spot(src, '"sk-live-1"', "leak", first),
+        spot(src, "push", "propertyName"),
+        spot(src, '"sk-live-1"', "leak", second),
+        spot(src, "length", "propertyName"),
+        spot(src, '"sk-live-1"', "leak", third),
+        spot(src, '"hello"', "leak"),
+      ]),
+      entry("src/names.js", names, [
+        spot(names, "push", "propertyName"),
+        spot(names, "push", "propertyName", 20),
+      ]),
+    ],
+  };
+}
+
+test("U. the weak-spots panel lists each readable string once and counts property names apart", async () => {
+  const v = await loadViewer(docWithWeakSpots(), { hash: "#file=src/keys.js" });
+  const file = v.FILES[0];
+  assert.equal(file.weakSpotCount, 4, "every readable string counts");
+  assert.equal(file.propertyNameCount, 2);
+  assert.equal(v.byId("weakspots-title").textContent, "Weak spots (4)");
+
+  const html = v.byId("weakspots-list").innerHTML;
+  assert.equal(
+    html.match(/class="weakspot"/g).length,
+    2,
+    "a repeated string is one row, not three",
+  );
+  assert.match(html, /data-spot-count="3"/);
+  assert.match(html, /×3/);
+  assert.match(html, /appears in 3 places in this file/);
+  assert.ok(
+    !/weakspot-sample">(push|length)</.test(html),
+    "no property name is listed as a weak spot",
+  );
+  assert.match(html, /data-property-names="2"/);
+  assert.match(html, /2 property names stay readable/);
+
+  const groups = v.weakSpotGroups(file);
+  assert.equal(groups.map((g) => g.members.map((s) => s.idx).join(",")).join(" | "), "0,2,4 | 5");
+  assert.match(html, /data-jump-spotlight="0" data-jump-cycle="0,2,4"/);
+  const btn = { dataset: { jumpSpotlight: "0", jumpCycle: "0,2,4" } };
+  assert.equal(
+    [v.nextJumpIdx(btn), v.nextJumpIdx(btn), v.nextJumpIdx(btn), v.nextJumpIdx(btn)].join(","),
+    "0,2,4,0",
+    "Show in code steps through every place the string appears, then wraps",
+  );
+
+  const namesOnly = v.FILES[1];
+  assert.equal(namesOnly.weakSpotCount, 0);
+  assert.equal(namesOnly.propertyNameCount, 2);
+  assert.ok(!v.isWeakFile(namesOnly), "a file with only property names is not a weak file");
+  v.renderWeakSpots(namesOnly);
+  assert.equal(v.byId("weakspots-title").textContent, "Weak spots (0)");
+  const quiet = v.byId("weakspots-list").innerHTML;
+  assert.match(quiet, /None in this file\./);
+  assert.match(quiet, /2 property names stay readable/);
+  assert.ok(!/class="weakspot"/.test(quiet));
+  assert.equal(v.byId("workspace-summary").textContent, "4 weak spots");
+  assert.match(
+    v.byId("workspace-summary").getAttribute("data-tip"),
+    /4 property names stay readable/,
+  );
 });

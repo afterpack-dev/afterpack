@@ -208,7 +208,7 @@ function richDoc() {
             "destroyed-fused": 0,
             maxClassReached: "renamed-encoded",
           },
-          directives: [{ keyword: "destroy", span: [0, 4], target: 80, floor: true }],
+          directives: [{ keyword: "preset", span: [0, 4], target: 80, floor: true }],
         },
         renamedSpans: [
           [3, 7],
