@@ -76,6 +76,19 @@ const SPECS: FixtureSpec[] = [
     weight: 30,
   },
   {
+    name: "vite-react-router",
+    dir: "packages/vite/e2e/react-router",
+    build: "npm run build",
+    targets: { client: "build/client", server: "build/server" },
+    port: 4323,
+    serve: "node serve.mjs {port}",
+    baseline: {
+      env: { AFTERPACK_E2E_DIST_DIR: "build-baseline" },
+      receipts: ["build-baseline/client", "build-baseline/server"],
+    },
+    weight: 15,
+  },
+  {
     name: "vite-worker",
     dir: "packages/vite/e2e/worker",
     build: "npm run build",

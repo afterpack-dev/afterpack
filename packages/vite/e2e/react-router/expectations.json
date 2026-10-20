@@ -1,0 +1,66 @@
+{
+  "framework": "react-router",
+  "frameworkClass": "ssr",
+  "description": "React Router 7 in framework mode on Vite 8, server-rendered through @react-router/express: route modules loaded on navigation, loaders and a zod-validated action that keep notes in a cookie session, React context state across routes, and a report route that reads the notes through a class with private fields and getters. @afterpack/vite protects both the client and the server build.",
+  "seed": 618204937,
+  "deterministicOutput": true,
+  "build": {
+    "outputDir": "build",
+    "bundles": [
+      "client",
+      "server"
+    ],
+    "note": "react-router build runs the client and the server Vite builds; @afterpack/vite obfuscates each on generateBundle. AFTERPACK_E2E_DIST_DIR moves the baseline build beside it."
+  },
+  "obfuscation": {
+    "minFiles": 8,
+    "passes": 2
+  },
+  "hashedNames": {
+    "pattern": "^client:assets/.+-[A-Za-z0-9_-]{8}\\.js$",
+    "minRenamed": 5
+  },
+  "smoke": {
+    "routes": [
+      {
+        "path": "/",
+        "status": 200,
+        "textContains": [
+          "React Router framework fixture"
+        ],
+        "selectors": {
+          "[data-testid=\"title\"]": "React Router framework fixture",
+          "[data-testid=\"intro\"]": "AfterPack framework-integration smoke fixture."
+        }
+      },
+      {
+        "path": "/notes",
+        "status": 200,
+        "selectors": {
+          "h1": "Notes"
+        }
+      },
+      {
+        "path": "/reports",
+        "status": 200,
+        "selectors": {
+          "[data-testid=\"report-summary\"]": "0 notes, 0 words"
+        }
+      }
+    ],
+    "interactions": [
+      {
+        "route": "/",
+        "description": "The server-rendered page hydrates; the counter increments on click.",
+        "click": "[data-testid=\"counter\"]",
+        "expectTextContains": [
+          "count is 1 (odd)"
+        ]
+      }
+    ],
+    "hydration": {
+      "assertNoMismatch": true
+    },
+    "consoleErrors": "none"
+  }
+}

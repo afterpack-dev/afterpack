@@ -1,0 +1,10 @@
+node_modules/
+build/
+build-baseline/
+.react-router/
+
+.afterpack/
+*.protectionMap.html
+protectionMap.html
+*.backup.*
+*.map
