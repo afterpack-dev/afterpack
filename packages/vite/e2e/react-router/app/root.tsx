@@ -1,5 +1,5 @@
 import { Links, Meta, NavLink, Outlet, Scripts, ScrollRestoration } from "react-router";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { CounterProvider } from "./counter";
 
 export const links = () => [{ rel: "icon", type: "image/svg+xml", href: "/favicon.svg" }];
@@ -24,6 +24,8 @@ export function Layout({ children }: { children: ReactNode }) {
 }
 
 export default function App() {
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
   return (
     <CounterProvider>
       <nav aria-label="Main">
@@ -33,7 +35,7 @@ export default function App() {
         <NavLink to="/notes">Notes</NavLink>
         <NavLink to="/reports">Reports</NavLink>
       </nav>
-      <main>
+      <main data-app-ready={hydrated ? "" : undefined}>
         <Outlet />
       </main>
     </CounterProvider>

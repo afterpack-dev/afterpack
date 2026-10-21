@@ -1,7 +1,7 @@
 {
   "framework": "react-router",
   "frameworkClass": "ssr",
-  "description": "React Router 7 in framework mode on Vite 8, server-rendered through @react-router/express: route modules loaded on navigation, loaders and a zod-validated action that keep notes in a cookie session, React context state across routes, and a report route that reads the notes through a class with private fields and getters. @afterpack/vite protects both the client and the server build.",
+  "description": "React Router 7 in framework mode on Vite 8, server-rendered through @react-router/express: route modules loaded on navigation, loaders and a zod-validated action that keep notes in a cookie session, React context state across routes, and a report route that reads the notes through a class with private fields and getters. @afterpack/vite protects both the client and the server build. The server-rendered page shows its content before it hydrates, so the app sets <main data-app-ready> once it has, and the smoke check and the scenarios wait for smoke.readySelector before they click.",
   "seed": 618204937,
   "deterministicOutput": true,
   "build": {
@@ -21,6 +21,7 @@
     "minRenamed": 5
   },
   "smoke": {
+    "readySelector": "main[data-app-ready]",
     "routes": [
       {
         "path": "/",

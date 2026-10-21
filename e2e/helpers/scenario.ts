@@ -8,14 +8,18 @@ import {
   test,
 } from "@playwright/test";
 import { currentFixture } from "./current.js";
+import { readExpectations } from "./expectations.js";
 import { stripHashes } from "./normalize.js";
 import type { Fixture } from "./registry.js";
+import { waitUntilReady } from "./smoke.js";
 
 export type BuildKind = "baseline" | "protected";
 
 export interface ScenarioRun {
   page: Page;
   build: BuildKind;
+  goto(path: string): Promise<void>;
+  reload(): Promise<void>;
   checkpoint(label: string, scope?: Locator): Promise<void>;
   inPlace(label: string, action: () => Promise<unknown>): Promise<void>;
 }
@@ -83,6 +87,7 @@ export async function recordScenario(
 ): Promise<Recording> {
   const baseURL = serverOf(app, build);
   const origin = new URL(baseURL).origin;
+  const readySelector = readExpectations(app).smoke?.readySelector;
   const context = await browser.newContext({ baseURL });
   const page = await context.newPage();
   const recording: Recording = {
@@ -157,6 +162,13 @@ export async function recordScenario(
   const run: ScenarioRun = {
     page,
     build,
+    async goto(path) {
+      await waitUntilReady(page, await page.goto(path), readySelector, `${build} ${path}`);
+    },
+    async reload() {
+      const where = `${build} reload of ${normalizeUrl(page.url(), origin)}`;
+      await waitUntilReady(page, await page.reload(), readySelector, where);
+    },
     async checkpoint(label, scope) {
       await settle();
       recording.snapshots.push([label, await (scope ?? page.locator("body")).ariaSnapshot()]);

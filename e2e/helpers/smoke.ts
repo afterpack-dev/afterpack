@@ -86,13 +86,12 @@ function servedStatus(response: Response | null, expected: number): number | und
   return status === 304 && expected === 200 ? 200 : status;
 }
 
-async function waitUntilReady(
+export async function waitUntilReady(
   page: Page,
   response: Response | null,
-  smoke: SmokeExpectations,
+  ready: string | undefined,
   where: string,
 ): Promise<void> {
-  const ready = smoke.readySelector;
   if (!ready) return;
   const served = (await response?.text()) ?? "";
   const readyAsServed = await page.evaluate(
@@ -116,7 +115,7 @@ export async function visitRoutes(
     expect(servedStatus(response, route.status), `${route.path}: unexpected status`).toBe(
       route.status,
     );
-    await waitUntilReady(page, response, smoke, route.path);
+    await waitUntilReady(page, response, smoke.readySelector, route.path);
     for (const needle of route.textContains ?? []) {
       await contentContains(page, needle, route.path);
     }
@@ -144,7 +143,7 @@ export async function runInteractions(
 ): Promise<void> {
   for (const interaction of smoke.interactions ?? []) {
     const response = await page.goto(`${baseURL}${interaction.route}`);
-    await waitUntilReady(page, response, smoke, interaction.route);
+    await waitUntilReady(page, response, smoke.readySelector, interaction.route);
     await page.locator(interaction.click).click();
     for (const needle of interaction.expectTextContains ?? []) {
       await contentContains(

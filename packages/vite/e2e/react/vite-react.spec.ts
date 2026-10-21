@@ -23,8 +23,8 @@ import { hashedNamesTest } from "@e2e/helpers/hashed-names.js";
 const app = fixture("vite-react");
 const expectations = readExpectations(app);
 
-const firstVisit: ScenarioSteps = async ({ page, checkpoint }) => {
-  await page.goto("/");
+const firstVisit: ScenarioSteps = async ({ page, goto, checkpoint }) => {
+  await goto("/");
   await expect(page.getByTestId("title")).toHaveText("Vite + React fixture");
   await checkpoint("first visit");
 };

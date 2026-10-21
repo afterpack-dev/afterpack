@@ -36,8 +36,8 @@ function navLink(page: Page, name: string) {
   return page.getByRole("navigation", { name: "Main" }).getByRole("link", { name });
 }
 
-const guestbookJourney: ScenarioSteps = async ({ page, checkpoint, inPlace }) => {
-  await page.goto("/");
+const guestbookJourney: ScenarioSteps = async ({ page, goto, reload, checkpoint, inPlace }) => {
+  await goto("/");
   await page.getByTestId("counter").click();
   await expect(page.getByTestId("counter")).toHaveText("clicked 1 times (odd)");
   await checkpoint("home hydrated");
@@ -87,7 +87,7 @@ const guestbookJourney: ScenarioSteps = async ({ page, checkpoint, inPlace }) =>
     await expect(page.getByTestId("stats-summary")).toHaveText("1 entry, 30 characters");
   });
 
-  await page.reload();
+  await reload();
   await expect(page.getByTestId("stats-summary")).toHaveText("1 entry, 30 characters");
   await expect(page.getByTestId("signed-count")).toHaveText("1 signed");
   await checkpoint("stats restored from localStorage after a reload");

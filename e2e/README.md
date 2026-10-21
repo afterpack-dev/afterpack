@@ -96,8 +96,10 @@ that fixture's other browsers. To repeat one Firefox test, select only that brow
    An app that wires itself only after the page's load event declares `smoke.readySelector` in
    its `expectations.json` and matches it once it is wired: `cli-requirejs-amd`, whose modules
    require.js loads after `load`, sets `<body data-app-ready>` once its click handler is
-   attached. After every navigation the smoke check waits for that selector before it checks or
-   clicks anything, and fails if the served HTML already matches it.
+   attached, and `vite-react-router`, whose server-rendered page shows its content before it
+   hydrates, sets `<main data-app-ready>` once it has. After every navigation the smoke check and
+   a scenario's `goto` and `reload` wait for that selector before anything is checked or clicked,
+   and fail if the served HTML already matches it.
 4. For a fixture with a baseline build, its scenarios behave the same in both builds.
 5. A content-hashed file name always names the same bytes (`hashedNamesTest`, the last test in
    every spec). The check rebuilds the fixture in place with a second seed
@@ -142,9 +144,12 @@ To write one:
    `AFTERPACK_build_autorun=false` into its own output directory, such as `dist-baseline` or
    `.next-baseline`, and serves it on its port plus 100. `receipts` names the baseline's
    counterpart of each output directory a receipt covers.
-2. Write the steps as a function of `{ page, build, checkpoint, inPlace }`. Assert with Playwright's
-   web-first assertions. The steps run once per build, so an assertion that fails names the build
-   it failed in; a baseline failure means the fixture or the scenario is wrong.
+2. Write the steps as a function of `{ page, build, goto, reload, checkpoint, inPlace }`. Assert
+   with Playwright's web-first assertions. The steps run once per build, so an assertion that
+   fails names the build it failed in; a baseline failure means the fixture or the scenario is
+   wrong. Load a document with `goto(path)` and `reload()`, not `page.goto` and `page.reload`:
+   they wait for the fixture's `smoke.readySelector`, so no step acts on a page that is not yet
+   interactive.
 3. `checkpoint(label, scope?)` waits for requests to settle, then records an ARIA snapshot of
    `scope` (the whole body by default). Keep request-time values, such as timestamps, out of it.
 4. `inPlace(label, action)` sets a marker on `window`, runs `action`, and fails if the marker is
@@ -155,8 +160,8 @@ To write one:
 import { expect, test } from "@playwright/test";
 import { type ScenarioSteps, scenario } from "@e2e/helpers/scenario.js";
 
-const journey: ScenarioSteps = async ({ page, checkpoint, inPlace }) => {
-  await page.goto("/");
+const journey: ScenarioSteps = async ({ page, goto, checkpoint, inPlace }) => {
+  await goto("/");
   await inPlace("the Notes link", async () => {
     await page.getByRole("link", { name: "Notes" }).click();
     await expect(page.getByRole("heading", { name: "Notes" })).toBeVisible();
@@ -175,7 +180,7 @@ validated Notes form; a Reports route loaded on demand; and notes that survive a
 specs share the journeys in `e2e/helpers/notes-app.ts`, so a new fixture of that shape needs only
 `scenario(notesJourney("<home title>"))` and `scenario(notesReloadJourney)`. Those journeys are
 tagged `@scenario` and run in the full lane; `vite-react` and `next-app` also run theirs in the
-quick lane. Checkpoint before every reload or `page.goto`: a framework's idle-time prefetch (Nuxt
+quick lane. Checkpoint before every `reload` or `goto`: a framework's idle-time prefetch (Nuxt
 fetches its payloads and app manifest that way) that a new document cuts off never settles, or lands
 in only one build's requests.
 

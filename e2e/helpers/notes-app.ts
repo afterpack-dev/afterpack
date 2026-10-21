@@ -9,8 +9,8 @@ export function navLink(page: Page, name: string) {
 }
 
 export function notesJourney(homeTitle: string): ScenarioSteps {
-  return async ({ page, checkpoint, inPlace }) => {
-    await page.goto("/");
+  return async ({ page, goto, checkpoint, inPlace }) => {
+    await goto("/");
     await expect(page.getByTestId("title")).toHaveText(homeTitle);
     await page.getByTestId("counter").click();
     await page.getByTestId("counter").click();
@@ -62,19 +62,19 @@ export function notesJourney(homeTitle: string): ScenarioSteps {
   };
 }
 
-export const notesReloadJourney: ScenarioSteps = async ({ page, checkpoint }) => {
-  await page.goto("/notes");
+export const notesReloadJourney: ScenarioSteps = async ({ page, goto, reload, checkpoint }) => {
+  await goto("/notes");
   await page.getByLabel("Title").fill("Persisted");
   await page.getByLabel("Body").fill("Survives a reload");
   await page.getByRole("button", { name: "Add note" }).click();
   await expect(page.getByRole("status")).toHaveText("Saved note 1: Persisted");
   await checkpoint("note saved before the reload");
 
-  await page.reload();
+  await reload();
   await expect(page.getByRole("status")).toHaveText("");
   await expect(page.getByRole("list", { name: "Saved notes" })).toContainText("Survives a reload");
   await checkpoint("notes restored after the reload");
-  await page.goto("/reports");
+  await goto("/reports");
   await expect(page.getByTestId("report-summary")).toHaveText("1 note, 4 words");
   await checkpoint("report after reload");
 };
