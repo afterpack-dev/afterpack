@@ -76,7 +76,8 @@ Rules:
 - `.afterpack/backups/<output dir>/`: the original files, on by default for the CLI, so
   `afterpack restore` can undo the run. `--build.backup=false` turns it off. Each output directory
   has its own backup and lock, so parallel builds of different apps don't collide.
-- `.afterpack/protectionMap.html`: the Protection Map report, when the build has source maps.
+- `.afterpack/protectionMap.html`: the Protection Map report, when the build has source maps
+  (outside CI, unless `protectionMap.enabled` is `true`).
 - `.map` files beside the output, only with `--sourceMap.enabled` or on a development run
   (`--build.mode=development` or `NODE_ENV=development`) when an input map exists.
 
@@ -85,10 +86,10 @@ own source maps, hidden ones included, and the `sourceMappingURL` comments that 
 
 Every front door puts `.afterpack/` next to the nearest lockfile, `afterpack.json` or `.git` above
 the build directory, failing those the nearest `package.json`, otherwise beside the build
-directory, never inside it (`cd public && npx afterpack .` keeps it beside `public/`). A
+directory, never inside it (`cd public && npx afterpack@latest .` keeps it beside `public/`). A
 `package.json` the build emits, such as Nitro's `.output/server/package.json` or a dual package's
 `dist/cjs/package.json`, never moves it. For a single file, the file's own directory counts when it
-holds a lockfile, `afterpack.json` or `.git`, so `npx afterpack app.js` in such a root keeps
+holds a lockfile, `afterpack.json` or `.git`, so `npx afterpack@latest app.js` in such a root keeps
 `.afterpack/` there. The place does not depend on the working directory, so a re-run over the same
 output or the same file is refused from anywhere. A run fails if it finds a `.afterpack/` inside
 the output, and removes a `.afterpack-protection.json` an older version left there.

@@ -87,7 +87,8 @@ export default new Optimizer<ParcelConfig, void>({
           message:
             "`paths.include` is not supported here — an Optimizer is handed each packaged bundle " +
             "in memory, so there is no output-directory walk for a glob to re-admit anything " +
-            "into. Use `npx afterpack <dir> --paths.include=...` for a disk walk, or drop the key.",
+            "into. Use `npx afterpack@latest <dir> --paths.include=...` for a disk walk, or drop " +
+            "the key.",
           origin: PLUGIN_NAME,
         },
       });

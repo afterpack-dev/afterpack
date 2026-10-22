@@ -30,8 +30,8 @@ import type { NormalizedOutputOptions, OutputBundle, Plugin } from "rollup";
 
 const PATHS_INCLUDE_UNSUPPORTED =
   "this plugin obfuscates Rollup's own bundle, in the pipeline — there is no output-directory " +
-  "walk for a glob to re-admit anything into. Use `npx afterpack <dir> --paths.include=...` for " +
-  "a disk walk, or drop the key.";
+  "walk for a glob to re-admit anything into. Use `npx afterpack@latest <dir> " +
+  "--paths.include=...` for a disk walk, or drop the key.";
 
 export type AfterpackRollupOptions = AfterpackPluginOptions;
 

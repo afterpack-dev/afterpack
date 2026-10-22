@@ -42,7 +42,7 @@ const SRI_CONFLICT =
 
 const PATHS_INCLUDE_UNSUPPORTED =
   "this plugin obfuscates the assets webpack's own chunks claim, in the pipeline — there is no " +
-  "output-directory walk for a glob to re-admit anything into. Use `npx afterpack <dir> " +
+  "output-directory walk for a glob to re-admit anything into. Use `npx afterpack@latest <dir> " +
   "--paths.include=...` for a disk walk, or drop the key.";
 
 export type AfterpackWebpackOptions = AfterpackPluginOptions;
