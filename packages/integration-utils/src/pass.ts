@@ -927,7 +927,9 @@ export async function runObfuscationPass(
           engineSource === "cloud" ? safeVersionString(batch.engineVersion) : localEngineDisplay,
         );
   const engineSuffix =
-    style !== "cli" && ranEngine !== null && ranEngine !== announcedEngine ? ` · ${ranEngine}` : "";
+    ranEngine !== null && (style === "cli" || ranEngine !== announcedEngine)
+      ? ` · ${ranEngine}`
+      : "";
   logger.log(
     formatPassSummary(
       {

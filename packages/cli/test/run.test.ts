@@ -106,6 +106,20 @@ describe("run", () => {
     expect(text).not.toContain("detected Vite");
   });
 
+  it("names the installed engine on the summary line", async () => {
+    writeFileSync(join(buildDir, "app.js"), "export const a = 1;");
+    const code = await run({
+      argv: ["dist", "--protectionMap.enabled=false"],
+      cwd: root,
+      engine: { processBatch },
+      logger,
+      version: "9.9.9",
+      client: { packageName: "afterpack", packageVersion: "9.9.9", coreVersion: "0.2.5-rc.1" },
+    });
+    expect(code).toBe(0);
+    expect(out.find((l) => l.includes("Protected 1 file"))).toMatch(/ · engine 0\.2\.5-rc\.1$/);
+  });
+
   it("prints help and version and exits 0 without touching the engine", async () => {
     expect(await invoke(["--help"])).toBe(0);
     expect(out.join("\n")).toContain("usage: afterpack");

@@ -2208,6 +2208,40 @@ describe("runObfuscationPass names the engine in its build log", () => {
     expect(cap.logs.find((l) => l.includes("Protected"))).toMatch(/ · cloud engine 0\.3\.0$/);
     expect(receiptIn(outDir).engineVersion).toBe("0.3.0");
   });
+
+  it("names the engine on the CLI summary line, which has no obfuscating line before it", async () => {
+    const a = join(outDir, "a.js");
+    writeFileSync(a, "export const a = 1;");
+    const local = silentLogger();
+    await runObfuscationPass({
+      ...baseOptions([a], makeEngine(() => ({}), "local", "1.0.0").engine),
+      client: client("1.0.0-rc.202610210240"),
+      summaryStyle: "cli",
+      logger: local.logger,
+    });
+    expect(local.logs.some((l) => l.includes("obfuscating"))).toBe(false);
+    expect(local.logs.find((l) => l.includes("Protected"))).toMatch(
+      / · engine 1\.0\.0-rc\.202610210240$/,
+    );
+
+    const file = join(outDir, "b.js");
+    writeFileSync(file, "x");
+    const cloud = silentLogger();
+    await runObfuscationPass({
+      ...baseOptions([file], cloudBatchEngine("0.3.0")),
+      env: { AFTERPACK_KEY: "k" },
+      cloudEngineExpectation: {
+        engineVersion: "0.3.0",
+        nonce: null,
+        cloud: true,
+        probedCloudVersion: "0.3.0",
+        probeFailed: false,
+      },
+      summaryStyle: "cli",
+      logger: cloud.logger,
+    });
+    expect(cloud.logs.find((l) => l.includes("Protected"))).toMatch(/ · cloud engine 0\.3\.0$/);
+  });
 });
 
 describe("sourceType", () => {
