@@ -297,6 +297,7 @@ describe("AfterpackWebpackPlugin protection receipt", () => {
     expect(existsSync(receiptPath)).toBe(true);
     const receipt = JSON.parse(readFileSync(receiptPath, "utf8"));
     expect(receipt.files.map((f: { path: string }) => f.path)).toEqual(["main.js"]);
+    expect(receipt.bundler).toBe("webpack");
     expect(readdirSync(outDir)).toEqual(["main.js"]);
   });
 

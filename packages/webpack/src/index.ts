@@ -350,6 +350,7 @@ export class AfterpackWebpackPlugin {
       ...passSettings({ options: this.settings, engineConfig: this.engineConfig }),
       sourceType: sourceTypeForOutputFormat(outputModule ? "module" : undefined),
       hasBundlerSourcemap: typeof devtool === "string" && devtool.includes("source-map"),
+      receipt: { bundler: "webpack" },
       messages: {
         autoEnableBundlerSourcemap:
           "protectionMap:true but no bundler sourcemap was found; set `devtool: 'source-map'` " +

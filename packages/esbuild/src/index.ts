@@ -101,6 +101,7 @@ export function afterpackEsbuild(options: AfterpackEsbuildOptions = {}): Plugin 
           ...passSettings(resolved),
           sourceType: sourceTypeForOutputFormat(io.format),
           hasBundlerSourcemap: Boolean(io.sourcemap),
+          receipt: { bundler: "esbuild" },
           postMinify: POST_MINIFY_DIRECTIVE_RECOVERY,
           messages: {
             autoEnableBundlerSourcemap:

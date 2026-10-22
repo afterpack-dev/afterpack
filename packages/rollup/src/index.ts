@@ -187,6 +187,7 @@ export function afterpackRollup(options: AfterpackRollupOptions = {}): Plugin {
           ...passSettings(resolved),
           sourceType: sourceTypeForBundle(outputOptions.format, entries.values()),
           hasBundlerSourcemap: Boolean(outputOptions.sourcemap),
+          receipt: { bundler: "rollup" },
           messages: {
             autoEnableBundlerSourcemap:
               "protectionMap:true but no bundler sourcemap was found; set `output.sourcemap: true` " +

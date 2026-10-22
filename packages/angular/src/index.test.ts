@@ -101,6 +101,7 @@ describe("afterpackAngular", () => {
     expect(existsSync(receiptPath)).toBe(true);
     const receipt = JSON.parse(readFileSync(receiptPath, "utf8"));
     expect(receipt.files.map((f: { path: string }) => f.path)).toEqual(["main.js"]);
+    expect(receipt.bundler).toBe("esbuild");
     expect(readdirSync(browserDir)).toEqual(["main.js"]);
     expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe("");
   });

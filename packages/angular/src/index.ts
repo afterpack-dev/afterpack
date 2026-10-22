@@ -80,6 +80,7 @@ export async function afterpackAngular(options: AfterpackAngularOptions = {}): P
     sourceType: angularSourceType(kinds),
     fileSourceTypes: angularFileSourceTypes(kinds, files),
     directivesEnabled: DIRECTIVES_ALWAYS_DISABLED,
+    receipt: { bundler: "esbuild" },
   });
   recomputeAngularIntegrity(outputRoot, browserDir);
 }

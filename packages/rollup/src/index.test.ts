@@ -167,6 +167,7 @@ describe("afterpackRollup writeBundle (protection receipt)", () => {
     expect(existsSync(receiptPath)).toBe(true);
     const receipt = JSON.parse(readFileSync(receiptPath, "utf8"));
     expect(receipt.files.map((f: { path: string }) => f.path)).toEqual(["index.js"]);
+    expect(receipt.bundler).toBe("rollup");
     expect(readdirSync(outDir)).toEqual(["index.js"]);
   });
 

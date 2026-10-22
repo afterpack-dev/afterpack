@@ -221,6 +221,7 @@ export function afterpackVite(options: AfterpackViteOptions = {}): Plugin {
           ...passSettings(resolved),
           sourceType: sourceTypeForBundle(outputOptions.format, entries.values()),
           hasBundlerSourcemap: buildSourcemap,
+          receipt: { bundler: "vite" },
           messages: {
             autoEnableBundlerSourcemap:
               "protectionMap:true but no bundler sourcemap was found; enabled build.sourcemap " +

@@ -80,6 +80,7 @@ describe("afterpackEsbuild onEnd", () => {
       readFileSync(join(root, ".afterpack", "receipts", "dist.json"), "utf8"),
     );
     expect(receipt.files.map((f: { path: string }) => f.path)).toEqual(["app.js"]);
+    expect(receipt.bundler).toBe("esbuild");
     expect(readdirSync(outDir)).toEqual(["app.js"]);
   });
 

@@ -360,6 +360,7 @@ describe("afterpackVite writeBundle (protection receipt)", () => {
     expect(existsSync(receiptPath)).toBe(true);
     const receipt = JSON.parse(readFileSync(receiptPath, "utf8"));
     expect(receipt.files.map((f: { path: string }) => f.path)).toEqual(["a.js"]);
+    expect(receipt.bundler).toBe("vite");
     expect(readdirSync(outDir)).toEqual(["a.js"]);
   });
 

@@ -150,6 +150,7 @@ export default new Optimizer<ParcelConfig, void>({
         },
       },
       hasBundlerSourcemap: Boolean(bundle.env.sourceMap),
+      receipt: { bundler: "parcel" },
       env: seedEnvCopy,
       logger: {
         warn: (message) => logger.warn({ message: escapeParcelMarkdown(message) }),
