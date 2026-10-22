@@ -39,9 +39,9 @@ the comments that point at them, since a served source map gives your source awa
 
 Each build writes `.afterpack/receipts/.next.json`, a receipt with a hash per obfuscated file.
 `.afterpack/` sits next to your project's lockfile, `afterpack.json` or `.git` (failing those, its
-`package.json`), out of `.next/`, so it never ships with the build. Run `npx afterpack verify .`
-before you deploy. It fails when the receipt is missing, belongs to a different build, or a file
-changed after obfuscation.
+`package.json`), out of `.next/`, so it never ships with the build. Run
+`npx afterpack@latest verify .` before you deploy. It fails when the receipt is missing, belongs to
+a different build, or a file changed after obfuscation.
 
 ## Options
 
@@ -54,7 +54,7 @@ Pass them as the second argument: `withAfterpack(nextConfig, { preset: "hard", s
 | [`identifiers.reserved`][identifiers.reserved] | names never to rename | none |
 | [`paths.exclude`][paths.exclude] | globs for files to leave untouched | none |
 | [`sourceMap.enabled`][sourceMap.enabled] | write source maps for the obfuscated output | off; on in development mode (`build.mode` or `NODE_ENV=development`) when an input map exists |
-| [`protectionMap.enabled`][protectionMap.enabled] | write the Protection Map | on when Next emits browser source maps |
+| [`protectionMap.enabled`][protectionMap.enabled] | write the Protection Map | on when Next emits browser source maps, outside CI |
 | [`build.autorun`][build.autorun] | `false` turns AfterPack off | `true` |
 
 Dotted names are nested objects: `build.backup` is `{ build: { backup: true } }`. Every
@@ -71,8 +71,10 @@ other option is in the [configuration reference](https://www.afterpack.dev/docs/
 `/* @afterpack */` [directives](https://www.afterpack.dev/docs/directives) that raise protection for
 a region are a [Pro](https://www.afterpack.dev/docs/pro) feature. They and a readable [Protection
 Map](https://www.afterpack.dev/docs/protection-map) both need `productionBrowserSourceMaps: true` in
-your Next config. The Protection Map is written to `.afterpack/`, which carries its own `.gitignore`
-and self-ignores. It contains your original source, so never deploy or commit it.
+your Next config. With browser source maps, the Protection Map is written to `.afterpack/`, which
+carries its own `.gitignore` and self-ignores; without them, or in CI, it is off unless
+`protectionMap.enabled` is `true`. It contains your original source, so never deploy or commit
+it.
 
 Options can also live in `afterpack.json` or in `AFTERPACK_*` environment variables. The options
 object wins over the environment, which wins over the file. An unknown or misspelled key fails the

@@ -68,8 +68,9 @@ AFTERPACK_SEED=git npm run build
 
 ## Keep local files out of app.asar
 
-AfterPack writes its Protection Map to `.afterpack/`. It contains your original source, so exclude
-it from the packaged app. The plugin prints this reminder when it finds a packager config:
+When Vite emits source maps, AfterPack writes its Protection Map to `.afterpack/`. It contains your
+original source, so exclude it from the packaged app. The plugin prints this reminder when it finds
+a packager config:
 
 ```jsonc
 // electron-builder
@@ -89,7 +90,7 @@ withAfterpack(config, { preset: "hard", seed: "git" });
 | [`preset`][preset] | `"minify"`, `"light"`, `"medium"`, `"hard"` or `"extreme"` | `"light"` |
 | [`seed`][seed] | a number or string; `"git"` uses the current commit | a new random seed per build, shared by every part |
 | [`identifiers.reserved`][identifiers.reserved] | names never to rename | none |
-| [`protectionMap.enabled`][protectionMap.enabled] | write the Protection Map, one per part in `.afterpack/<leg>/` | on when Vite emits source maps |
+| [`protectionMap.enabled`][protectionMap.enabled] | write the Protection Map, one per part in `.afterpack/<leg>/` | on when Vite emits source maps, outside CI |
 | [`build.autorun`][build.autorun] | `false` turns AfterPack off | `true` |
 | `leg` | plugin option: `"main"`, `"preload"` or `"renderer"`; required for `afterpackElectron` | set by `withAfterpack` |
 | `projectRoot` | plugin option: the app root that ties the parts into one build | `process.cwd()` |

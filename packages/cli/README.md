@@ -128,7 +128,7 @@ An unknown or misspelled option fails the run and names the right spelling.
 | [`--paths.include`][paths.include] | globs to add back to the walk | none |
 | [`--identifiers.reserved`][identifiers.reserved] | names never to rename | none |
 | [`--build.backup`][build.backup] | back up originals to `.afterpack/backups/` | `true` |
-| [`--protectionMap.enabled`][protectionMap.enabled] | write the Protection Map | on when an input map exists |
+| [`--protectionMap.enabled`][protectionMap.enabled] | write the Protection Map | on when an input map exists, outside CI |
 
 Each flag is also a key in `afterpack.json` and an `AFTERPACK_*` variable. Every other option is in
 the [configuration reference](https://www.afterpack.dev/docs/config). The

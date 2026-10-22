@@ -31,8 +31,8 @@ anything you want protected.
 Each build writes a protection receipt to `.afterpack/receipts/`, one per output directory
 (`.afterpack/receipts/dist.json` for `dist`). `.afterpack/` sits next to your project's lockfile,
 `afterpack.json` or `.git` (failing those, its `package.json`), otherwise beside the build
-directory, so the receipt never ships with your build. Run `npx afterpack verify dist` in your
-deploy step to check that what you ship is what was obfuscated.
+directory, so the receipt never ships with your build. Run `npx afterpack@latest verify dist` in
+your deploy step to check that what you ship is what was obfuscated.
 
 ## Options
 
@@ -47,7 +47,7 @@ afterpackVite({ preset: "hard", seed: "git" });
 | [`identifiers.reserved`][identifiers.reserved] | names never to rename | none |
 | [`paths.exclude`][paths.exclude] | globs for files to leave untouched | none |
 | [`sourceMap.enabled`][sourceMap.enabled] | write source maps for the obfuscated output | off; on in development mode (`build.mode` or `NODE_ENV=development`) when Vite emits a map |
-| [`protectionMap.enabled`][protectionMap.enabled] | write the Protection Map | on when Vite emits source maps |
+| [`protectionMap.enabled`][protectionMap.enabled] | write the Protection Map | on when Vite emits source maps, outside CI |
 | [`build.autorun`][build.autorun] | `false` turns AfterPack off | `true` |
 
 Dotted names are nested objects: `sourceMap.enabled` is `{ sourceMap: { enabled: true } }`. Every
@@ -61,8 +61,10 @@ other option is in the [configuration reference](https://www.afterpack.dev/docs/
 [protectionMap.enabled]: https://www.afterpack.dev/docs/config#protectionMap-enabled
 [build.autorun]: https://www.afterpack.dev/docs/config#build-autorun
 
-The [Protection Map](https://www.afterpack.dev/docs/protection-map) is written to `.afterpack/`,
-which carries its own `.gitignore` and self-ignores. It contains your original source, so never
+When Vite emits source maps, the [Protection Map](https://www.afterpack.dev/docs/protection-map)
+is written to `.afterpack/`, which carries its own `.gitignore` and self-ignores. Without source
+maps, or in CI, it is off unless `protectionMap.enabled` is `true`, which also turns on
+`build.sourcemap` when your config leaves it unset. It contains your original source, so never
 deploy or commit it.
 
 Options can also live in `afterpack.json` or in `AFTERPACK_*` environment variables. The options

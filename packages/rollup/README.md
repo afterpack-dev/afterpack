@@ -29,8 +29,8 @@ output directory is left untouched.
 Each build writes a protection receipt to `.afterpack/receipts/`, one per output directory
 (`.afterpack/receipts/dist.json` for `dist`). `.afterpack/` sits next to your project's lockfile,
 `afterpack.json` or `.git` (failing those, its `package.json`), otherwise beside the build
-directory, so the receipt never ships with your build. Run `npx afterpack verify dist` in your
-deploy step to check that what you ship is what was obfuscated.
+directory, so the receipt never ships with your build. Run `npx afterpack@latest verify dist` in
+your deploy step to check that what you ship is what was obfuscated.
 
 ## Options
 
@@ -45,7 +45,7 @@ afterpackRollup({ preset: "hard", seed: "git" });
 | [`identifiers.reserved`][identifiers.reserved] | names never to rename | none |
 | [`paths.exclude`][paths.exclude] | globs for files to leave untouched | none |
 | [`sourceMap.enabled`][sourceMap.enabled] | write source maps for the obfuscated output; off also drops the build's CSS maps | off; on in development mode (`build.mode` or `NODE_ENV=development`) when Rollup emits a map |
-| [`protectionMap.enabled`][protectionMap.enabled] | write the Protection Map | on when `output.sourcemap` is set |
+| [`protectionMap.enabled`][protectionMap.enabled] | write the Protection Map | on when `output.sourcemap` is set, outside CI |
 | [`build.autorun`][build.autorun] | `false` turns AfterPack off | `true` |
 
 Dotted names are nested objects: `sourceMap.enabled` is `{ sourceMap: { enabled: true } }`. Every
@@ -63,9 +63,11 @@ other option is in the [configuration reference](https://www.afterpack.dev/docs/
 a region are a [Pro](https://www.afterpack.dev/docs/pro) feature. In a multi-module bundle they need
 `output.sourcemap: true`. Without it, the plugin skips them and tells you.
 
-The [Protection Map](https://www.afterpack.dev/docs/protection-map) is written to `.afterpack/`,
-outside your output directory; that directory carries its own `.gitignore` and self-ignores. It
-contains your original source, so never publish or commit it.
+When `output.sourcemap` is set, the [Protection Map](https://www.afterpack.dev/docs/protection-map)
+is written to `.afterpack/`, outside your output directory; that directory carries its own
+`.gitignore` and self-ignores. Without source maps, or in CI, it is off unless
+`protectionMap.enabled` is `true`. It contains your original source, so never publish or commit
+it.
 
 Options can also live in `afterpack.json` or in `AFTERPACK_*` environment variables. The options
 object wins over the environment, which wins over the file. An unknown or misspelled key fails the

@@ -38,7 +38,7 @@ directory, so the receipt never ships with the build:
 
 ```sh
 parcel build index.html --reporter @afterpack/parcel-optimizer/reporter
-npx afterpack verify dist   # in the deploy step, before the upload
+npx afterpack@latest verify dist   # in the deploy step, before the upload
 ```
 
 `afterpack verify` fails if a file changed after it was obfuscated, or if there is no receipt. The
@@ -68,7 +68,7 @@ there, ignored by git.
 | [`identifiers.reserved`][identifiers.reserved] | names never to rename | none |
 | [`paths.exclude`][paths.exclude] | globs for files to leave untouched | none |
 | [`sourceMap.enabled`][sourceMap.enabled] | write source maps for the obfuscated output | on in development when an input map exists, off in production |
-| [`protectionMap.enabled`][protectionMap.enabled] | write the Protection Map | on when the bundle has a source map |
+| [`protectionMap.enabled`][protectionMap.enabled] | write the Protection Map | on when the bundle has a source map, outside CI |
 | [`build.autorun`][build.autorun] | `false` turns AfterPack off | `true` |
 
 Every other option is in the [configuration reference](https://www.afterpack.dev/docs/config). An
@@ -84,9 +84,10 @@ unknown or misspelled key fails the build and names the right spelling.
 [build.backup]: https://www.afterpack.dev/docs/config#build-backup
 [paths.include]: https://www.afterpack.dev/docs/config#paths-include
 
-The plugin writes one [Protection Map](https://www.afterpack.dev/docs/protection-map) per bundle to
-`.afterpack/`, which carries its own `.gitignore` and self-ignores. It contains your original
-source, so never deploy or commit it.
+When a bundle has a source map, the plugin writes one
+[Protection Map](https://www.afterpack.dev/docs/protection-map) per bundle to `.afterpack/`, which
+carries its own `.gitignore` and self-ignores. Without source maps, or in CI, it is off unless
+`protectionMap.enabled` is `true`. It contains your original source, so never deploy or commit it.
 
 ## Things to know
 

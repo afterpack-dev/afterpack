@@ -124,7 +124,7 @@ minification.
 | [`identifiers.reserved`][identifiers.reserved] | names never to rename | `[]` |
 | [`build.backup`][build.backup] | keep originals in `.afterpack/backups/` | `true` for the CLI, `false` in plugins |
 | [`sourceMap.enabled`][sourceMap.enabled] | write `.map` files | off; on in development mode when an input map exists |
-| [`protectionMap.enabled`][protectionMap.enabled] | write the Protection Map | on when an input map exists |
+| [`protectionMap.enabled`][protectionMap.enabled] | write the Protection Map | on when an input map exists, outside CI |
 | [`diagnostics.format`][diagnostics.format] | `text` or `json` | `text` |
 | [`diagnostics.level`][diagnostics.level] | `summary`, `all` or `none` (errors still print) | `summary` |
 | [`build.autorun`][build.autorun] | `false` turns AfterPack off for the project, CLI and plugins alike | `true` |
