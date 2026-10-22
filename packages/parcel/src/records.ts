@@ -9,6 +9,7 @@ export interface BundleRecord {
   seed: string;
   seedOrigin: string;
   transformed: boolean;
+  bundler?: string;
 }
 
 function afterpackDirOf(projectRoot: string): string {
@@ -48,6 +49,7 @@ export function readBundleRecord(projectRoot: string, bundleId: string): BundleR
     if (raw === null || typeof raw !== "object") return null;
     const record = raw as Partial<BundleRecord>;
     if (typeof record.tool !== "string" || typeof record.transformed !== "boolean") return null;
+    if (record.bundler !== undefined && typeof record.bundler !== "string") return null;
     return record as BundleRecord;
   } catch {
     return null;

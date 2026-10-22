@@ -85,7 +85,7 @@ export default new Reporter({
         engineVersion: agreed(records.map((r) => r.engineVersion)),
         seed: joined(records.map((r) => r.seed)),
         seedOrigin: joined(records.map((r) => r.seedOrigin)),
-        bundler: "parcel",
+        bundler: records[0].bundler ?? "parcel",
         buildId: null,
         files: tree.files,
         transformed: tree.transformed,

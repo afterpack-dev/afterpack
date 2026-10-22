@@ -134,6 +134,16 @@ describe("the Parcel receipt reporter", () => {
     expect(readdirSync(dist).sort()).toEqual(["app.05f9e6d8.js", "index.html", "lazy"]);
   });
 
+  it("names the bundler the optimizer recorded, and parcel for a record without one", () => {
+    writeBundleRecord(root, "app", record({ bundler: "parcel-test" }));
+    report([bundle({ id: "app", file: "app.05f9e6d8.js" })]);
+    expect(receiptIn(dist).bundler).toBe("parcel-test");
+
+    writeBundleRecord(root, "app", record());
+    report([bundle({ id: "app", file: "app.05f9e6d8.js" })]);
+    expect(receiptIn(dist).bundler).toBe("parcel");
+  });
+
   it("removes a stale receipt an earlier build left in the dist dir", () => {
     writeFileSync(join(dist, ".afterpack-protection.json"), "{}");
     writeBundleRecord(root, "app", record());

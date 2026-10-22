@@ -350,6 +350,7 @@ describe("the record the receipt reporter reads", () => {
       seed: "42",
       seedOrigin: "option",
       transformed: true,
+      bundler: "parcel",
     });
     expect(readFileSync(join(root, ".afterpack", ".gitignore"), "utf8")).not.toBe("");
   });

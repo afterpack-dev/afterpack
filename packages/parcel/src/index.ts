@@ -213,6 +213,7 @@ export default new Optimizer<ParcelConfig, void>({
         seed: String(receipt.seed),
         seedOrigin: receipt.seedOrigin,
         transformed: receipt.transformed.includes(projectedFilePath),
+        bundler: receipt.bundler,
       });
     }
 
