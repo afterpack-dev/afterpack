@@ -6,7 +6,8 @@ import { currentFixture } from "./current.js";
 import { receiptOf } from "./receipt.js";
 import type { Fixture } from "./registry.js";
 
-const PASS_LEVEL = /obfuscating \d+ file\(s\) at (.+?) \.\.\./g;
+const PASS_LEVEL =
+  /obfuscating \d+ file\(s\) at (.+?)(?: with (?:the )?(?:cloud )?engine(?: \S+)?)? \.\.\./g;
 const REGIONS_SENT = /applied (\d+) directive region\(s\)/g;
 
 export function presetProblems(log: string, preset: string): string[] {

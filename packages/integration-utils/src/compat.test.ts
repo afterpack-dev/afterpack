@@ -15,6 +15,7 @@ import {
   coreSupportsFileSourceType,
   coreSupportsSourceType,
   FILE_SOURCE_TYPE_MIN_CORE_VERSION,
+  installedEngineVersion,
   isBelowVersion,
   MIN_CORE_VERSION,
   npxAlternative,
@@ -111,6 +112,39 @@ describe("resolveClientIdentity", () => {
       coreVersion: null,
     });
     expect(clientString(resolveClientIdentity(moduleUrl))).toBeNull();
+  });
+
+  it("reads the core's version from its entry's package when the exports map hides package.json", () => {
+    const { moduleUrl, pkgDir } = stagePackage("@afterpack/vite", "1.0.0", null);
+    const coreDir = join(pkgDir, "node_modules", "@afterpack", "core");
+    mkdirSync(join(coreDir, "dist"), { recursive: true });
+    writeFileSync(
+      join(coreDir, "package.json"),
+      JSON.stringify({
+        name: "@afterpack/core",
+        version: "1.0.0-rc.202610210240",
+        exports: { ".": { require: "./dist/index.js" } },
+      }),
+    );
+    writeFileSync(join(coreDir, "dist", "package.json"), JSON.stringify({ type: "commonjs" }));
+    writeFileSync(join(coreDir, "dist", "index.js"), "module.exports = {};");
+    expect(resolveClientIdentity(moduleUrl).coreVersion).toBe("1.0.0-rc.202610210240");
+  });
+});
+
+describe("installedEngineVersion", () => {
+  it("prefers the package version when it is the engine's release", () => {
+    expect(installedEngineVersion("1.0.0-rc.202610210240", "1.0.0")).toBe("1.0.0-rc.202610210240");
+  });
+
+  it("keeps the engine's own version when the package is another release", () => {
+    expect(installedEngineVersion("0.9.0", "1.0.0")).toBe("1.0.0");
+  });
+
+  it("uses whichever is known, and only well-formed versions", () => {
+    expect(installedEngineVersion(null, "1.0.0")).toBe("1.0.0");
+    expect(installedEngineVersion("1.0.0-rc.1", null)).toBe("1.0.0-rc.1");
+    expect(installedEngineVersion("not a version", "bad\nline")).toBeNull();
   });
 });
 

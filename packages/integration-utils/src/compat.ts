@@ -53,14 +53,47 @@ function ownPackage(moduleUrl: string | URL): { name: string; version: string } 
   }
 }
 
+function corePackageJsonPath(moduleUrl: string | URL): string | null {
+  const require = createRequire(moduleUrl);
+  try {
+    return require.resolve(`${CORE_PACKAGE}/package.json`);
+  } catch {}
+  try {
+    let dir = dirname(require.resolve(CORE_PACKAGE));
+    for (;;) {
+      const path = findUpward(dir, "package.json");
+      if (!path) return null;
+      if (readPackageJson(path)?.name === CORE_PACKAGE) return path;
+      const parent = dirname(dirname(path));
+      if (parent === dirname(path)) return null;
+      dir = parent;
+    }
+  } catch {
+    return null;
+  }
+}
+
 function installedCoreVersion(moduleUrl: string | URL): string | null {
   try {
-    const path = createRequire(moduleUrl).resolve(`${CORE_PACKAGE}/package.json`);
-    const pkg = readPackageJson(path);
+    const path = corePackageJsonPath(moduleUrl);
+    const pkg = path ? readPackageJson(path) : null;
     return pkg?.name === CORE_PACKAGE ? safeVersionString(pkg.version) : null;
   } catch {
     return null;
   }
+}
+
+export function installedEngineVersion(
+  packageVersion: string | null,
+  engineVersion: string | null,
+): string | null {
+  const pkg = safeVersionString(packageVersion);
+  const engine = safeVersionString(engineVersion);
+  if (pkg === null) return engine;
+  if (engine === null) return pkg;
+  const a = releaseTriple(pkg);
+  const b = releaseTriple(engine);
+  return a && b && a.every((part, i) => part === b[i]) ? pkg : engine;
 }
 
 const identities = new Map<string, ClientIdentity>();

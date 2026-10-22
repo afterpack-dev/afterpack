@@ -18,6 +18,7 @@ import {
   clientString,
   coreSupportsFileSourceType,
   coreSupportsSourceType,
+  installedEngineVersion,
   safeVersionString,
   toCloudApiError,
 } from "./compat.js";
@@ -41,6 +42,7 @@ import { detectGitContext } from "./git.js";
 import {
   afterpackHashSalt,
   cloudEngineMismatch,
+  isCloudBuild,
   readEngineVersion,
   resolveSaltEngine,
   type SaltEngine,
@@ -308,6 +310,11 @@ function removeBundlerSourceMaps(input: {
   if (sweepDir != null && !policy.sourceMap) {
     stripCssSourceMappingURLs(collectStylesheets(sweepDir));
   }
+}
+
+function describeEngine(source: EngineSource, version: string | null): string | null {
+  if (source === "cloud") return version ? `cloud engine ${version}` : "the cloud engine";
+  return version ? `engine ${version}` : null;
 }
 
 function describeLevel(preset: Preset | undefined, complexity: number | undefined): string {
@@ -629,10 +636,18 @@ export async function runObfuscationPass(
       input.source = source;
     }
   }
+  const localEngineDisplay = installedEngineVersion(
+    options.client?.coreVersion ?? null,
+    localEngineVersion,
+  );
+  const announcedEngine = isCloudBuild(env)
+    ? describeEngine("cloud", saltEngine?.probedCloudVersion ?? null)
+    : describeEngine("local", localEngineDisplay);
   if (style !== "cli") {
+    const engineClause = announcedEngine ? ` with ${announcedEngine}` : "";
     logger.log(
       prefix(
-        `obfuscating ${inputs.length} file(s) at ${describeLevel(options.preset, options.complexity)} ...`,
+        `obfuscating ${inputs.length} file(s) at ${describeLevel(options.preset, options.complexity)}${engineClause} ...`,
       ),
     );
   }
@@ -904,6 +919,15 @@ export async function runObfuscationPass(
     summaryVerbosity === "all"
       ? ` · seed ${seed} (${resolvedSeed.mismatch ? "MISMATCH" : resolvedSeed.origin})`
       : "";
+  const ranEngine =
+    engineSource === null
+      ? null
+      : describeEngine(
+          engineSource,
+          engineSource === "cloud" ? safeVersionString(batch.engineVersion) : localEngineDisplay,
+        );
+  const engineSuffix =
+    style !== "cli" && ranEngine !== null && ranEngine !== announcedEngine ? ` · ${ranEngine}` : "";
   logger.log(
     formatPassSummary(
       {
@@ -916,7 +940,9 @@ export async function runObfuscationPass(
       },
       style,
       options.colorGlyph,
-    ) + seedSuffix,
+    ) +
+      engineSuffix +
+      seedSuffix,
   );
 
   return {
