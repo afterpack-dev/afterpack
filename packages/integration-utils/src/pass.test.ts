@@ -2099,6 +2099,7 @@ describe("runObfuscationPass — the protection receipt it writes", () => {
 });
 
 describe("runObfuscationPass names the engine in its build log", () => {
+  const floorRc = `${MIN_CORE_VERSION}-rc.202610210240`;
   const receiptIn = (dir: string): ProtectionReceipt =>
     JSON.parse(readFileSync(receiptFor(dir), "utf8"));
   const client = (coreVersion: string | null) => ({
@@ -2123,20 +2124,20 @@ describe("runObfuscationPass names the engine in its build log", () => {
   it("names the installed @afterpack/core package version, so a release candidate shows as one", async () => {
     const a = join(outDir, "a.js");
     writeFileSync(a, "export const a = 1;");
-    const { engine } = makeEngine(() => ({}), "local", "1.0.0");
+    const { engine } = makeEngine(() => ({}), "local", MIN_CORE_VERSION);
     const cap = silentLogger();
 
     await runObfuscationPass({
       ...baseOptions([a], engine),
-      client: client("1.0.0-rc.202610210240"),
+      client: client(floorRc),
       logger: cap.logger,
     });
 
     expect(cap.logs).toContain(
-      '[afterpack-test] obfuscating 1 file(s) at preset "light" with engine 1.0.0-rc.202610210240 ...',
+      `[afterpack-test] obfuscating 1 file(s) at preset "light" with engine ${floorRc} ...`,
     );
     expect(cap.logs.find((l) => l.includes("Protected"))).not.toContain("engine");
-    expect(receiptIn(outDir).engineVersion).toBe("1.0.0");
+    expect(receiptIn(outDir).engineVersion).toBe(MIN_CORE_VERSION);
   });
 
   it("names the engine's own version when the installed package is another release", async () => {
@@ -2184,7 +2185,7 @@ describe("runObfuscationPass names the engine in its build log", () => {
     await runObfuscationPass({
       ...baseOptions([file], cloudBatchEngine("0.3.0")),
       env: { AFTERPACK_KEY: "k" },
-      client: client("1.0.0-rc.1"),
+      client: client(`${MIN_CORE_VERSION}-rc.1`),
       cloudEngineExpectation: {
         engineVersion: "0.3.0",
         nonce: null,
@@ -2220,14 +2221,14 @@ describe("runObfuscationPass names the engine in its build log", () => {
     writeFileSync(a, "export const a = 1;");
     const local = silentLogger();
     await runObfuscationPass({
-      ...baseOptions([a], makeEngine(() => ({}), "local", "1.0.0").engine),
-      client: client("1.0.0-rc.202610210240"),
+      ...baseOptions([a], makeEngine(() => ({}), "local", MIN_CORE_VERSION).engine),
+      client: client(floorRc),
       summaryStyle: "cli",
       logger: local.logger,
     });
     expect(local.logs.some((l) => l.includes("obfuscating"))).toBe(false);
-    expect(local.logs.find((l) => l.includes("Protected"))).toMatch(
-      / · engine 1\.0\.0-rc\.202610210240$/,
+    expect(local.logs.find((l) => l.includes("Protected"))?.endsWith(` · engine ${floorRc}`)).toBe(
+      true,
     );
 
     const file = join(outDir, "b.js");
