@@ -11,7 +11,7 @@ import {
 import { findUpward } from "./paths.js";
 import { isPlainObject } from "./registry.js";
 
-export const MIN_CORE_VERSION = "0.2.0";
+export const MIN_CORE_VERSION = "1.0.0";
 
 export const SOURCE_TYPE_MIN_CORE_VERSION = "0.2.3";
 
