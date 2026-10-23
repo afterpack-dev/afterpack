@@ -1,5 +1,6 @@
 import { Component, computed, inject } from "@angular/core";
 import { type Note, NotesStore } from "../notes.store";
+import { PluralPipe } from "../plural.pipe";
 
 class NoteReport {
   readonly #notes: Note[];
@@ -19,18 +20,18 @@ class NoteReport {
     return this.#notes.reduce((best, note) => (note.title.length > best.length ? note.title : best), "");
   }
 
-  get summary(): string {
-    const count = this.#notes.length;
-    return `${count} ${count === 1 ? "note" : "notes"}, ${this.words} words`;
+  get count(): number {
+    return this.#notes.length;
   }
 }
 
 @Component({
   selector: "app-reports",
   standalone: true,
+  imports: [PluralPipe],
   template: `
     <h1>Reports</h1>
-    <p data-testid="report-summary">{{ report().summary }}</p>
+    <p data-testid="report-summary">{{ report().count | plural: "note" }}, {{ report().words | plural: "word" }}</p>
     <p data-testid="report-longest">
       {{ report().longest ? "Longest title: " + report().longest : "No notes yet" }}
     </p>

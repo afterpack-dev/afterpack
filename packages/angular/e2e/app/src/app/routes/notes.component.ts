@@ -1,30 +1,15 @@
 import { Component, inject, signal } from "@angular/core";
-import {
-  type AbstractControl,
-  FormControl,
-  FormGroup,
-  ReactiveFormsModule,
-  type ValidationErrors,
-} from "@angular/forms";
+import { FormBuilder, ReactiveFormsModule, Validators } from "@angular/forms";
 import { NotesStore } from "../notes.store";
+import { SavedNotesModule } from "../saved-notes/saved-notes.module";
 
 const TITLE_ERROR = "Give the note a title of at least 3 characters.";
 const BODY_ERROR = "Keep the note under 140 characters.";
 
-function trimmedMinLength(min: number, message: string) {
-  return (control: AbstractControl): ValidationErrors | null =>
-    String(control.value ?? "").trim().length >= min ? null : { message };
-}
-
-function trimmedMaxLength(max: number, message: string) {
-  return (control: AbstractControl): ValidationErrors | null =>
-    String(control.value ?? "").trim().length <= max ? null : { message };
-}
-
 @Component({
   selector: "app-notes",
   standalone: true,
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, SavedNotesModule],
   template: `
     <h1>Notes</h1>
     <form aria-label="New note" novalidate [formGroup]="form" (ngSubmit)="submit()">
@@ -45,11 +30,7 @@ function trimmedMaxLength(max: number, message: string) {
       <button type="submit">Add note</button>
     </form>
     <p role="status">{{ status() }}</p>
-    <ul aria-label="Saved notes">
-      @for (note of store.notes(); track note.id) {
-        <li><strong>{{ note.title }}</strong> {{ note.body }}</li>
-      }
-    </ul>
+    <app-saved-notes [notes]="store.notes()" />
   `,
 })
 export class NotesComponent {
@@ -57,15 +38,22 @@ export class NotesComponent {
   readonly Boolean = Boolean;
   readonly errors = signal<{ title?: string; body?: string }>({});
   readonly status = signal("");
-  readonly form = new FormGroup({
-    title: new FormControl("", { nonNullable: true, validators: trimmedMinLength(3, TITLE_ERROR) }),
-    body: new FormControl("", { nonNullable: true, validators: trimmedMaxLength(140, BODY_ERROR) }),
-  });
+  readonly form;
+
+  constructor(formBuilder: FormBuilder) {
+    this.form = formBuilder.nonNullable.group({
+      title: ["", [Validators.required, Validators.minLength(3)]],
+      body: ["", Validators.maxLength(140)],
+    });
+  }
 
   submit(): void {
     const { title, body } = this.form.controls;
     if (this.form.invalid) {
-      this.errors.set({ title: title.errors?.["message"], body: body.errors?.["message"] });
+      this.errors.set({
+        title: title.invalid ? TITLE_ERROR : undefined,
+        body: body.invalid ? BODY_ERROR : undefined,
+      });
       this.status.set("");
       return;
     }

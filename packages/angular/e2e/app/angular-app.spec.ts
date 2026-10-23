@@ -49,7 +49,7 @@ test.describe("the Angular application builder emits a browser bundle", { tag: "
 
 test.describe("the Angular application builder emits a browser bundle, as a user drives it", () => {
   test(
-    "router navigation, the reactive form, the signal store and the loadComponent route match the baseline",
+    "router navigation, @Input/@Output with @HostListener, the Validators form, the NgModule component, the pipe and the loadComponent route match the baseline",
     { tag: "@scenario" },
     scenario(notesJourney("Angular fixture")),
   );

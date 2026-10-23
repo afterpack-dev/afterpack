@@ -1,15 +1,22 @@
 import { Component, inject, type OnInit, signal } from "@angular/core";
+import { CounterButtonComponent } from "../counter-button.component";
 import { NotesStore } from "../notes.store";
 
 @Component({
   selector: "app-home",
   standalone: true,
+  imports: [CounterButtonComponent],
   template: `
     <h1 data-testid="title">Angular fixture</h1>
     <p data-testid="intro">AfterPack framework-integration smoke fixture.</p>
-    <button type="button" data-testid="counter" (click)="store.increment()">
-      count is {{ store.count() }} ({{ store.parity() }})
-    </button>
+    <button
+      type="button"
+      appCounter
+      data-testid="counter"
+      [count]="store.count()"
+      [parity]="store.parity()"
+      (increment)="store.increment()"
+    ></button>
     <p data-testid="lazy">{{ lazy() }}</p>
   `,
 })
