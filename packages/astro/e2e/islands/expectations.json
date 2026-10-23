@@ -1,7 +1,7 @@
 {
   "framework": "astro-islands",
   "frameworkClass": "ssg",
-  "description": "Astro 6 notes site with React islands and the ClientRouter: in-place navigation between static pages, a zod-validated form island, a module store that islands on different pages share through useSyncExternalStore, notes persisted to localStorage, and a client:visible report island that reads them through a class with private fields and getters. Compiler-based: the .astro compiler regenerates code, so directives in .astro files need pre-compile capture, before the compiler discards the original source. This fixture builds in static (SSG) mode.",
+  "description": "Astro 6 notes site with React islands and the ClientRouter: in-place navigation between static pages, a zod-validated form island, a module store that islands on different pages share through useSyncExternalStore, notes persisted to localStorage, and a client:visible report island that reads them through a class with private fields and getters. Compiler-based: the .astro compiler regenerates code, so directives in .astro files need pre-compile capture, before the compiler discards the original source. This fixture builds in static (SSG) mode. Its pages show their content before the client:load islands hydrate, so the layout sets <main data-app-ready> once they have, and the smoke check and the scenarios wait for smoke.readySelector before they click.",
   "seed": 730185264,
   "deterministicOutput": true,
   "build": {
@@ -67,6 +67,7 @@
         ]
       }
     ],
-    "consoleErrors": "none"
+    "consoleErrors": "none",
+    "readySelector": "main[data-app-ready]"
   }
 }

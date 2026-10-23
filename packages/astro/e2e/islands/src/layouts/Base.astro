@@ -28,6 +28,17 @@ const { title } = Astro.props;
   </body>
 </html>
 
+<script>
+  const markReady = () => {
+    if (document.querySelector('astro-island[ssr][client="load"]')) {
+      requestAnimationFrame(markReady);
+      return;
+    }
+    document.querySelector("main")?.setAttribute("data-app-ready", "");
+  };
+  document.addEventListener("astro:page-load", markReady);
+</script>
+
 <style is:global>
   body {
     margin: 0;
