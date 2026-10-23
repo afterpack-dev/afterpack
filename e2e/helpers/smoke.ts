@@ -86,6 +86,14 @@ function servedStatus(response: Response | null, expected: number): number | und
   return status === 304 && expected === 200 ? 200 : status;
 }
 
+async function servedHtml(response: Response | null): Promise<string> {
+  let current = response;
+  while (current && current.status() >= 300 && current.status() < 400) {
+    current = (await current.request().redirectedTo()?.response()) ?? null;
+  }
+  return (await current?.text()) ?? "";
+}
+
 export async function waitUntilReady(
   page: Page,
   response: Response | null,
@@ -93,7 +101,7 @@ export async function waitUntilReady(
   where: string,
 ): Promise<void> {
   if (!ready) return;
-  const served = (await response?.text()) ?? "";
+  const served = await servedHtml(response);
   const readyAsServed = await page.evaluate(
     ([html, selector]) =>
       new DOMParser().parseFromString(html, "text/html").querySelector(selector) !== null,
