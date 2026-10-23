@@ -40,7 +40,9 @@ scripts/                set-version.ts, release-plan.mjs, bump-engine.mjs, npm-r
                                       run by dispatch
 .github/workflows/e2e-pro.yml         the Pro e2e lane: on the Pro engine the API serves, or on a
                                       candidate's own Pro build once the API serves it
-.github/actions/        e2e-fixtures: fixture installs (cached) and Playwright browsers;
+.github/actions/        gates: hygiene, comment ban, lint, build, typecheck, test, for every
+                        workflow that gates a commit;
+                        e2e-fixtures: fixture installs (cached) and Playwright browsers;
                         candidate-workspace: the workspace on an unreleased @afterpack/core
 .github/PULL_REQUEST_TEMPLATE.md   the PR gate checklist
 playwright.config.ts    root Playwright config for every packages/*/e2e fixture

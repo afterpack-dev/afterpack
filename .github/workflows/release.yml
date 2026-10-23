@@ -128,16 +128,13 @@ jobs:
           ENGINE_VERSION: ${{ steps.bump.outputs.version }}
         run: node scripts/npm-release.mjs wait --version "$ENGINE_VERSION"
 
-      - name: Write the lockfile against npmjs and run the gates
+      - name: Write the lockfile against npmjs
         if: steps.bump.outputs.changed == 'true'
-        run: |
-          pnpm install --no-frozen-lockfile
-          pnpm hygiene
-          pnpm check:comments
-          pnpm lint
-          pnpm build
-          pnpm typecheck
-          pnpm test
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Run the gates
+        if: steps.bump.outputs.changed == 'true'
+        uses: ./.github/actions/gates
 
       - name: Commit and push
         id: push
@@ -236,23 +233,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Repo hygiene
-        run: pnpm hygiene
-
-      - name: Comment ban
-        run: pnpm check:comments
-
-      - name: Lint
-        run: pnpm lint
-
-      - name: Build
-        run: pnpm build
-
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Test
-        run: pnpm test
+      - uses: ./.github/actions/gates
 
   e2e:
     name: End-to-end (Playwright, full suite)

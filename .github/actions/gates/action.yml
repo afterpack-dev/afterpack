@@ -1,0 +1,33 @@
+name: Run the repository gates
+description: >-
+  Runs every gate a commit must pass, in order: repo hygiene, the comment
+  ban, lint, build, typecheck and the unit tests. Run it after the workspace
+  is installed. CI, the release and the engine candidate's release bump all
+  run this one list.
+
+runs:
+  using: composite
+  steps:
+    - name: Repo hygiene
+      shell: bash
+      run: pnpm hygiene
+
+    - name: Comment ban
+      shell: bash
+      run: pnpm check:comments
+
+    - name: Lint
+      shell: bash
+      run: pnpm lint
+
+    - name: Build
+      shell: bash
+      run: pnpm build
+
+    - name: Typecheck
+      shell: bash
+      run: pnpm typecheck
+
+    - name: Test
+      shell: bash
+      run: pnpm test
