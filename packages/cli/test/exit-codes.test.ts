@@ -49,7 +49,10 @@ function invoke(argv: string[], env: Record<string, string | undefined> = {}): P
 
 function document(): Record<string, unknown> {
   expect(out, "stdout must carry exactly one JSON document").toHaveLength(1);
-  return JSON.parse(out[0]) as Record<string, unknown>;
+  const doc = JSON.parse(out[0]) as Record<string, unknown>;
+  expect(Object.keys(doc)[0]).toBe("schemaVersion");
+  expect(doc.schemaVersion).toBe(1);
+  return doc;
 }
 
 function stageFreshBuildOutput(): void {
@@ -335,7 +338,13 @@ describe("diagnostics.format=json", () => {
     expect(await invoke(["dist", ...QUIET, "--diagnostics.format=json", "--seed=4242"])).toBe(0);
 
     const doc = document();
-    expect(doc).toMatchObject({ afterpack: "9.9.9", command: "obfuscate", exitCode: 0, ok: true });
+    expect(doc).toMatchObject({
+      schemaVersion: 1,
+      afterpack: "9.9.9",
+      command: "obfuscate",
+      exitCode: 0,
+      ok: true,
+    });
     expect(doc.files).toEqual([
       {
         path: "dist/app.js",
@@ -349,6 +358,19 @@ describe("diagnostics.format=json", () => {
     expect(doc.summary).toMatchObject({ files: 2, transformed: 2, seed: 4242, engine: "local" });
     expect(err.join("\n")).toContain("Protecting dist");
     expect(out.join("")).not.toContain("Protecting");
+  });
+
+  it("emits the skip document, schemaVersion first, when build.autorun is false", async () => {
+    expect(
+      await invoke(["dist", ...QUIET, "--diagnostics.format=json"], {
+        AFTERPACK_build_autorun: "false",
+      }),
+    ).toBe(0);
+    expect(document()).toMatchObject({
+      command: "obfuscate",
+      ok: true,
+      summary: { files: 0, skipped: "build.autorun=false" },
+    });
   });
 
   it("is byte-identical across two runs of the same build", async () => {

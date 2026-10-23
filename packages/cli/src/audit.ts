@@ -6,6 +6,7 @@ import { bold, cyan, dim, green, header, red, severityColor, stripAnsi, yellow }
 import {
   emitJson,
   emitJsonError,
+  JSON_SCHEMA_VERSION,
   type JsonDiagnostic,
   type OutputMode,
   sortDiagnostics,
@@ -165,6 +166,7 @@ function emitResult(deps: AuditDeps, url: string, result: ScanResult, code: Exit
   const link = reportUrl(result);
   if (deps.mode.format === "json") {
     emitJson(deps.logger, {
+      schemaVersion: JSON_SCHEMA_VERSION,
       afterpack: deps.version,
       command: "audit",
       exitCode: code,

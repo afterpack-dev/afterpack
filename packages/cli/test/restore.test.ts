@@ -59,6 +59,33 @@ describe("afterpack restore", () => {
     expect(readFileSync(join(buildDir, "app.js"), "utf8")).toBe("export const a = 1;");
   });
 
+  it("emits ONE json document, schemaVersion first, on success and on failure", async () => {
+    writeFileSync(join(buildDir, "app.js"), "export const a = 1;");
+    expect(await invoke(["dist", ...QUIET])).toBe(0);
+
+    out = [];
+    expect(await invoke(["restore", "--diagnostics.format=json"])).toBe(0);
+    expect(out).toHaveLength(1);
+    const doc = JSON.parse(out[0]) as Record<string, unknown>;
+    expect(Object.keys(doc)[0]).toBe("schemaVersion");
+    expect(doc).toMatchObject({
+      schemaVersion: 1,
+      afterpack: "9.9.9",
+      command: "restore",
+      exitCode: 0,
+      ok: true,
+      files: [{ path: "dist/app.js", status: "unchanged" }],
+      summary: { files: 1 },
+    });
+
+    out = [];
+    expect(await invoke(["restore", "--diagnostics.format=json"])).toBe(1);
+    expect(out).toHaveLength(1);
+    const failure = JSON.parse(out[0]) as Record<string, unknown>;
+    expect(Object.keys(failure)[0]).toBe("schemaVersion");
+    expect(failure).toMatchObject({ schemaVersion: 1, command: "restore", exitCode: 1, ok: false });
+  });
+
   it("finds the manifest by searching UPWARD: `restore dist` from the project root works", async () => {
     writeFileSync(join(buildDir, "app.js"), "export const a = 1;");
     expect(await invoke(["dist", ...QUIET])).toBe(0);

@@ -16,6 +16,7 @@ import {
   displayDir,
   documentPath,
   emitJson,
+  JSON_SCHEMA_VERSION,
   type OutputMode,
   realDir,
 } from "./output.js";
@@ -192,6 +193,7 @@ export function verify(deps: VerifyDeps): ExitCode {
   const files = receipt?.files ?? [];
   if (deps.mode.format === "json") {
     emitJson(deps.logger, {
+      schemaVersion: JSON_SCHEMA_VERSION,
       afterpack: deps.version,
       command: "verify",
       exitCode: EXIT.ok,

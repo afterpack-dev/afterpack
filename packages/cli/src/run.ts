@@ -84,6 +84,7 @@ import {
   documentPath,
   emitJson,
   emitJsonError,
+  JSON_SCHEMA_VERSION,
   type JsonDiagnostic,
   type JsonDocument,
   type OutputMode,
@@ -243,6 +244,7 @@ function buildDocument(input: {
   const byCode: Record<string, number> = {};
   for (const d of all) byCode[d.code] = (byCode[d.code] ?? 0) + 1;
   return {
+    schemaVersion: JSON_SCHEMA_VERSION,
     afterpack: input.version,
     command: "obfuscate",
     exitCode: input.exitCode,
@@ -899,6 +901,7 @@ async function runHolding(deps: CliDeps, locks: HeldLock[]): Promise<number> {
   if (parsed.build?.autorun === false) {
     if (mode.format === "json") {
       emitJson(logger, {
+        schemaVersion: JSON_SCHEMA_VERSION,
         afterpack: version,
         command: "obfuscate",
         exitCode: EXIT.ok,

@@ -165,12 +165,13 @@ https://www.afterpack.dev/docs/config
 ## Machine-readable output
 
 Read `--diagnostics.format=json` output instead of parsing text. Stdout carries exactly one JSON
-document, with no colour or progress; everything else goes to stderr. `verify` and `audit` support
-it too. Add `--diagnostics.level=none` for a run that prints nothing else.
+document, with no colour or progress; everything else goes to stderr. `verify`, `restore` and
+`audit` support it too. Add `--diagnostics.level=none` for a run that prints nothing else.
 
 ```json
 {
-  "afterpack": "0.1.0",
+  "schemaVersion": 1,
+  "afterpack": "1.0.1",
   "command": "obfuscate",
   "exitCode": 0,
   "ok": true,
@@ -188,7 +189,8 @@ with the same exit code and a `fix` field to act on:
 
 ```json
 {
-  "afterpack": "0.1.0",
+  "schemaVersion": 1,
+  "afterpack": "1.0.1",
   "command": "obfuscate",
   "exitCode": 3,
   "ok": false,
@@ -197,6 +199,10 @@ with the same exit code and a `fix` field to act on:
 ```
 
 Lists are sorted and there are no timestamps, so two runs of one build give identical documents.
+
+Every document starts with `schemaVersion`, currently `1`. Within one `schemaVersion` fields are
+only ever added; a field is removed, renamed or retyped only under a new `schemaVersion` in a
+major release. Check it before reading the rest, and ignore fields you do not know.
 
 ## The Pro key
 

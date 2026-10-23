@@ -138,7 +138,8 @@ describe("afterpack verify", () => {
     expect(await invoke(["verify", ".", "--diagnostics.format=json"])).toBe(0);
     expect(out).toHaveLength(1);
     const doc = JSON.parse(out[0]) as Record<string, unknown>;
-    expect(doc).toMatchObject({ command: "verify", exitCode: 0, ok: true });
+    expect(Object.keys(doc)[0]).toBe("schemaVersion");
+    expect(doc).toMatchObject({ schemaVersion: 1, command: "verify", exitCode: 0, ok: true });
     expect(doc.summary).toMatchObject({
       tool: "@afterpack/next",
       buildId: BUILD_ID,
@@ -158,7 +159,9 @@ describe("afterpack verify", () => {
 
     out = [];
     expect(await invoke(["verify", "nope", "--diagnostics.format=json"])).toBe(1);
+    expect(Object.keys(JSON.parse(out[0]))[0]).toBe("schemaVersion");
     expect(JSON.parse(out[0])).toMatchObject({
+      schemaVersion: 1,
       command: "verify",
       exitCode: 1,
       ok: false,

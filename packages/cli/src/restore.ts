@@ -38,6 +38,7 @@ import {
   displayDir,
   documentPath,
   emitJson,
+  JSON_SCHEMA_VERSION,
   type OutputMode,
   realDir,
 } from "./output.js";
@@ -349,6 +350,7 @@ function restoreSlots(deps: RestoreDeps, slots: BackupSlot[]): ExitCode {
   const restored = loaded.flatMap((item) => item.restore);
   if (deps.mode.format === "json") {
     emitJson(deps.logger, {
+      schemaVersion: JSON_SCHEMA_VERSION,
       afterpack: deps.version,
       command: "restore",
       exitCode: EXIT.ok,

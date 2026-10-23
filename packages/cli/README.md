@@ -156,7 +156,10 @@ the [configuration reference](https://www.afterpack.dev/docs/config). The
 ```
 
 [`--diagnostics.format`][diagnostics.format]`=json` prints exactly one JSON document on stdout
-and sends everything else to stderr. Use it in CI and scripts. `verify` and `audit` support it too.
+and sends everything else to stderr. Use it in CI and scripts. `verify`, `restore` and `audit`
+support it too. Every document, failures included, starts with `"schemaVersion": 1`. Within one
+`schemaVersion` fields are only ever added; a removal, rename or retype comes with a new
+`schemaVersion` in a major release.
 
 ## Pro
 

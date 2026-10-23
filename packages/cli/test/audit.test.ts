@@ -207,7 +207,9 @@ describe("afterpack audit", () => {
     expect(await invoke(["audit", "example.com", "--diagnostics.format=json"])).toBe(0);
     expect(out).toHaveLength(1);
     const doc = JSON.parse(out[0]) as Record<string, unknown>;
+    expect(Object.keys(doc)[0]).toBe("schemaVersion");
     expect(doc).toMatchObject({
+      schemaVersion: 1,
       afterpack: "9.9.9",
       command: "audit",
       exitCode: 0,
@@ -229,12 +231,22 @@ describe("afterpack audit", () => {
     rejectWith = { status: 429, body: { error: "rate_limited", scansIn24h: 3 } };
     expect(await invoke(["audit", "example.com", "--diagnostics.format=json"])).toBe(1);
     expect(out).toHaveLength(1);
+    expect(Object.keys(JSON.parse(out[0]))[0]).toBe("schemaVersion");
     expect(JSON.parse(out[0])).toMatchObject({
+      schemaVersion: 1,
       command: "audit",
       exitCode: 1,
       ok: false,
       error: { code: "RATE_LIMITED" },
     });
+  });
+
+  it("emits a json ERROR document with exit 64 on a malformed URL", async () => {
+    expect(await invoke(["audit", "http://", "--diagnostics.format=json"])).toBe(64);
+    expect(out).toHaveLength(1);
+    const doc = JSON.parse(out[0]) as Record<string, unknown>;
+    expect(Object.keys(doc)[0]).toBe("schemaVersion");
+    expect(doc).toMatchObject({ schemaVersion: 1, command: "audit", exitCode: 64, ok: false });
   });
 
   it("reads the format from the environment as well as the flag", async () => {

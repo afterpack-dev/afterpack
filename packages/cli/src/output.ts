@@ -109,6 +109,8 @@ export function displayDir(cwd: string, dir: string): string {
   return rel === "." ? "./" : `${rel}/`;
 }
 
+export const JSON_SCHEMA_VERSION = 1;
+
 export type CommandName = "obfuscate" | "verify" | "restore" | "audit";
 
 export interface JsonDiagnostic {
@@ -128,6 +130,7 @@ export interface JsonFile {
 }
 
 export interface JsonDocument {
+  schemaVersion: typeof JSON_SCHEMA_VERSION;
   afterpack: string;
   command: CommandName;
   exitCode: number;
@@ -139,6 +142,7 @@ export interface JsonDocument {
 }
 
 export interface JsonErrorDocument {
+  schemaVersion: typeof JSON_SCHEMA_VERSION;
   afterpack: string;
   command: CommandName;
   exitCode: number;
@@ -197,6 +201,7 @@ export function jsonError(input: {
   fix: string;
 }): JsonErrorDocument {
   return {
+    schemaVersion: JSON_SCHEMA_VERSION,
     afterpack: input.version,
     command: input.command,
     exitCode: input.exitCode,
