@@ -42,7 +42,7 @@ export class NotesComponent {
 
   constructor(formBuilder: FormBuilder) {
     this.form = formBuilder.nonNullable.group({
-      title: ["", [Validators.required, Validators.minLength(3)]],
+      title: ["", [Validators.required, Validators.minLength(3), Validators.pattern(/\S.+\S/)]],
       body: ["", Validators.maxLength(140)],
     });
   }
