@@ -1,7 +1,7 @@
 # @afterpack/sveltekit
 
 Obfuscate a SvelteKit build. `@afterpack/sveltekit` adds the
-[AfterPack](https://www.afterpack.dev) JavaScript obfuscator to SvelteKit 1 and 2.
+[AfterPack](https://www.afterpack.dev) JavaScript obfuscator to SvelteKit 2.
 
 ## Install
 

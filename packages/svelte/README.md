@@ -1,8 +1,7 @@
 # @afterpack/svelte
 
 Obfuscate a Svelte app's production build. `@afterpack/svelte` adds the
-[AfterPack](https://www.afterpack.dev) JavaScript obfuscator to a Svelte 4 or 5 project built with
-Vite.
+[AfterPack](https://www.afterpack.dev) JavaScript obfuscator to a Svelte 5 project built with Vite.
 
 ## Install
 

@@ -38,14 +38,14 @@ exists, and the CLI everywhere else.
 
 | Package | Works with | Entry point |
 | --- | --- | --- |
-| [`@afterpack/vite`](packages/vite) | Vite 5 to 8 | `afterpackVite()` |
+| [`@afterpack/vite`](packages/vite) | Vite 6 to 8 | `afterpackVite()` |
 | [`@afterpack/next`](packages/next) | Next.js 15.4+ | `withAfterpack()` |
 | [`@afterpack/webpack`](packages/webpack) | webpack 5 | `AfterpackWebpackPlugin` |
 | [`@afterpack/rollup`](packages/rollup) | Rollup 3 and 4 | `afterpackRollup()` |
 | [`@afterpack/esbuild`](packages/esbuild) | esbuild 0.17+ | `afterpackEsbuild()` |
 | [`@afterpack/astro`](packages/astro) | Astro 4 to 6 | `afterpackAstro()` |
-| [`@afterpack/svelte`](packages/svelte) | Svelte 4 and 5 on Vite | `afterpackSvelte()` |
-| [`@afterpack/sveltekit`](packages/sveltekit) | SvelteKit 1 and 2 | `afterpackSveltekit()` |
+| [`@afterpack/svelte`](packages/svelte) | Svelte 5 on Vite | `afterpackSvelte()` |
+| [`@afterpack/sveltekit`](packages/sveltekit) | SvelteKit 2 | `afterpackSveltekit()` |
 | [`@afterpack/vue`](packages/vue) | Vue 3 on Vite | `afterpackVue()` |
 | [`@afterpack/nuxt`](packages/nuxt) | Nuxt 3 | Nuxt module |
 | [`@afterpack/angular`](packages/angular) | Angular 17+ | `afterpackAngular()` after `ng build` |
