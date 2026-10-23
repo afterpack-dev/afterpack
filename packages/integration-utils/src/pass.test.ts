@@ -16,6 +16,7 @@ import { dirname, join } from "node:path";
 import type { ProtectionMap } from "@afterpack/protection-map";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { guardedEngine } from "../../../test/core-fake.js";
+import { isBelowVersion, MIN_CORE_VERSION, releaseTriple } from "./compat.js";
 import type { EngineDiagnostic } from "./diagnostics.js";
 import { DIAG_ALREADY_OBFUSCATED } from "./diagnostics.js";
 import type { EngineFileInput, EngineFileResult, ObfuscationEngine } from "./pass.js";
@@ -29,6 +30,10 @@ import {
 } from "./receipt.js";
 import { resetBuildSessions, SEED_ENV_VAR } from "./seed.js";
 import { buildTelemetryPayload, type TelemetryFacts } from "./telemetry.js";
+
+const atLeastFloor = (version: string) =>
+  isBelowVersion(version, MIN_CORE_VERSION) ? MIN_CORE_VERSION : version;
+const floorMajor = releaseTriple(MIN_CORE_VERSION)?.[0] ?? 0;
 
 let root: string;
 let outDir: string;
@@ -2137,16 +2142,17 @@ describe("runObfuscationPass names the engine in its build log", () => {
   it("names the engine's own version when the installed package is another release", async () => {
     const a = join(outDir, "a.js");
     writeFileSync(a, "export const a = 1;");
-    const { engine } = makeEngine(() => ({}), "local", "1.0.0");
+    const engineVersion = `${floorMajor + 1}.0.0`;
+    const { engine } = makeEngine(() => ({}), "local", engineVersion);
     const cap = silentLogger();
 
     await runObfuscationPass({
       ...baseOptions([a], engine),
-      client: client("0.9.0"),
+      client: client(`${floorMajor + 2}.0.0`),
       logger: cap.logger,
     });
 
-    expect(cap.logs.some((l) => l.endsWith(" with engine 1.0.0 ..."))).toBe(true);
+    expect(cap.logs.some((l) => l.endsWith(` with engine ${engineVersion} ...`))).toBe(true);
   });
 
   it("names the engine's own version when no package version is known, and nothing when neither is", async () => {
@@ -2281,7 +2287,7 @@ describe("sourceType", () => {
 
   it("falls back to the client core version when the engine does not report one", async () => {
     const config = await configSentWith({
-      client: { coreVersion: "0.2.3" },
+      client: { coreVersion: atLeastFloor("0.2.3") },
       sourceType: "module",
     });
     expect(config.sourceType).toBe("module");
@@ -2346,7 +2352,7 @@ describe("per-file sourceType", () => {
   });
 
   it("falls back to the client core version when the engine does not report one", async () => {
-    const { inputs } = await inputsSentWith({ client: { coreVersion: "0.2.5" } });
+    const { inputs } = await inputsSentWith({ client: { coreVersion: atLeastFloor("0.2.5") } });
     expect(typesOf(inputs)[0]).toEqual(["main.js", "module"]);
   });
 

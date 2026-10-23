@@ -114,10 +114,10 @@ describe("run", () => {
       engine: { processBatch },
       logger,
       version: "9.9.9",
-      client: { packageName: "afterpack", packageVersion: "9.9.9", coreVersion: "0.2.5-rc.1" },
+      client: { packageName: "afterpack", packageVersion: "9.9.9", coreVersion: "99.0.0-rc.1" },
     });
     expect(code).toBe(0);
-    expect(out.find((l) => l.includes("Protected 1 file"))).toMatch(/ · engine 0\.2\.5-rc\.1$/);
+    expect(out.find((l) => l.includes("Protected 1 file"))).toMatch(/ · engine 99\.0\.0-rc\.1$/);
   });
 
   it("prints help and version and exits 0 without touching the engine", async () => {
