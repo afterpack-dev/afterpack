@@ -39,7 +39,7 @@ Run the full lane as CI does with `AFTERPACK_E2E_BROWSERS=chromium,firefox,webki
 |---|---|---|
 | quick | every pull request, in four shards; a Windows and a macOS job over `vite-react`, `webpack-react`, `cli-vanilla-esm` and `next-app-webpack` (on a push to `main` too) | tests tagged `@quick`, in Chromium |
 | full | a push to `main`, in four shards; `e2e-candidate.yml` for an engine candidate | every test, in Chromium, Firefox and WebKit |
-| preset | `e2e-candidate.yml`, once per preset: medium, hard, extreme | `vite-react` and `next-app-webpack` built with `AFTERPACK_preset`, then `@scenario` and `@lane` in Chromium |
+| preset | `e2e-candidate.yml`, in three shards per preset: medium, hard, extreme | every fixture with a baseline build (see [Writing a scenario](#writing-a-scenario)) built with `AFTERPACK_preset`, then `@scenario` and `@lane` in Chromium |
 | Pro | `e2e-pro.yml`: on the Pro engine the API serves, for an engine candidate's release gate, and on the candidate's own Pro engine once the API serves it | `vite-react` and both `next-app` legs built with `AFTERPACK_KEY` on that cloud engine, then `@scenario` and `@lane` in Chromium |
 
 - `@quick`: in the PR lane. Tag the tests that matter most for the fixture, and keep them fast.
@@ -179,10 +179,12 @@ labelled Main with Home, Notes and Reports; a counter on Home whose state surviv
 validated Notes form; a Reports route loaded on demand; and notes that survive a reload. Their
 specs share the journeys in `e2e/helpers/notes-app.ts`, so a new fixture of that shape needs only
 `scenario(notesJourney("<home title>"))` and `scenario(notesReloadJourney)`. Those journeys are
-tagged `@scenario` and run in the full lane; `vite-react` and `next-app` also run theirs in the
-quick lane. Checkpoint before every `reload` or `goto`: a framework's idle-time prefetch (Nuxt
-fetches its payloads and app manifest that way) that a new document cuts off never settles, or lands
-in only one build's requests.
+tagged `@scenario` and run in the full lane and, at every preset, in the preset lane; `vite-react`
+and `next-app` also run theirs in the quick lane. Every spec of a fixture with a baseline calls
+`candidateLaneTests()`, and the fixture is listed in `AFTERPACK_E2E_FIXTURES` of the `presets` job
+in `e2e-candidate.yml`. Checkpoint before every `reload` or `goto`: a framework's idle-time prefetch
+(Nuxt fetches its payloads and app manifest that way) that a new document cuts off never settles, or
+lands in only one build's requests.
 
 Each test attaches both recordings (`baseline.json`, `protected.json`) to the report.
 `vite-react.spec.ts` also shows the parity check failing on a protected bundle altered to log an
