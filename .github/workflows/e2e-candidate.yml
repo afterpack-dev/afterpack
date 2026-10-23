@@ -142,7 +142,7 @@ jobs:
         preset: [medium, hard, extreme]
         shard: [1, 2, 3]
     env:
-      AFTERPACK_E2E_FIXTURES: vite-react,vue-vite,nuxt-app,sveltekit-app,angular-app,astro-islands,next-app-turbopack,next-app-webpack
+      AFTERPACK_E2E_FIXTURES: vite-react,vite-react-router,vue-vite,nuxt-app,sveltekit-app,angular-app,astro-islands,next-app-turbopack,next-app-webpack
       AFTERPACK_E2E_SHARD: ${{ matrix.shard }}/3
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

@@ -12,6 +12,7 @@ import {
 } from "@e2e/helpers/signatures.js";
 import { runSmoke } from "@e2e/helpers/smoke.js";
 import { hashedNamesTest } from "@e2e/helpers/hashed-names.js";
+import { candidateLaneTests } from "@e2e/helpers/lanes.js";
 
 const app = fixture("vite-react-router");
 const expectations = readExpectations(app);
@@ -51,5 +52,7 @@ test.describe("React Router 7 framework mode renders on the server, as a user dr
     scenario(notesReloadJourney),
   );
 });
+
+candidateLaneTests();
 
 hashedNamesTest();
