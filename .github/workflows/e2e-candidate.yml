@@ -10,6 +10,13 @@ name: E2E candidate
 # now. Its own Pro engine is tested by e2e-pro.yml's `candidate` mode, which
 # is dispatched by hand once the API serves that engine.
 #
+# The `bump` job rehearses the release's engine bump on this checkout: it
+# repins every package to the candidate's release version (the version
+# without its prerelease suffix), raising MIN_CORE_VERSION and the package
+# floor on a new release line, installs the candidate over that pin, and
+# runs the gates the release runs after its bump. A test the bump breaks
+# fails the candidate, not the release.
+#
 # Triggered by a repository_dispatch of type `e2e-candidate` whose
 # client_payload carries `version` (and optionally `id`, which lands in the
 # run name so the dispatcher can find its run), or by hand. It never runs on
@@ -44,6 +51,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      release: ${{ steps.version.outputs.release }}
     steps:
       - name: Validate the candidate version
         id: version
@@ -56,10 +64,15 @@ jobs:
             echo "::error::'$VERSION' is not a version"
             exit 1
           fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          RELEASE="${VERSION%%-*}"
+          {
+            echo "version=$VERSION"
+            echo "release=$RELEASE"
+          } >> "$GITHUB_OUTPUT"
           {
             echo "Testing \`@afterpack/core@$VERSION\`: the full lane in Chromium, Firefox and WebKit,"
-            echo "and the scenarios at the medium, hard and extreme presets."
+            echo "the scenarios at the medium, hard and extreme presets, and the gates after"
+            echo "the release's bump to \`$RELEASE\`."
           } >> "$GITHUB_STEP_SUMMARY"
 
   e2e:
@@ -164,3 +177,38 @@ jobs:
             .afterpack/e2e/test-results/**
           if-no-files-found: ignore
           retention-days: 7
+
+  bump:
+    name: Gates after the bump to ${{ needs.version.outputs.release }}
+    needs: version
+    runs-on: ubuntu-latest
+    environment: npm
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - name: Repin @afterpack/core as the release will
+        id: bump
+        env:
+          RELEASE: ${{ needs.version.outputs.release }}
+        run: node scripts/bump-engine.mjs "$RELEASE"
+
+      # The release version is on no registry yet, so the candidate is
+      # installed over the new pin.
+      - if: steps.bump.outputs.changed == 'true'
+        uses: ./.github/actions/candidate-workspace
+        with:
+          version: ${{ needs.version.outputs.version }}
+          registry: ${{ secrets.ENGINE_REGISTRY }}
+          token: ${{ secrets.ENGINE_REGISTRY_TOKEN }}
+
+      - if: steps.bump.outputs.changed == 'true'
+        uses: ./.github/actions/gates

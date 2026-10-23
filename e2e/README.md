@@ -192,8 +192,8 @@ same way to check a new comparison rule.
 ## Engine candidates
 
 `.github/workflows/e2e-candidate.yml` tests an unreleased `@afterpack/core`: the full lane in four
-shards and three browsers, and the preset lane. It is triggered by a `repository_dispatch` of type
-`e2e-candidate` or by hand:
+shards and three browsers, the preset lane, and the release's engine bump. It is triggered by a
+`repository_dispatch` of type `e2e-candidate` or by hand:
 
 ```bash
 gh api repos/afterpack-dev/afterpack/dispatches -f event_type=e2e-candidate \
@@ -208,6 +208,13 @@ the workspace with `--ignore-scripts`, and deletes the npmrc. The dependencies' 
 in the next step, which never sees the token. It then checks that every package resolved the
 candidate and builds. The workflow never runs on a pull request. No cache it writes and no artifact
 it uploads contains the candidate.
+
+The `bump` job runs `scripts/bump-engine.mjs` with the candidate's release version (`1.2.3` for
+`1.2.3-rc.202610011200`), as the release does once npmjs serves the engine: every package repins
+`@afterpack/core`, and a new release line also raises `MIN_CORE_VERSION` and the package floor. The
+release version is on no registry yet, so the candidate is installed over the new pin, and the job
+runs `.github/actions/gates`, the gates the release runs after its bump. A test that breaks once the
+pin and the floor move fails the candidate instead of the release.
 
 With a key, the candidate only sends the bundle; the API runs its own Pro engine. The Pro lane,
 `.github/workflows/e2e-pro.yml`, has two modes, named by `engine`. `served` tests the candidate as

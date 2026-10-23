@@ -36,8 +36,8 @@ scripts/                set-version.ts, release-plan.mjs, bump-engine.mjs, npm-r
                         lib/ holds their logic, test/ its node:test suites (run by pnpm test)
 .github/workflows/      ci (contributor), release, publish-engine, rc-smoke, approve
 .github/ISSUE_TEMPLATE/ bug report form, issue config
-.github/workflows/e2e-candidate.yml   the full and preset e2e lanes on an unreleased engine,
-                                      run by dispatch
+.github/workflows/e2e-candidate.yml   the full and preset e2e lanes on an unreleased engine, and
+                                      the gates after the release's engine bump, run by dispatch
 .github/workflows/e2e-pro.yml         the Pro e2e lane: on the Pro engine the API serves, or on a
                                       candidate's own Pro build once the API serves it
 .github/actions/        gates: hygiene, comment ban, lint, build, typecheck, test, for every
