@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { expectObfuscationPass, readBuildLog } from "@e2e/helpers/build-log.js";
 import { readExpectations, smokeOf } from "@e2e/helpers/expectations.js";
+import { candidateLaneTests } from "@e2e/helpers/lanes.js";
 import { expectProtectionReceipt, expectVerifyPasses } from "@e2e/helpers/receipt.js";
 import { notesJourney, notesReloadJourney } from "@e2e/helpers/notes-app.js";
 import { baseURLOf, fixture } from "@e2e/helpers/registry.js";
@@ -65,5 +66,7 @@ test.describe("Nuxt 3 prerenders a static site, as a user drives it", () => {
     scenario(notesReloadJourney),
   );
 });
+
+candidateLaneTests();
 
 hashedNamesTest();

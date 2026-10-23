@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { expectObfuscationPass, readBuildLog } from "@e2e/helpers/build-log.js";
 import { readExpectations, smokeOf } from "@e2e/helpers/expectations.js";
+import { candidateLaneTests } from "@e2e/helpers/lanes.js";
 import { notesJourney, notesReloadJourney } from "@e2e/helpers/notes-app.js";
 import { baseURLOf, fixture } from "@e2e/helpers/registry.js";
 import { scenario } from "@e2e/helpers/scenario.js";
@@ -51,5 +52,7 @@ test.describe("Astro builds a static site with React islands, as a user drives i
     scenario(notesReloadJourney),
   );
 });
+
+candidateLaneTests();
 
 hashedNamesTest();
