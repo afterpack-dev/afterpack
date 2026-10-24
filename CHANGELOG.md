@@ -2,6 +2,25 @@
 
 The full changelog, including cloud and dashboard changes, is at https://www.afterpack.dev/changelog.
 
+## 1.0.1 - 2026-10-24
+
+One receipt for several builds, and release notes in every package
+
+### Added
+
+- **CLI:** `afterpack verify` also counts the JavaScript files in the directory that the receipt doesn't list, such as scripts your pipeline copies in. The count is information only and never changes the exit code. ([Files the receipt doesn't list](https://www.afterpack.dev/docs/cli#files-the-receipt-doesnt-list))
+- **CLI:** Every `--diagnostics.format=json` document starts with `schemaVersion: 1`.
+- **Plugins:** Every package ships a `CHANGELOG.md`, and each GitHub release carries its release notes.
+
+### Changed
+
+- **Docs:** The presets page explains why output size changes between builds and how to set a size budget. ([Size budget](https://www.afterpack.dev/docs/presets#size-budget))
+
+### Fixed
+
+- **Plugins:** Several AfterPack builds into one output directory now share one protection receipt, so `afterpack verify` checks the files of every build. Before, each build replaced the receipt and `verify` checked only the last one. If you merged receipts yourself to work around this, you can remove that step. ([Several builds into one directory](https://www.afterpack.dev/docs/cli#several-builds-into-one-directory))
+- **Plugins:** `require("@afterpack/vite/package.json")` and the same for every other package now resolve.
+
 ## 1.0.0 - 2026-10-23
 
 AfterPack 1.0, Vite 6 or newer and engine 1.0.0
