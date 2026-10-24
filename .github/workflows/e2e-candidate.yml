@@ -15,7 +15,9 @@ name: E2E candidate
 # without its prerelease suffix), raising MIN_CORE_VERSION and the package
 # floor on a new release line, installs the candidate over that pin, and
 # runs the gates the release runs after its bump. A test the bump breaks
-# fails the candidate, not the release.
+# fails the candidate, not the release. It first requires the CHANGELOG.md
+# section for the release version, which the release needs before it
+# publishes, so a missing changelog fails the candidate too.
 #
 # Triggered by a repository_dispatch of type `e2e-candidate` whose
 # client_payload carries `version` (and optionally `id`, which lands in the
@@ -198,6 +200,15 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
+
+      - name: Require the changelog section for ${{ needs.version.outputs.release }}
+        env:
+          RELEASE: ${{ needs.version.outputs.release }}
+        run: |
+          if ! node scripts/changelog-section.mjs "$RELEASE" > /dev/null; then
+            echo "::error::CHANGELOG.md has no section '## $RELEASE - YYYY-MM-DD'. Regenerate it from the website's changelog and commit it before this candidate ships."
+            exit 1
+          fi
 
       - name: Repin @afterpack/core as the release will
         id: bump

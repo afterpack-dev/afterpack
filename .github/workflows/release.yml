@@ -23,8 +23,12 @@ name: Release
 #    the bump it names, and refuses a commit the newest vX.Y.Z tag already
 #    holds.
 #
-# Nothing is released when no package ships a change against its npm
-# `latest`. The version is decided once per run and the publish skips every
+# Every package ships the root CHANGELOG.md, generated from the website's
+# changelog, and its section for the version is the GitHub Release body: the
+# version job fails before anything is published when that section is
+# missing. Nothing is released when no package ships a change against its
+# npm `latest`, and a CHANGELOG.md edit alone is no shipped change. The
+# version is decided once per run and the publish skips every
 # package npmjs already holds at that version with the same files, so
 # "Re-run failed jobs" resumes the release. A fresh run is no resume: once
 # every package is out it releases nothing, so it never tags or creates the
@@ -212,6 +216,19 @@ jobs:
             echo "version=$VERSION"
           } >> "$GITHUB_OUTPUT"
           echo "Releasing \`$VERSION\` of every package (\`$BUMP\`); shipped change in \`$PACKAGES\`." >> "$GITHUB_STEP_SUMMARY"
+
+      # CHANGELOG.md is generated from the website's changelog. Its section for
+      # this version ships in every package and is the GitHub Release body, so
+      # a release without one stops here, before anything is published.
+      - name: Require the changelog section for the version
+        if: steps.plan.outputs.release == 'true'
+        env:
+          VERSION: ${{ steps.plan.outputs.version }}
+        run: |
+          if ! node scripts/changelog-section.mjs "$VERSION" > /dev/null; then
+            echo "::error::CHANGELOG.md has no section '## $VERSION - YYYY-MM-DD'. Regenerate it from the website's changelog, commit it, and release that commit."
+            exit 1
+          fi
 
   checks:
     name: Hygiene, lint, build, typecheck, test
@@ -428,17 +445,29 @@ jobs:
       contents: write
     continue-on-error: true
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
       - name: Create the release if it does not exist yet
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.version.outputs.version }}
           REPO: ${{ github.repository }}
         run: |
+          set -euo pipefail
           if gh release view "v$VERSION" --repo "$REPO" >/dev/null 2>&1; then
             echo "v$VERSION already has a release"
             exit 0
           fi
-          gh release create "v$VERSION" --repo "$REPO" --title "v$VERSION" --generate-notes
+          node scripts/changelog-section.mjs "$VERSION" > "$RUNNER_TEMP/release-notes.md"
+          gh release create "v$VERSION" --repo "$REPO" --title "v$VERSION" \
+            --notes-file "$RUNNER_TEMP/release-notes.md"
 
   verify:
     name: Verify on ${{ matrix.os }}
