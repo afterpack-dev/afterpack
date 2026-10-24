@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { CHANGELOG_FILE, ChangelogError, stageChangelog } from "./lib/changelog.mjs";
 import { canonical, extractTarball, listFiles } from "./lib/registry.mjs";
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -123,6 +124,7 @@ function diffTrees(local, published, workspaceNames) {
   const publishedFiles = new Set(listFiles(published));
   const differences = [];
   for (const file of new Set([...localFiles, ...publishedFiles])) {
+    if (file === CHANGELOG_FILE) continue;
     if (!localFiles.has(file)) differences.push(`- ${file}`);
     else if (!publishedFiles.has(file)) differences.push(`+ ${file}`);
     else if (file === "package.json") {
@@ -201,9 +203,27 @@ function packAll(into) {
   fs.mkdirSync(into, { recursive: true });
   const stale = fs.readdirSync(into).filter((f) => f.endsWith(".tgz"));
   if (stale.length > 0) fail(`${into} already holds ${stale.join(", ")}`);
-  for (const { dir, pkg } of listPackages()) {
-    run("pnpm", ["pack", "--pack-destination", path.resolve(into)], { cwd: dir });
-    console.log(`packed ${pkg.name}@${pkg.version}`);
+  const packages = listPackages();
+  const versions = [...new Set(packages.map(({ pkg }) => pkg.version))];
+  if (versions.length !== 1) fail(`packages carry more than one version: ${versions.join(", ")}`);
+  let unstage;
+  try {
+    unstage = stageChangelog(
+      ROOT,
+      packages.map(({ dir }) => dir),
+      versions[0],
+    );
+  } catch (error) {
+    if (error instanceof ChangelogError) fail(`cannot pack ${versions[0]}: ${error.message}`);
+    throw error;
+  }
+  try {
+    for (const { dir, pkg } of packages) {
+      run("pnpm", ["pack", "--pack-destination", path.resolve(into)], { cwd: dir });
+      console.log(`packed ${pkg.name}@${pkg.version}`);
+    }
+  } finally {
+    unstage();
   }
 }
 

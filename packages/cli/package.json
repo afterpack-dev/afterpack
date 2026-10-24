@@ -8,6 +8,7 @@
   },
   "main": "./dist/cli.js",
   "files": [
+    "CHANGELOG.md",
     "LICENSE",
     "NOTICE",
     "SKILL.md",

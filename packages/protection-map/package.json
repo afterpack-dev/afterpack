@@ -17,6 +17,7 @@
     "afterpack-protection-map": "./render.mjs"
   },
   "files": [
+    "CHANGELOG.md",
     "LICENSE",
     "NOTICE",
     "README.md",
