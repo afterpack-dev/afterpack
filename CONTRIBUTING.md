@@ -111,6 +111,17 @@ committed: the root `package.json` version is a floor, and the next version is o
 last `vX.Y.Z` tag or the npm `latest`, whichever is higher. `node scripts/release-plan.mjs changed`
 shows what a release would ship; never bump a single package on its own.
 
+The root `CHANGELOG.md` is generated from the website's changelog
+(https://www.afterpack.dev/changelog) and committed as it comes; change an entry there, not here.
+It lists every npm release, newest first, as `## <version> - <YYYY-MM-DD>` followed by its notes.
+Every package ships a copy: `node scripts/release-plan.mjs pack` stages it into each package and
+refuses to pack a version it has no section for (a plain `pnpm pack` in a package leaves it out).
+That section is the GitHub Release body. `Release` fails before it publishes anything when the
+section for its version is missing, and `E2E candidate` fails an engine candidate whose release
+version has none. `node scripts/changelog-section.mjs <version>` prints a section; a prerelease
+such as `1.0.1-rc.1` reads the section of `1.0.1`. A change to `CHANGELOG.md` alone releases
+nothing.
+
 ## Pull requests
 
 CI (`ci.yml`) runs on GitHub-hosted runners with no secrets, so a fork PR runs it in full: keep PRs
