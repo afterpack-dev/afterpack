@@ -679,7 +679,7 @@ describe("afterpack verify on a tree that holds JS the receipt does not list", (
     ]);
   });
 
-  it("counts only the served static/ tree of a Next build", async () => {
+  it("adds no coverage note to a clean Next build", async () => {
     const { distDir } = protectedBuild();
     mkdirSync(join(distDir, "server", "app"), { recursive: true });
     writeFileSync(join(distDir, "server", "app", "page.js"), "server");
@@ -687,10 +687,23 @@ describe("afterpack verify on a tree that holds JS the receipt does not list", (
     writeFileSync(join(distDir, "cache", "x.js"), "cache");
     mkdirSync(join(distDir, "static", BUILD_ID), { recursive: true });
     writeFileSync(join(distDir, "static", BUILD_ID, "_buildManifest.js"), "manifest");
+    writeFileSync(join(distDir, "static", BUILD_ID, "_ssgManifest.js"), "manifest");
+
+    expect(await invoke(["verify", "."])).toBe(0);
+    const text = out.join("\n");
+    expect(text).toContain("Verified 1 file · .next/ · AfterPack Pro");
+    expect(text).not.toContain("other JS");
+  });
+
+  it("counts a Next chunk under static/chunks the receipt does not list", async () => {
+    const { distDir } = protectedBuild();
+    mkdirSync(join(distDir, "static", BUILD_ID), { recursive: true });
+    writeFileSync(join(distDir, "static", BUILD_ID, "_buildManifest.js"), "manifest");
+    writeFileSync(join(distDir, "static", "chunks", "extra.js"), "plain");
 
     expect(await invoke(["verify", "."])).toBe(0);
     expect(out.join("\n")).toContain(
-      "Verified 1 file · .next/ · AfterPack Pro · 1 other JS file in .next/static/ isn't in this receipt",
+      "Verified 1 file · .next/ · AfterPack Pro · 1 other JS file in .next/static/chunks/ isn't in this receipt",
     );
   });
 });

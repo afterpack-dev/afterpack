@@ -35,8 +35,8 @@ What it guarantees: every file the receipt records is present and hashes to
 the value AfterPack wrote. Every AfterPack build into the same directory adds
 its files to that one receipt. Other files in the tree are not checked: the
 success line counts the JavaScript files (.js, .mjs, .cjs) the receipt does
-not list, and they never fail verify, because a build may copy in scripts
-AfterPack did not produce.
+not list (for Next.js, those under .next/static/chunks/), and they never fail
+verify, because a build may copy in scripts AfterPack did not produce.
 
 A MISSING receipt FAILS. This command is only ever run by someone who expects a
 protected tree, so "there was nothing to check" is not a pass.
@@ -88,8 +88,8 @@ function leftoverTempFiles(dir: string): string[] {
 const COUNTED_SCRIPT = /\.[cm]?js$/;
 
 function servedScope(dir: string): string {
-  const nextStatic = join(dir, "static");
-  return readBuildId(dir) !== null && existsSync(nextStatic) ? nextStatic : dir;
+  const nextChunks = join(dir, "static", "chunks");
+  return readBuildId(dir) !== null && existsSync(nextChunks) ? nextChunks : dir;
 }
 
 function unlistedScripts(dir: string, scope: string, listed: ReadonlySet<string>): number {
