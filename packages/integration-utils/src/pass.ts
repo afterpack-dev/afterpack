@@ -885,6 +885,7 @@ export async function runObfuscationPass(
       ...receiptFields,
       dir: combinedProtectionMap.buildDir,
       home,
+      fileTarget: combinedProtectionMap.fileTarget,
       files: emittedFiles,
     };
   } else {
@@ -892,6 +893,7 @@ export async function runObfuscationPass(
       ...receiptFields,
       dir: combinedProtectionMap.buildDir,
       home,
+      fileTarget: combinedProtectionMap.fileTarget,
       files: writtenFiles,
     });
     if (style !== "cli") {

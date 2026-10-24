@@ -193,6 +193,7 @@ export interface WriteProtectionReceiptInput {
   buildId: string | null;
   files: string[];
   transformed: readonly string[];
+  fileTarget?: boolean;
 }
 
 function keptEntries(path: string, dir: string, replaced: Set<string>): ProtectionReceiptFile[] {
@@ -237,10 +238,16 @@ export function writeProtectionReceipt(input: WriteProtectionReceiptInput): stri
   const home = input.home ?? afterpackHome(input.dir);
   receipt.buildDir = buildDirOf(home);
   const path = receiptPathIn(home);
-  const replaced = new Set(receipt.files.map((entry) => entry.path));
-  receipt.files = [...keptEntries(path, input.dir, replaced), ...receipt.files].sort((a, b) =>
-    a.path.localeCompare(b.path),
-  );
+  const shippedSource =
+    input.fileTarget !== true &&
+    receipt.files.length > 0 &&
+    receipt.files.every((entry) => !entry.transformed);
+  if (!shippedSource) {
+    const replaced = new Set(receipt.files.map((entry) => entry.path));
+    receipt.files = [...keptEntries(path, input.dir, replaced), ...receipt.files].sort((a, b) =>
+      a.path.localeCompare(b.path),
+    );
+  }
   mkdirSync(dirname(path), { recursive: true });
   ensureAfterpackGitignore(home.dir);
   writeFileSync(path, `${JSON.stringify(receipt, null, 2)}\n`);

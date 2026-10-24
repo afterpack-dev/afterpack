@@ -408,6 +408,51 @@ describe("two builds into one output dir", () => {
     expect(receipt.files).toHaveLength(2);
   });
 
+  it("fails verify when the later build transformed nothing, whatever the earlier one did", () => {
+    const { dir, file: a } = distWith("a.js", "OBF:a");
+    receiptAt(dir, [a]);
+    const { file: b } = distWith("b.js", "plain b");
+    receiptAt(dir, [b], []);
+
+    expect(listed(dir).map((f) => f.path)).toEqual(["b.js"]);
+    expect(verifyProtectionReceipt(protectionReceiptPath(dir), dir).problems).toEqual([
+      "receipt lists 1 file(s) but the engine changed NONE of them — " +
+        "this build shipped its source (check `paths.exclude` and AFTERPACK_paths_exclude)",
+    ]);
+  });
+
+  it("merges a single-file run that transformed nothing into the files already recorded", () => {
+    const { dir, file: a } = distWith("a.js", "OBF:a");
+    receiptAt(dir, [a]);
+    const { file: b } = distWith("b.js", "plain b");
+    writeProtectionReceipt({
+      dir,
+      tool: "afterpack-test",
+      engine: "local",
+      engineVersion: null,
+      seed: 1,
+      seedOrigin: "fresh",
+      bundler: "test",
+      buildId: null,
+      files: [b],
+      transformed: [],
+      fileTarget: true,
+    });
+
+    expect(listed(dir).map((f) => f.path)).toEqual(["a.js", "b.js"]);
+  });
+
+  it("still merges a later build that left some of its files unchanged", () => {
+    const { dir, file: a } = distWith("a.js", "OBF:a");
+    receiptAt(dir, [a]);
+    const { file: b } = distWith("b.js", "OBF:b");
+    const { file: c } = distWith("c.js", "plain c");
+    receiptAt(dir, [b, c], [b]);
+
+    expect(listed(dir).map((f) => f.path)).toEqual(["a.js", "b.js", "c.js"]);
+    expect(verifyProtectionReceipt(protectionReceiptPath(dir), dir).problems).toEqual([]);
+  });
+
   it("replaces, never merges, a receipt it cannot read", () => {
     const { dir, file } = distWith("main.js", "OBF:main");
     writeRawReceipt(dir, JSON.stringify({ schema: 0, files: [{ path: "old.js", sha256: "x" }] }));
