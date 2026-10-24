@@ -72,7 +72,8 @@ Rules:
 ## What a run writes
 
 - `.afterpack/receipts/<output dir>.json` (`.afterpack/receipts/dist.json` for `dist`): the receipt
-  `afterpack verify` checks.
+  `afterpack verify` checks. Every run or plugin build into the same directory adds the files it
+  wrote to that one receipt; a file no longer on disk drops out.
 - `.afterpack/backups/<output dir>/`: the original files, on by default for the CLI, so
   `afterpack restore` can undo the run. `--build.backup=false` turns it off. Each output directory
   has its own backup and lock, so parallel builds of different apps don't collide.

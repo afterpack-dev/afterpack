@@ -324,6 +324,110 @@ describe("where a protection receipt lives", () => {
   });
 });
 
+describe("two builds into one output dir", () => {
+  function listed(dir: string): { path: string; sha256: string }[] {
+    const receipt = JSON.parse(readFileSync(protectionReceiptPath(dir), "utf8")) as {
+      files: { path: string; sha256: string }[];
+    };
+    return receipt.files.map(({ path, sha256 }) => ({ path, sha256 }));
+  }
+
+  it("merges into one receipt that verify checks in full", () => {
+    const { dir, file: main } = distWith("main.js", "OBF:main");
+    receiptAt(dir, [main]);
+    const landing = join(dir, "landing", "index.js");
+    mkdirSync(dirname(landing), { recursive: true });
+    writeFileSync(landing, "OBF:landing");
+    receiptAt(dir, [landing]);
+
+    expect(listed(dir).map((f) => f.path)).toEqual(["landing/index.js", "main.js"]);
+    const verification = verifyProtectionReceipt(protectionReceiptPath(dir), dir);
+    expect(verification.problems).toEqual([]);
+    expect(verification.receipt?.files).toHaveLength(2);
+  });
+
+  it("starts fresh when the dir was wiped between the builds", () => {
+    const { dir, file: main } = distWith("main.js", "OBF:main");
+    receiptAt(dir, [main]);
+    rmSync(dir, { recursive: true });
+    const { file: landing } = distWith("landing.js", "OBF:landing");
+    receiptAt(dir, [landing]);
+
+    expect(listed(dir).map((f) => f.path)).toEqual(["landing.js"]);
+  });
+
+  it("keeps a first-build entry whose file changed, so verify still fails on it", () => {
+    const { dir, file: main } = distWith("main.js", "OBF:main");
+    receiptAt(dir, [main]);
+    writeFileSync(main, "tampered");
+    const { file: landing } = distWith("landing.js", "OBF:landing");
+    receiptAt(dir, [landing]);
+
+    expect(listed(dir).map((f) => f.path)).toEqual(["landing.js", "main.js"]);
+    expect(verifyProtectionReceipt(protectionReceiptPath(dir), dir).problems).toEqual([
+      "main.js: content changed since it was obfuscated",
+    ]);
+  });
+
+  it("takes the later build's hash for a file both builds wrote", () => {
+    const { dir, file } = distWith("shared.js", "OBF:first");
+    receiptAt(dir, [file]);
+    writeFileSync(file, "OBF:second");
+    receiptAt(dir, [file]);
+
+    expect(listed(dir)).toEqual([{ path: "shared.js", sha256: sha256Of(file) }]);
+    expect(verifyProtectionReceipt(protectionReceiptPath(dir), dir).problems).toEqual([]);
+  });
+
+  it("describes the later build in its top-level fields", () => {
+    const { dir, file: main } = distWith("main.js", "OBF:main");
+    receiptAt(dir, [main]);
+    const { file: landing } = distWith("landing.js", "OBF:landing");
+    writeProtectionReceipt({
+      dir,
+      tool: "afterpack-second",
+      engine: "cloud",
+      engineVersion: "2.0.0",
+      seed: 2,
+      seedOrigin: "option",
+      bundler: "vite",
+      buildId: "second",
+      files: [landing],
+      transformed: [landing],
+    });
+
+    const receipt = JSON.parse(readFileSync(protectionReceiptPath(dir), "utf8"));
+    expect(receipt).toMatchObject({
+      tool: "afterpack-second",
+      engine: "cloud",
+      engineVersion: "2.0.0",
+      seed: "2",
+      bundler: "vite",
+      buildId: "second",
+    });
+    expect(receipt.files).toHaveLength(2);
+  });
+
+  it("replaces, never merges, a receipt it cannot read", () => {
+    const { dir, file } = distWith("main.js", "OBF:main");
+    writeRawReceipt(dir, JSON.stringify({ schema: 0, files: [{ path: "old.js", sha256: "x" }] }));
+    writeFileSync(join(dir, "old.js"), "old");
+    receiptAt(dir, [file]);
+
+    expect(listed(dir).map((f) => f.path)).toEqual(["main.js"]);
+  });
+
+  it("keeps the other build dirs' receipts out of the merge", () => {
+    const { dir: client, file: a } = distWith("a.js", "OBF:a", "dist/client");
+    receiptAt(client, [a]);
+    const { dir: server, file: b } = distWith("b.js", "OBF:b", "dist/server");
+    receiptAt(server, [b]);
+
+    expect(listed(client).map((f) => f.path)).toEqual(["a.js"]);
+    expect(listed(server).map((f) => f.path)).toEqual(["b.js"]);
+  });
+});
+
 describe("locateProtectionReceipt", () => {
   function copyTree(from: string, to: string, files: Record<string, string>): void {
     for (const [rel, content] of Object.entries(files)) {

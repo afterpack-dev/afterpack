@@ -892,7 +892,6 @@ export async function runObfuscationPass(
       ...receiptFields,
       dir: combinedProtectionMap.buildDir,
       home,
-      merge: combinedProtectionMap.fileTarget === true,
       files: writtenFiles,
     });
     if (style !== "cli") {

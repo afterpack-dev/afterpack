@@ -8,8 +8,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { protectionReceiptPath } from "@afterpack/integration-utils";
+import { dirname, join } from "node:path";
+import { protectionReceiptPath, verifyProtectionReceipt } from "@afterpack/integration-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __reset,
@@ -434,6 +434,50 @@ describe("afterpackVite writeBundle (protection receipt)", () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  async function buildInto(fileName: string, code: string, options: AfterpackViteOptions = {}) {
+    const plugin = afterpackVite(options);
+    // biome-ignore lint/suspicious/noExplicitAny: exercising Vite hooks directly in a test.
+    const p = plugin as any;
+    p.configResolved({ root, command: "build", build: { outDir } });
+    const bundle = bundleOf(chunk(fileName, code));
+    await p.generateBundle.handler.call({}, { dir: outDir }, bundle);
+    const emitted = bundle[fileName].code;
+    if (emitted === undefined) throw new Error("the pass left the chunk with no code");
+    mkdirSync(dirname(join(outDir, fileName)), { recursive: true });
+    writeFileSync(join(outDir, fileName), emitted);
+    await p.writeBundle();
+  }
+
+  function receiptFiles(): string[] {
+    const receipt = JSON.parse(readFileSync(protectionReceiptPath(outDir), "utf8"));
+    return receipt.files.map((f: { path: string }) => f.path);
+  }
+
+  it("merges a second build into the same outDir into one receipt verify checks in full", async () => {
+    await buildInto("assets/main.js", "export const main = 1;");
+    await buildInto("landing/assets/landing.js", "export const landing = 1;");
+
+    expect(receiptFiles()).toEqual(["assets/main.js", "landing/assets/landing.js"]);
+    const verification = verifyProtectionReceipt(protectionReceiptPath(outDir), outDir);
+    expect(verification.problems).toEqual([]);
+  });
+
+  it("merges two legs sharing one outDir", async () => {
+    await buildInto("main.js", "const m = 1;", { leg: "main" });
+    await buildInto("preload.js", "const p = 1;", { leg: "preload" });
+
+    expect(receiptFiles()).toEqual(["main.js", "preload.js"]);
+  });
+
+  it("drops the first build's files once emptyOutDir wiped them", async () => {
+    await buildInto("assets/main.js", "export const main = 1;");
+    rmSync(outDir, { recursive: true });
+    mkdirSync(outDir);
+    await buildInto("assets/next.js", "export const next = 1;");
+
+    expect(receiptFiles()).toEqual(["assets/next.js"]);
   });
 
   it("does not write a receipt for a file vite never flushed to disk", async () => {

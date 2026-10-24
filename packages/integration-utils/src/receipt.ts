@@ -193,16 +193,17 @@ export interface WriteProtectionReceiptInput {
   buildId: string | null;
   files: string[];
   transformed: readonly string[];
-  merge?: boolean;
 }
 
-function keptEntries(path: string, replaced: Set<string>): ProtectionReceiptFile[] {
+function keptEntries(path: string, dir: string, replaced: Set<string>): ProtectionReceiptFile[] {
   if (!existsSync(path)) return [];
   const previous = parseReceipt(path);
   if (previous.error !== undefined || previous.receipt.schema !== PROTECTION_RECEIPT_SCHEMA) {
     return [];
   }
-  return previous.receipt.files.filter((entry) => !replaced.has(entry.path));
+  return previous.receipt.files.filter(
+    (entry) => !replaced.has(entry.path) && existsSync(join(dir, entry.path)),
+  );
 }
 
 export function writeDeferredProtectionReceipt(
@@ -236,12 +237,10 @@ export function writeProtectionReceipt(input: WriteProtectionReceiptInput): stri
   const home = input.home ?? afterpackHome(input.dir);
   receipt.buildDir = buildDirOf(home);
   const path = receiptPathIn(home);
-  if (input.merge) {
-    const replaced = new Set(receipt.files.map((entry) => entry.path));
-    receipt.files = [...keptEntries(path, replaced), ...receipt.files].sort((a, b) =>
-      a.path.localeCompare(b.path),
-    );
-  }
+  const replaced = new Set(receipt.files.map((entry) => entry.path));
+  receipt.files = [...keptEntries(path, input.dir, replaced), ...receipt.files].sort((a, b) =>
+    a.path.localeCompare(b.path),
+  );
   mkdirSync(dirname(path), { recursive: true });
   ensureAfterpackGitignore(home.dir);
   writeFileSync(path, `${JSON.stringify(receipt, null, 2)}\n`);

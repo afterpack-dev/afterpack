@@ -38,7 +38,8 @@ Nested `node_modules/` folders are skipped. Pass [`--paths.include`][paths.inclu
 Each run writes:
 
 - `.afterpack/receipts/<output dir>.json` (`.afterpack/receipts/dist.json` for `dist`), the receipt
-  that `afterpack verify` checks.
+  that `afterpack verify` checks. Every run or plugin build into the same directory adds the files
+  it wrote to that one receipt; a file no longer on disk drops out.
 - `.afterpack/backups/<output dir>/`, a copy of the original files, so `afterpack restore` can
   undo the run. Each output directory has its own backup and its own lock, so parallel builds of
   different apps in one repository don't collide, and a second run over the same directory is

@@ -1,4 +1,4 @@
-import { existsSync, rmSync, statSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import {
   AfterpackFilesError,
@@ -24,6 +24,7 @@ import {
   type ObfuscationEngine,
   type ObfuscationPassResult,
   planAngularIntegrity,
+  protectionReceiptPath,
   type ResolvedPluginConfig,
   resolvePluginConfig,
   runObfuscationPass,
@@ -514,6 +515,10 @@ async function runObfuscationAndBackup(input: {
   let journal: Journal | null = null;
   let undoFailure: string | null = null;
   const angular = input.layout?.angular;
+  const receiptPath = protectionReceiptPath(
+    afterpackHome(input.buildDir, { fileTarget: input.fileTarget }),
+  );
+  const priorReceipt = existsSync(receiptPath) ? readFileSync(receiptPath) : null;
   try {
     result = await withProgress({
       stdout: input.stdout,
@@ -574,7 +579,11 @@ async function runObfuscationAndBackup(input: {
     failure = error instanceof Error ? error.message : String(error);
     try {
       (journal as Journal | null)?.rollback();
-      if (result?.receiptPath) rmSync(result.receiptPath, { force: true });
+      if (result?.receiptPath === receiptPath && priorReceipt !== null) {
+        writeFileAtomic(receiptPath, priorReceipt);
+      } else if (result?.receiptPath) {
+        rmSync(result.receiptPath, { force: true });
+      }
     } catch (undo) {
       undoFailure = undo instanceof Error ? undo.message : String(undo);
     }
