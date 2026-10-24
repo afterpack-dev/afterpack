@@ -224,7 +224,11 @@ Details: https://www.afterpack.dev/docs/pro
 ## `afterpack verify [dir]`
 
 Add this to the deploy step. It reads the receipt for `[dir]` from `.afterpack/receipts/`, found
-by the same rule as above, and re-hashes every file that receipt names.
+by the same rule as above, and re-hashes every file that receipt names: each must be there and hash
+to the value AfterPack wrote. Other files in the tree are not checked. The success line counts the
+JavaScript files the receipt doesn't list (`✓ Verified 40 files · dist/ · 27 other JS files aren't
+in this receipt`); they never fail verify. When that count is not what you expect, a build into
+that directory ran without AfterPack.
 
 ```bash
 npx afterpack@latest verify .        # looks in ./ and ./.next/

@@ -1,5 +1,5 @@
 import { type Dirent, existsSync, readdirSync, readFileSync } from "node:fs";
-import { isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   AFTERPACK_DIR,
   afterpackHome,
@@ -10,7 +10,7 @@ import {
 } from "@afterpack/integration-utils";
 import { CONTACT_FOOTER } from "./args.js";
 import { EXIT, type ExitCode } from "./exit.js";
-import { dim, green } from "./format.js";
+import { dim, green, yellow } from "./format.js";
 import {
   commandFailure,
   displayDir,
@@ -29,9 +29,14 @@ export const VERIFY_HELP = `${VERIFY_USAGE}
 Re-checks a build output tree against the protection receipt the build wrote
 for it in .afterpack/receipts/, next to the nearest lockfile, afterpack.json or
 .git above the tree (failing those the nearest package.json, otherwise beside
-the tree): every recorded file must still
-hash to the value it was obfuscated to. Run it in the deploy step, after the
-build and before the upload.
+the tree). Run it in the deploy step, after the build and before the upload.
+
+What it guarantees: every file the receipt records is present and hashes to
+the value AfterPack wrote. Every AfterPack build into the same directory adds
+its files to that one receipt. Other files in the tree are not checked: the
+success line counts the JavaScript files (.js, .mjs, .cjs) the receipt does
+not list, and they never fail verify, because a build may copy in scripts
+AfterPack did not produce.
 
 A MISSING receipt FAILS. This command is only ever run by someone who expects a
 protected tree, so "there was nothing to check" is not a pass.
@@ -78,6 +83,35 @@ function leftoverTempFiles(dir: string): string[] {
   };
   walk(dir);
   return out.sort();
+}
+
+const COUNTED_SCRIPT = /\.[cm]?js$/;
+
+function servedScope(dir: string): string {
+  const nextStatic = join(dir, "static");
+  return readBuildId(dir) !== null && existsSync(nextStatic) ? nextStatic : dir;
+}
+
+function unlistedScripts(dir: string, scope: string, listed: ReadonlySet<string>): number {
+  let count = 0;
+  const walk = (current: string): void => {
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(current, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = join(current, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name !== "node_modules" && entry.name !== AFTERPACK_DIR) walk(full);
+      } else if (entry.isFile() && COUNTED_SCRIPT.test(entry.name)) {
+        if (!listed.has(relative(dir, full).split(sep).join("/"))) count++;
+      }
+    }
+  };
+  walk(scope);
+  return count;
 }
 
 function candidates(target: string): string[] {
@@ -226,12 +260,24 @@ export function verify(deps: VerifyDeps): ExitCode {
     return EXIT.ok;
   }
 
+  if (deps.mode.level === "none") return EXIT.ok;
   const engine = receipt?.engine === "cloud" ? " · AfterPack Pro" : "";
+  const scope = servedScope(dir);
+  const others = unlistedScripts(dir, scope, new Set(files.map((f) => f.path)));
+  const where = scope === dir ? "" : ` in ${displayDir(deps.cwd, scope)}`;
+  const coverage =
+    others === 0
+      ? ""
+      : yellow(
+          ` · ${others} other JS ${others === 1 ? "file" : "files"}${where} ` +
+            `${others === 1 ? "isn't" : "aren't"} in this receipt`,
+        );
   deps.report.log(
     `${green("✓")} Verified ${files.length} ${files.length === 1 ? "file" : "files"} · ` +
       displayDir(deps.cwd, dir) +
       (copiedFrom === null ? "" : dim(` · copy of ${displayDir(deps.cwd, copiedFrom)}`)) +
-      engine,
+      engine +
+      coverage,
   );
   return EXIT.ok;
 }

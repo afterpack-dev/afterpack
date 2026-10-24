@@ -577,3 +577,120 @@ describe("afterpack <dir> writes the receipt afterpack verify reads", () => {
     expect(doc.summary.buildId).toBe(BUILD_ID);
   });
 });
+
+describe("afterpack verify on a tree that holds JS the receipt does not list", () => {
+  function distBuild(files: Record<string, string>, protectedFiles: string[]): string {
+    writeFileSync(join(root, "package.json"), "{}");
+    const dist = join(root, "dist");
+    for (const [rel, content] of Object.entries(files)) {
+      mkdirSync(dirname(join(dist, rel)), { recursive: true });
+      writeFileSync(join(dist, rel), content);
+    }
+    const listed = protectedFiles.map((rel) => join(dist, rel));
+    writeProtectionReceipt({
+      dir: dist,
+      tool: "afterpack-vite",
+      engine: "local",
+      engineVersion: "9.9.9-test",
+      seed: 1,
+      seedOrigin: "fresh",
+      bundler: "vite",
+      buildId: null,
+      files: listed,
+      transformed: listed,
+    });
+    return dist;
+  }
+
+  it("keeps the plain success line when every JS file is in the receipt", async () => {
+    distBuild({ "assets/main.js": "OBF:main", "robots.txt": "User-agent: *" }, ["assets/main.js"]);
+    expect(await invoke(["verify", "dist"])).toBe(0);
+    expect(out.join("\n")).toContain("Verified 1 file · dist/");
+    expect(out.join("\n")).not.toContain("other JS");
+  });
+
+  it("counts the other .js, .mjs and .cjs files and still passes", async () => {
+    distBuild(
+      {
+        "assets/main.js": "OBF:main",
+        "landing/assets/landing.js": "OBF:landing",
+        "admin/assets/a.js": "plain",
+        "admin/assets/b.mjs": "plain",
+        "admin/assets/c.cjs": "plain",
+        "admin/assets/a.js.map": "{}",
+        "robots.txt": "User-agent: *",
+        "notes.txt": "x",
+        "node_modules/dep/index.js": "plain",
+      },
+      ["assets/main.js", "landing/assets/landing.js"],
+    );
+    expect(await invoke(["verify", "dist"])).toBe(0);
+    expect(out.join("\n")).toContain(
+      "Verified 2 files · dist/ · 3 other JS files aren't in this receipt",
+    );
+  });
+
+  it("names one other file in the singular", async () => {
+    distBuild({ "main.js": "OBF:main", "admin.js": "plain" }, ["main.js"]);
+    expect(await invoke(["verify", "dist"])).toBe(0);
+    expect(out.join("\n")).toContain("1 other JS file isn't in this receipt");
+  });
+
+  it("prints nothing on diagnostics.level=none", async () => {
+    distBuild({ "main.js": "OBF:main", "admin.js": "plain" }, ["main.js"]);
+    expect(await invoke(["verify", "dist", "--diagnostics.level=none"])).toBe(0);
+    expect(out).toEqual([]);
+  });
+
+  it("still fails on a changed receipt file, whatever else the tree holds", async () => {
+    const dist = distBuild({ "main.js": "OBF:main", "admin.js": "plain" }, ["main.js"]);
+    writeFileSync(join(dist, "main.js"), "tampered");
+    expect(await invoke(["verify", "dist"])).toBe(1);
+    expect(err.join("\n")).toContain("content changed since it was obfuscated");
+  });
+
+  it("adds no field to the json document", async () => {
+    distBuild({ "main.js": "OBF:main", "admin.js": "plain" }, ["main.js"]);
+    expect(await invoke(["verify", "dist", "--diagnostics.format=json"])).toBe(0);
+    const doc = JSON.parse(out[0]) as Record<string, Record<string, unknown>>;
+    expect(Object.keys(doc)).toEqual([
+      "schemaVersion",
+      "afterpack",
+      "command",
+      "exitCode",
+      "ok",
+      "files",
+      "diagnostics",
+      "summary",
+      "artifacts",
+    ]);
+    expect(Object.keys(doc.summary)).toEqual([
+      "directory",
+      "receipt",
+      "copiedFrom",
+      "tool",
+      "engine",
+      "bundler",
+      "buildId",
+      "seed",
+      "engineVersion",
+      "files",
+      "transformed",
+    ]);
+  });
+
+  it("counts only the served static/ tree of a Next build", async () => {
+    const { distDir } = protectedBuild();
+    mkdirSync(join(distDir, "server", "app"), { recursive: true });
+    writeFileSync(join(distDir, "server", "app", "page.js"), "server");
+    mkdirSync(join(distDir, "cache"), { recursive: true });
+    writeFileSync(join(distDir, "cache", "x.js"), "cache");
+    mkdirSync(join(distDir, "static", BUILD_ID), { recursive: true });
+    writeFileSync(join(distDir, "static", BUILD_ID, "_buildManifest.js"), "manifest");
+
+    expect(await invoke(["verify", "."])).toBe(0);
+    expect(out.join("\n")).toContain(
+      "Verified 1 file · .next/ · AfterPack Pro · 1 other JS file in .next/static/ isn't in this receipt",
+    );
+  });
+});

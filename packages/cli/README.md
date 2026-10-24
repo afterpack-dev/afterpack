@@ -86,6 +86,11 @@ npx afterpack@latest verify build    # SvelteKit's adapter copy; also .output/pu
 A directory a framework copied from its build output, such as SvelteKit's `build/`, Nuxt's
 `.output/public/` or Next's `out/`, is checked against the receipt of the directory it copied.
 
+It checks every file the receipt records: each must be there and hash to the value AfterPack wrote.
+Other files in the tree are not checked. The success line counts the JavaScript files the receipt
+doesn't list, such as a bundle you build without AfterPack into the same directory
+(`✓ Verified 40 files · dist/ · 27 other JS files aren't in this receipt`); they never fail it.
+
 It exits `1` when the receipt is missing, belongs to a different build, or a file changed after it
 was obfuscated. The CLI and the plugins for Vite, Next.js, webpack, Rollup, esbuild and Angular all
 write a receipt.
