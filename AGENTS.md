@@ -29,14 +29,14 @@ packages/
   */e2e/               Playwright fixtures, one per package, driven by playwright.config.ts
 e2e/                    the e2e harness: registry, parallel fixture builds, scenario and signature
                         helpers; e2e/README.md explains lanes, sharding and how to write a scenario
+CHANGELOG.md            generated from the website's changelog, never edited here; every package
+                        ships it and its section for a version is that GitHub Release's body
 test/core-fake.ts       the shared `@afterpack/core` test double, aliased in by every vitest.config.ts
 scripts/                set-version.ts, release-plan.mjs, bump-engine.mjs, npm-release.mjs,
                         approve.mjs, smoke.mjs (+ smoke-fixtures/), served-engine.mjs,
                         changelog-section.mjs, check-hygiene.mjs, check-comments.mjs;
                         lib/ holds their logic, test/ its node:test suites (run by pnpm test)
 .github/workflows/      ci (contributor), release, publish-engine, rc-smoke, approve
-CHANGELOG.md            generated from the website's changelog, never edited here; every package
-                        ships it and its section for a version is that GitHub Release's body
 .github/ISSUE_TEMPLATE/ bug report form, issue config
 .github/workflows/e2e-candidate.yml   the full and preset e2e lanes on an unreleased engine, and
                                       the gates after the release's engine bump, run by dispatch

@@ -71,7 +71,7 @@ export function stageChangelog(root, packageDirs, version) {
       const target = path.join(dir, CHANGELOG_FILE);
       if (fs.existsSync(target)) {
         throw new ChangelogError(
-          `${target} already exists; the root ${CHANGELOG_FILE} is the only one`,
+          `${target} already exists, likely left by an interrupted pack: remove it (rm ${target}); the root ${CHANGELOG_FILE} is the only one`,
         );
       }
       fs.copyFileSync(source, target);
