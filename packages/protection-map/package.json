@@ -10,7 +10,8 @@
       "types": "./index.d.ts",
       "default": "./index.mjs"
     },
-    "./template.html": "./template.html"
+    "./template.html": "./template.html",
+    "./package.json": "./package.json"
   },
   "bin": {
     "afterpack-protection-map": "./render.mjs"

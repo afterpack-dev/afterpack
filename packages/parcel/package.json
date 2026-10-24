@@ -15,7 +15,8 @@
       "types": "./dist/reporter.d.ts",
       "import": "./dist/reporter.js",
       "default": "./dist/reporter.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "LICENSE",

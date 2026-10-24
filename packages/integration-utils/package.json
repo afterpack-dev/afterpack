@@ -17,7 +17,8 @@
         "default": "./dist/index.cjs"
       },
       "default": "./dist/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "LICENSE",
