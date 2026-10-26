@@ -2,6 +2,18 @@
 
 The full changelog, including cloud and dashboard changes, is at https://www.afterpack.dev/changelog.
 
+## 1.0.2 - 2026-10-26
+
+Classic-script scoping and direct `eval` fixes
+
+### Fixed
+
+- **Engine:** A function declared inside a block at the top of a classic script, such as `{ function g() {} }` or a labelled one, is a global again after protection, so other scripts on the page can call it.
+- **Engine:** Code that calls `eval` directly keeps seeing the page's globals: a name AfterPack adds can no longer stand in for a global the evaluated code reads or writes, and a variable the evaluated code declares stays in its function's scope. Files that build their `eval` code at runtime, or use `with`, come out larger, because AfterPack gives its own names a form no page global can share.
+- **Engine:** `if (x) function f() {}` in a script that is not a module is accepted, as browsers accept it. Declarations browsers reject there, such as `if (x) async function f() {}`, now fail the build with a parse error instead of passing through.
+- **Engine:** A parenthesized string statement such as `('use strict');` no longer makes its function strict.
+- **Engine:** A `var` inside a class `static {}` block stays local to that block.
+
 ## 1.0.1 - 2026-10-24
 
 One receipt for several builds, and release notes in every package
