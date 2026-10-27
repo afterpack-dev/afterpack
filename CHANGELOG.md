@@ -2,7 +2,7 @@
 
 The full changelog, including cloud and dashboard changes, is at https://www.afterpack.dev/changelog.
 
-## 1.0.2 - 2026-10-26
+## 1.0.2 - 2026-10-27
 
 Classic-script scoping and direct `eval` fixes
 
