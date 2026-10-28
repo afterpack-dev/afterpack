@@ -38,7 +38,7 @@
     "vite": "^6.0.0 || ^7.0.0 || ^8.0.0"
   },
   "dependencies": {
-    "@afterpack/core": "~1.0.0",
+    "@afterpack/core": "~1.0.2",
     "@afterpack/integration-utils": "workspace:*"
   },
   "devDependencies": {
