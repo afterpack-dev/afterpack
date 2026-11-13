@@ -2,6 +2,18 @@
 
 The full changelog, including cloud and dashboard changes, is at https://www.afterpack.dev/changelog.
 
+## 1.0.3 - 2026-11-13
+
+A smaller WebAssembly engine and a `super` fix
+
+### Changed
+
+- **Engine:** `@afterpack/wasm` is smaller: 1.24 MiB gzipped, down from 1.29 MiB.
+
+### Fixed
+
+- **Engine:** An object literal getter or setter that uses `super`, such as `get x() { return super.x }`, is now protected. Before, the file failed the build.
+
 ## 1.0.2 - 2026-10-27
 
 Classic-script scoping and direct `eval` fixes
