@@ -8,7 +8,7 @@ A smaller WebAssembly engine and a `super` fix
 
 ### Changed
 
-- **Engine:** `@afterpack/wasm` is smaller: 1.24 MiB gzipped, down from 1.29 MiB.
+- **Engine:** `@afterpack/wasm` is smaller: 1.23 MiB gzipped, down from 1.29 MiB.
 
 ### Fixed
 
