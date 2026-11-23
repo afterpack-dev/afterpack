@@ -25,7 +25,12 @@ function tunnel(body: Uint8Array, contentType: string, path = "/api/x9"): Reques
   return new Request(`${ORIGIN}${path}`, {
     method: "POST",
     body: new Uint8Array(body),
-    headers: { "content-type": contentType, "sec-fetch-site": "same-origin", cookie: "sid=1" },
+    headers: {
+      "content-length": String(body.length),
+      "content-type": contentType,
+      "sec-fetch-site": "same-origin",
+      cookie: "sid=1",
+    },
   });
 }
 

@@ -1,5 +1,5 @@
 import nacl from "tweetnacl";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { SocketState } from "../src/index.js";
 import { setup } from "./harness.js";
 import { type FrameType, wireFromText } from "./np1-client.js";
@@ -133,6 +133,46 @@ describe("openSocket and sealSocket with the independent client", () => {
       error: "open-failed",
       state: null,
     });
+  });
+
+  it("counts a socket's first frame against freshSessionsPerMinute under the address given", () => {
+    const { protection, client } = setup({
+      freshSessionsPerMinute: 2,
+      clientAddress: (request) => request.headers.get("cf-connecting-ip"),
+    });
+    const upgrade = (ip: string) =>
+      new Request("https://app.example/ws", { headers: { "cf-connecting-ip": ip } });
+    const address = protection.clientAddress(upgrade("198.51.100.9"));
+    expect(address).toBe("198.51.100.9");
+    const first = (address: string | null) => {
+      const app = client(2);
+      return {
+        app,
+        opened: protection.openSocket(null, app.socketFrame(null, "binary", true), address),
+      };
+    };
+    const a = first(address);
+    const b = first(address);
+    const c = first(address);
+    expect([a.opened.ok, b.opened.ok]).toEqual([true, true]);
+    expect(c.opened).toEqual({ ok: false, error: "rate-limited", state: null });
+    expect(protection.counters).toMatchObject({ refusals: 1, openFailures: 0 });
+    if (!a.opened.ok) throw new Error(a.opened.error);
+    const later = protection.openSocket(
+      a.opened.state,
+      a.app.socketFrame("still", "binary", false),
+      address,
+    );
+    expect(later).toMatchObject({ ok: true, message: "still" });
+    expect(first(protection.clientAddress(upgrade("198.51.100.10"))).opened.ok).toBe(true);
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect([first(null).opened.ok, first(null).opened.ok]).toEqual([true, true]);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+
+    const uncapped = setup();
+    expect(uncapped.protection.clientAddress(upgrade("198.51.100.9"))).toBeNull();
   });
 
   it("seals nothing before the handshake and refuses a state it can't use", () => {

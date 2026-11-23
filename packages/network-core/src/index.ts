@@ -17,6 +17,7 @@ export type { BodyEncoding, FrameType, Np1Error } from "./np1.js";
 export {
   type Counters,
   createNetworkProtection,
+  DEFAULT_MAX_SEALED_BODY_BYTES,
   type NetworkProtection,
   type NetworkProtectionOptions,
   type Next,
@@ -25,6 +26,7 @@ export {
   type RequestInfo,
   type SocketData,
   type SocketOpened,
+  type SocketRefusal,
   type SocketState,
 } from "./protection.js";
 export type { Routes } from "./routes.js";

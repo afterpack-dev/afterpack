@@ -29,6 +29,19 @@ export function setup(options: Partial<NetworkProtectionOptions> = {}) {
   return { keys, serverPublic, protection, seen, infos, client };
 }
 
+export function post(
+  url: string,
+  body: Uint8Array | string,
+  headers: Record<string, string> = {},
+): Request {
+  const bytes = typeof body === "string" ? new TextEncoder().encode(body) : new Uint8Array(body);
+  return new Request(url, {
+    method: "POST",
+    body: bytes,
+    headers: { "content-length": String(bytes.length), ...headers },
+  });
+}
+
 export function tunnelRequest(
   sealed: SealedRequest,
   headers: Record<string, string> = {},
@@ -38,6 +51,7 @@ export function tunnelRequest(
     method: "POST",
     body: new Uint8Array(sealed.body),
     headers: {
+      "content-length": String(sealed.body.length),
       "content-type": sealed.contentType,
       "sec-fetch-site": "same-origin",
       "sec-fetch-mode": "cors",

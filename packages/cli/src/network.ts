@@ -1,6 +1,6 @@
 import { generateKeyPairSync } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { CONFIG_FILE_NAME, findUpward, validateConfig } from "@afterpack/integration-utils";
 import { CONTACT_FOOTER } from "./args.js";
 import { commandLine } from "./dispatch.js";
@@ -38,7 +38,8 @@ Commands:
                            and print the server snippet and the secret command
                            for the platform it detects (Cloudflare when a
                            wrangler.toml, wrangler.jsonc or wrangler.json is in
-                           the working directory). It never runs that command and
+                           the working directory or a parent up to the one
+                           holding afterpack.json). It never runs that command and
                            refuses to replace a public key afterpack.json already
                            holds. When this version's afterpack.json does not
                            accept the network keys yet, it writes nothing and
@@ -130,9 +131,31 @@ function keygen(deps: NetworkDeps): ExitCode {
 
 type Platform = "cloudflare" | "fetch";
 
-function detectPlatform(cwd: string): { platform: Platform; file: string | null } {
-  const file = WRANGLER_FILES.find((name) => existsSync(join(cwd, name))) ?? null;
-  return { platform: file === null ? "fetch" : "cloudflare", file };
+function searchedDirectories(cwd: string, configDir: string): string[] {
+  const stop = resolve(configDir);
+  const dirs: string[] = [];
+  let dir = resolve(cwd);
+  for (;;) {
+    dirs.push(dir);
+    if (dir === stop) return dirs;
+    const parent = dirname(dir);
+    if (parent === dir) return [resolve(cwd)];
+    dir = parent;
+  }
+}
+
+function detectPlatform(
+  cwd: string,
+  configDir: string,
+): { platform: Platform; file: string | null; dir: string } {
+  for (const dir of searchedDirectories(cwd, configDir)) {
+    const file = WRANGLER_FILES.find((name) => existsSync(join(dir, name)));
+    if (file !== undefined) {
+      const shown = relative(cwd, join(dir, file)).split(sep).join("/");
+      return { platform: "cloudflare", file: shown, dir };
+    }
+  }
+  return { platform: "fetch", file: null, dir: cwd };
 }
 
 function usesHono(cwd: string): boolean {
@@ -265,11 +288,11 @@ function init(deps: NetworkDeps): ExitCode {
   const written = acceptsNetwork(next);
   if (written) writeFileSync(configPath, `${JSON.stringify(next, null, 2)}\n`);
 
-  const { platform, file } = detectPlatform(cwd);
-  const hono = platform === "cloudflare" && usesHono(cwd);
+  const { platform, file, dir } = detectPlatform(cwd, dirname(configPath));
+  const hono = platform === "cloudflare" && usesHono(dir);
   const pkg =
     platform === "cloudflare" ? "@afterpack/network-cloudflare" : "@afterpack/network-core";
-  const install = detectPackageManager(cwd).add(pkg);
+  const install = detectPackageManager(dir).add(pkg);
   const secretCommand = platform === "cloudflare" ? `npx wrangler secret put ${SECRET_NAME}` : null;
   const snippet = serverSnippet(platform, hono, include);
 

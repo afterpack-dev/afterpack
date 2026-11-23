@@ -24,7 +24,9 @@ npm install @afterpack/network-core
 
 Make a key pair with `npx afterpack network keygen` (or `afterpack network init`, which also writes
 the public key into `afterpack.json`). The public key goes into the build config as
-`network.publicKey`; the private key goes only into your server's secret store.
+`network.publicKey`; the private key goes only into your server's secret store. Until an afterpack
+release accepts the `network` keys in `afterpack.json`, `init` writes nothing and prints the block to
+add, because a file holding them would fail every build.
 
 ## Use
 
@@ -54,7 +56,8 @@ fresh-session limiter.
 | `routes` | `{ include, exclude? }`: path globs (`*` within a segment, `**` across segments), the same as the build's `network.routes`. Percent-escapes of unreserved characters (`%70` for `p`) are decoded before matching. Requests outside them pass to `next` untouched. |
 | `allowedOrigins` | Origins, besides the page's own, whose tunnel requests are accepted (`Origin` header match). Default none. |
 | `requireSealed` | Refuse plaintext on the protected routes. Default `false`. |
-| `freshSessionsPerMinute` | Cap on new sessions (new client keys, each costing one X25519) per client address per minute. Needs `clientAddress`. Default no cap. |
+| `freshSessionsPerMinute` | Cap on new sessions (new client keys, each costing one X25519) per client address per minute, for tunnel requests and for sockets whose first frame comes with an address. Needs `clientAddress`. Default no cap. |
+| `maxSealedBodyBytes` | The largest tunnel body `handle` reads, in bytes. Default 1 MiB (`DEFAULT_MAX_SEALED_BODY_BYTES`). A `POST` whose `Content-Length` is larger, or whose body turns out larger, is never buffered: it goes to `next` untouched as plaintext, or gets the refusal status with `requireSealed`. Raise it if a protected route takes larger bodies; a sealed body is the app's body plus headers, padded up to the next 64 KiB step past 64 KiB, and a third larger in a text encoding. |
 | `clientAddress(request)` | The address `freshSessionsPerMinute` counts by. No default, because only your platform knows which address it vouches for. A header a client can set itself, such as `X-Forwarded-For` or `X-Real-IP` on a server reached directly, lets any client rotate it past the cap; return such a header only when a proxy you run overwrites it. A request it returns no address for (`null`, `undefined` or `""`) is not limited, and the first one logs a warning. On Cloudflare, `@afterpack/network-cloudflare` uses `CF-Connecting-IP`. |
 | `onRequest(request, info)` | Called once per request on a protected route, after the response is made. `info` is `{ method, path, status, sealed, durationMs, refusal? }`; `request` is the unwrapped request. |
 
@@ -62,24 +65,32 @@ It returns:
 
 - `handle(request, next)`: unwraps a tunnel request, calls `next` with the real request and seals
   its response; passes plaintext to `next` unchanged (unless `requireSealed`).
-- `openSocket(state, frame)` and `sealSocket(state, message)`: the WebSocket side, pure functions over
-  a small JSON-serialisable `state` (`{ key, frameType }`) you keep with the socket. Pass `null` as
-  the state for the first client frame. `openSocket` returns `{ ok: true, state, message }` (the
-  message is `null` for a handshake record) or `{ ok: false, error, state }`; close the socket on a
-  refusal, with a numeric code and no reason text.
+- `openSocket(state, frame, address?)` and `sealSocket(state, message)`: the WebSocket side, pure
+  functions over a small JSON-serialisable `state` (`{ key, frameType }`) you keep with the socket.
+  Pass `null` as the state for the first client frame, and the client address you took from the
+  upgrade request with `clientAddress(request)`, so `freshSessionsPerMinute` counts the socket.
+  `openSocket` returns `{ ok: true, state, message }` (the message is `null` for a handshake record)
+  or `{ ok: false, error, state }`, where `error` is an NP1 error or `rate-limited`; close the socket
+  on a refusal, with a numeric code and no reason text.
+- `clientAddress(request)`: the address `freshSessionsPerMinute` counts `request` under, or `null`
+  when the cap is off or the option gives none. Keep it with the socket for its first frame.
 - `counters`: `{ sealed, plaintext, openFailures, refusals }` since the protection was created.
 
 ### What `handle` does
 
-- **Tunnel requests.** A `POST` on a protected route whose body opens as an NP1 client record. The
-  real request is built from it: scheme and host from the outer request; path and query from the
+- **Tunnel requests.** A `POST` on a protected route, with a `Content-Length` of at most
+  `maxSealedBodyBytes`, whose body opens as an NP1 client record. Browsers send `Content-Length` for
+  every buffered body, so a body without one (a streamed upload) is plaintext and is never buffered;
+  nor is any body shorter than a record (72 bytes). The real request is built from it: scheme and host from the outer request; path and query from the
   inner target, which must fall inside `routes`; method, headers and body from inside.
 - **Headers.** The app's inner headers plus the outer request's browser-set headers. The outer request
   wins for every header a page can't set, that carries identity, or that frames the request: the
   Fetch standard's forbidden request headers, `Cookie`, `Origin`, `Host`, `Referer`, `Sec-*`,
   `Proxy-*`, `cf-*`, `X-Forwarded-*`, `X-Real-IP`, `True-Client-IP`, `Forwarded`, and `Connection`,
   `Upgrade`, `Transfer-Encoding`, `Content-Length`, `TE`, `Trailer`, `Keep-Alive`, `Expect`. An inner
-  header with one of those names is dropped. The outer `Content-Type` describes the tunnel body and
+  header with one of those names is dropped, and so is an inner `X-HTTP-Method`,
+  `X-HTTP-Method-Override` or `X-Method-Override` that names `CONNECT`, `TRACE` or `TRACK`, as Fetch
+  forbids. The outer `Content-Type` describes the tunnel body and
   is never passed on; for every other name the inner value wins.
 - **Same origin only.** A tunnel request is accepted when `Sec-Fetch-Site` is `same-origin`, or its
   `Origin` is in `allowedOrigins`. Anyone can seal a record, because the server key is public; without
@@ -93,8 +104,8 @@ It returns:
   one.
 - **Refusals** get status `400` and a plain `Bad Request` body: a cross-site tunnel request, a target
   outside `routes`, an inner request Fetch can't build (a `GET` with a body, `CONNECT`), a client
-  address over `freshSessionsPerMinute`, and, with `requireSealed`, plaintext or a body that fails to
-  open. The client runtime treats a refusal as a dropped session and retries once with a fresh one.
+  address over `freshSessionsPerMinute`, and, with `requireSealed`, plaintext, a body over
+  `maxSealedBodyBytes` or a body that fails to open. The client runtime treats a refusal as a dropped session and retries once with a fresh one.
 - **Errors in `next`.** When `next` throws or its body fails to read on a sealed request, the error
   goes to `console.error` and the client gets a sealed `500` with no headers and no body, so nothing
   about it shows on the wire. `onRequest` reports status `500`.

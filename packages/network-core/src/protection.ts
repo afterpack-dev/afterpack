@@ -32,7 +32,10 @@ export type RefusalReason =
   | "cross-site"
   | "rate-limited"
   | "outside-routes"
-  | "bad-request";
+  | "bad-request"
+  | "too-large";
+
+export type SocketRefusal = Np1Error | "rate-limited";
 
 export interface RequestInfo {
   method: string;
@@ -49,6 +52,7 @@ export interface NetworkProtectionOptions {
   allowedOrigins?: readonly string[];
   requireSealed?: boolean;
   freshSessionsPerMinute?: number;
+  maxSealedBodyBytes?: number;
   clientAddress?: (request: Request) => string | null | undefined;
   onRequest?: (request: Request, info: RequestInfo) => void;
 }
@@ -69,18 +73,24 @@ export type SocketData = string | ArrayBuffer | ArrayBufferView;
 
 export type SocketOpened =
   | { ok: true; state: SocketState; message: string | Uint8Array | null }
-  | { ok: false; error: Np1Error; state: SocketState | null };
+  | { ok: false; error: SocketRefusal; state: SocketState | null };
 
 export type Next = (request: Request) => Response | Promise<Response>;
 
 export interface NetworkProtection {
   handle(request: Request, next: Next): Promise<Response>;
-  openSocket(state: SocketState | null | undefined, frame: SocketData): SocketOpened;
+  openSocket(
+    state: SocketState | null | undefined,
+    frame: SocketData,
+    address?: string | null,
+  ): SocketOpened;
   sealSocket(state: SocketState, message: SocketData): string | Uint8Array;
+  clientAddress(request: Request): string | null;
   readonly counters: Readonly<Counters>;
 }
 
 export const REFUSAL_STATUS = 400;
+export const DEFAULT_MAX_SEALED_BODY_BYTES = 1 << 20;
 const INTERNAL_ERROR_STATUS = 500;
 const BAD_GATEWAY_STATUS = 502;
 
@@ -88,6 +98,7 @@ type Attempt =
   | { kind: "plaintext" }
   | { kind: "failed"; error: Np1Error }
   | { kind: "rate-limited" }
+  | { kind: "too-large" }
   | {
       kind: "opened";
       message: Extract<InnerMessage, { kind: 1 }>;
@@ -141,6 +152,49 @@ function freshSessionLimiter(cap: number | undefined): (address: string, now: nu
   };
 }
 
+function bodyLimit(value: number | undefined): number {
+  if (value === undefined) return DEFAULT_MAX_SEALED_BODY_BYTES;
+  if (!Number.isSafeInteger(value) || value < MIN_PREFIXED_WIRE) {
+    throw new TypeError(`maxSealedBodyBytes must be an integer of at least ${MIN_PREFIXED_WIRE}`);
+  }
+  return value;
+}
+
+function declaredLength(request: Request): number | null {
+  const value = request.headers.get("content-length");
+  if (value === null || !/^[0-9]{1,15}$/.test(value)) return null;
+  return Number(value);
+}
+
+async function readBounded(
+  body: ReadableStream<Uint8Array>,
+  limit: number,
+): Promise<Uint8Array | null> {
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return joinChunks(chunks, length);
+    length += value.byteLength;
+    if (length > limit) {
+      reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+}
+
+function joinChunks(chunks: Uint8Array[], length: number): Uint8Array {
+  const out = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
+}
+
 function looksSealed(encoding: BodyEncoding, wire: Uint8Array): boolean {
   if (wire.length < MIN_PREFIXED_WIRE) return false;
   return encoding !== "raw" || decodeUtf8(wire) === null;
@@ -182,6 +236,7 @@ export function createNetworkProtection(options: NetworkProtectionOptions): Netw
   const inRoutes = compileRoutes(options.routes);
   const allowedOrigins = new Set((options.allowedOrigins ?? []).map(normaliseOrigin));
   const requireSealed = options.requireSealed === true;
+  const maxBody = bodyLimit(options.maxSealedBodyBytes);
   const takeFreshSession = freshSessionLimiter(options.freshSessionsPerMinute);
   const clientAddress =
     options.freshSessionsPerMinute === undefined ? undefined : options.clientAddress;
@@ -192,6 +247,7 @@ export function createNetworkProtection(options: NetworkProtectionOptions): Netw
     );
   }
   let warnedNoAddress = false;
+  let warnedNoSocketAddress = false;
   const onRequest = options.onRequest;
   const counters: Counters = { sealed: 0, plaintext: 0, openFailures: 0, refusals: 0 };
 
@@ -210,17 +266,29 @@ export function createNetworkProtection(options: NetworkProtectionOptions): Netw
     return origin !== null && allowedOrigins.has(origin);
   };
 
+  const addressOf = (request: Request): string | null => {
+    if (clientAddress === undefined) return null;
+    const address = clientAddress(request);
+    return typeof address === "string" && address !== "" ? address : null;
+  };
+
   const attemptOpen = async (request: Request): Promise<Attempt> => {
     if (request.method !== "POST" || request.body === null) return { kind: "plaintext" };
-    const body = new Uint8Array(await request.clone().arrayBuffer());
+    const length = declaredLength(request);
+    if (length === null || length < MIN_PREFIXED_WIRE) return { kind: "plaintext" };
+    if (length > maxBody) return { kind: "too-large" };
+    const clone = request.clone().body;
+    if (clone === null) return { kind: "plaintext" };
+    const body = await readBounded(clone, maxBody);
+    if (body === null) return { kind: "too-large" };
     const detected = detectBody(body);
     if (!detected.ok || !looksSealed(detected.encoding, detected.wire)) {
       return { kind: "plaintext" };
     }
     const ephPublic = detected.wire.subarray(0, 32);
     if (clientAddress !== undefined && !isCachedSession(deriver, ephPublic)) {
-      const address = clientAddress(request);
-      if (typeof address === "string" && address !== "") {
+      const address = addressOf(request);
+      if (address !== null) {
         if (!takeFreshSession(address, Date.now())) return { kind: "rate-limited" };
       } else if (!warnedNoAddress) {
         warnedNoAddress = true;
@@ -288,6 +356,10 @@ export function createNetworkProtection(options: NetworkProtectionOptions): Netw
 
     const attempt = await attemptOpen(request);
     if (attempt.kind === "rate-limited") return refuse(request, started, "rate-limited", false);
+    if (attempt.kind === "too-large") {
+      if (requireSealed) return refuse(request, started, "too-large", false);
+      return passPlaintext(request, next, started);
+    }
     if (attempt.kind === "failed") {
       counters.openFailures += 1;
       if (requireSealed) return refuse(request, started, attempt.error, false);
@@ -361,7 +433,26 @@ export function createNetworkProtection(options: NetworkProtectionOptions): Netw
     });
   };
 
-  const openSocket = (state: SocketState | null | undefined, frame: SocketData): SocketOpened => {
+  const admitSocket = (address: string | null | undefined): boolean => {
+    if (clientAddress === undefined) return true;
+    if (typeof address === "string" && address !== "") {
+      return takeFreshSession(address, Date.now());
+    }
+    if (!warnedNoSocketAddress) {
+      warnedNoSocketAddress = true;
+      console.warn(
+        "network protection: openSocket got no client address, so freshSessionsPerMinute does " +
+          "not limit such sockets",
+      );
+    }
+    return true;
+  };
+
+  const openSocket = (
+    state: SocketState | null | undefined,
+    frame: SocketData,
+    address?: string | null,
+  ): SocketOpened => {
     const frameType: FrameType = typeof frame === "string" ? "text" : "binary";
     const data = typeof frame === "string" ? frame : toBytes(frame);
     const fail = (error: Np1Error): SocketOpened => {
@@ -371,6 +462,10 @@ export function createNetworkProtection(options: NetworkProtectionOptions): Netw
     if (state === null || state === undefined) {
       const wire = frameToWire(data, frameType);
       if (wire === null) return fail("bad-encoding");
+      if (wire.length >= MIN_PREFIXED_WIRE && !admitSocket(address)) {
+        counters.refusals += 1;
+        return { ok: false, error: "rate-limited", state: null };
+      }
       const opened = openRecord(
         wire,
         { prefixed: (eph) => deriveAllKeys(secrets, eph) },
@@ -409,6 +504,7 @@ export function createNetworkProtection(options: NetworkProtectionOptions): Netw
     handle,
     openSocket,
     sealSocket,
+    clientAddress: addressOf,
     get counters() {
       return { ...counters };
     },

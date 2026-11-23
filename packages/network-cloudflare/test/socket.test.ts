@@ -234,6 +234,37 @@ describe("createSocketProtection: the Durable Object socket helper", () => {
     again.restore(new FakeSocket());
   });
 
+  it("counts each socket's first frame against freshSessionsPerMinute by the upgrade's CF-Connecting-IP", () => {
+    const pair = generateKeyPair();
+    const serverPublic = new Uint8Array(Buffer.from(pair.publicKey, "base64url"));
+    const sockets = createSocketProtection({
+      privateKeys: pair.privateKey,
+      freshSessionsPerMinute: 1,
+    });
+    const upgrade = (ip: string) =>
+      new Request("https://app.example/ws", { headers: { "cf-connecting-ip": ip } });
+    const open = (ip: string) => {
+      const app = new Np1TestClient({ serverPublic, ratio: 2 });
+      const socket = new FakeSocket();
+      sockets.accept(socket, { ip }, upgrade(ip));
+      sockets.send(socket, "hello");
+      const message = sockets.receive(socket, app.socketFrame("hi", "text", true));
+      return { app, socket, message };
+    };
+    const first = open("203.0.113.5");
+    expect(first.message).toBe("hi");
+    expect(first.app.openSocketFrame(first.socket.sent[0])).toBe("hello");
+    const second = open("203.0.113.5");
+    expect(second.message).toBeNull();
+    expect(second.socket.closed).toBe(REFUSAL_CLOSE_CODE);
+    expect(second.socket.sent).toEqual([]);
+    expect(open("203.0.113.6").message).toBe("hi");
+    expect(sockets.receive(first.socket, first.app.socketFrame("again", "text", false))).toBe(
+      "again",
+    );
+    expect(first.socket.closed).toBeNull();
+  });
+
   it("closes a socket it never accepted", () => {
     const { sockets, client } = setup();
     const socket = new FakeSocket();

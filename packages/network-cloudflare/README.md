@@ -24,7 +24,8 @@ npx wrangler secret put NETWORK_PRIVATE_KEYS
 ```
 
 `afterpack network init` makes a key pair, writes the public key into `afterpack.json` and prints the
-private key once, for the secret. During a rotation the secret holds both private keys, new first,
+private key once, for the secret. Until an afterpack release accepts the `network` keys in
+`afterpack.json`, it writes nothing and prints the block to add instead. During a rotation the secret holds both private keys, new first,
 separated by a comma.
 
 ## Hono
@@ -94,7 +95,7 @@ export class Room {
     }
     const [client, server] = Object.values(new WebSocketPair());
     this.ctx.acceptWebSocket(server);
-    this.sockets.accept(server, { seat: 1 });
+    this.sockets.accept(server, { seat: 1 }, request);
     this.sockets.send(server, "welcome");
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -107,8 +108,12 @@ export class Room {
 }
 ```
 
-- `accept(socket, attachment?)` starts the session. The session state (the key and the frame type)
-  is kept in the socket's attachment with `serializeAttachment`, so a hibernated object resumes. Read
+- `accept(socket, attachment?, request?)` starts the session. The session state (the key and the
+  frame type) is kept in the socket's attachment with `serializeAttachment`, so a hibernated object
+  resumes. Pass the upgrade request so `freshSessionsPerMinute` counts the socket's first frame
+  under its `CF-Connecting-IP`; without it, sockets are not limited, and the first one logs a
+  warning when the cap is set. The cap counts per helper, so in a Durable Object per object, not
+  across your Worker. Read
   and write your own attachment data through `attachment(socket)` and `setAttachment(socket, value)`,
   not `serializeAttachment` directly.
 - `receive(socket, data)` returns the app's message (a string or an `ArrayBuffer`), or `null` for the
@@ -122,7 +127,7 @@ export class Room {
   a socket that never sends stays open until it does.
 - **Check `Origin` on the upgrade request.** A browser sends cross-site WebSocket upgrades with the
   page's cookies and no CORS check, and anyone can seal a handshake, because the server key is
-  public. The helper does not see the upgrade request, so the check is yours, as for any socket.
+  public. The helper does not check it, so the check is yours, as for any socket.
 - Close reasons travel in clear: close a protected socket with numeric codes, never prose.
 
 ## License

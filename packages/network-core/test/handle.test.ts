@@ -3,6 +3,7 @@ import nacl from "tweetnacl";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createNetworkProtection,
+  DEFAULT_MAX_SEALED_BODY_BYTES,
   generateKeyPair,
   publicKeyFor,
   REFUSAL_STATUS,
@@ -12,6 +13,7 @@ import {
   echo,
   json,
   ORIGIN,
+  post,
   roundTrip,
   setup,
   TUNNEL,
@@ -22,6 +24,33 @@ import { decodeOuter, type Encoding, encodeOuter, Np1TestClient } from "./np1-cl
 const ENCODINGS: Encoding[] = ["raw", "base64", "base64url", "json"];
 const byTestAddress = (request: Request) => request.headers.get("cf-connecting-ip");
 const utf8 = (bytes: Uint8Array) => Buffer.from(bytes).toString("utf8");
+
+function countedStream(bytes: Uint8Array, chunk: number) {
+  const pulls = { bytes: 0 };
+  let offset = 0;
+  const stream = new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        if (offset >= bytes.length) {
+          controller.close();
+          return;
+        }
+        const part = bytes.slice(offset, offset + chunk);
+        offset += part.length;
+        pulls.bytes += part.length;
+        controller.enqueue(part);
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  return { stream, pulls };
+}
+
+function streamedPost(url: string, stream: ReadableStream<Uint8Array>, length: number | null) {
+  const headers: Record<string, string> = { "sec-fetch-site": "same-origin", origin: ORIGIN };
+  if (length !== null) headers["content-length"] = String(length);
+  return new Request(url, { method: "POST", body: stream, headers, duplex: "half" } as RequestInit);
+}
 
 afterEach(() => {
   vi.useRealTimers();
@@ -361,6 +390,53 @@ describe("handle: header rules", () => {
     }
   });
 
+  it("drops inner method-override headers that name a method Fetch forbids", async () => {
+    const ctx = setup();
+    const { opened } = await roundTrip(
+      ctx,
+      ctx.client(),
+      {
+        method: "POST",
+        target: "/api/m",
+        headers: [
+          ["x-http-method-override", "TRACE"],
+          ["x-http-method", '"CONNECT"'],
+          ["x-method-override", "patch"],
+          ["x-method-override", " track"],
+        ],
+        body: "m",
+      },
+      "raw",
+    );
+    const headers = new Map(json(opened).headers);
+    expect(headers.has("x-http-method-override")).toBe(false);
+    expect(headers.has("x-http-method")).toBe(false);
+    expect(headers.has("x-method-override")).toBe(false);
+    for (const name of ["x-http-method-override", "x-http-method", "x-method-override"]) {
+      expect(ctx.seen[0].headers.has(name), name).toBe(false);
+    }
+
+    const allowed = await roundTrip(
+      ctx,
+      ctx.client(),
+      {
+        method: "POST",
+        target: "/api/m",
+        headers: [
+          ["x-http-method-override", "PATCH"],
+          ["x-method-override", "DELETE, PUT"],
+          ["x-http-method", "TRACEROUTE"],
+        ],
+        body: "m",
+      },
+      "raw",
+    );
+    const kept = new Map(json(allowed.opened).headers);
+    expect(kept.get("x-http-method-override")).toBe("PATCH");
+    expect(kept.get("x-method-override")).toBe("DELETE, PUT");
+    expect(kept.get("x-http-method")).toBe("TRACEROUTE");
+  });
+
   it("carries the outer identity headers and leaves the tunnel's Content-Type out", async () => {
     const ctx = setup();
     const { opened } = await roundTrip(
@@ -501,7 +577,7 @@ describe("handle: cross-site requests", () => {
     const foreign = tunnelRequest(sealed, { origin: "https://evil.example" });
     foreign.headers.delete("sec-fetch-site");
     expect((await ctx.protection.handle(foreign, echo)).status).toBe(REFUSAL_STATUS);
-    const bare = new Request(TUNNEL, { method: "POST", body: new Uint8Array(sealed.body) });
+    const bare = post(TUNNEL, sealed.body);
     expect((await ctx.protection.handle(bare, echo)).status).toBe(REFUSAL_STATUS);
     expect(ctx.seen).toEqual([]);
   });
@@ -525,11 +601,11 @@ describe("handle: cross-site requests", () => {
 
 describe("handle: plaintext", () => {
   const plainPost = () =>
-    new Request(`${ORIGIN}/api/items`, {
-      method: "POST",
-      body: JSON.stringify({ name: "a plaintext body long enough to look like anything at all" }),
-      headers: { "content-type": "application/json" },
-    });
+    post(
+      `${ORIGIN}/api/items`,
+      JSON.stringify({ name: "a plaintext body long enough to look like anything at all" }),
+      { "content-type": "application/json" },
+    );
 
   it("passes plaintext through by default, body intact, marked unsealed", async () => {
     const ctx = setup();
@@ -563,10 +639,7 @@ describe("handle: plaintext", () => {
     const ctx = setup();
     for (const encoding of ENCODINGS) {
       const text = encodeOuter(nacl.randomBytes(300), encoding);
-      const request = new Request(`${ORIGIN}/api/upload`, {
-        method: "POST",
-        body: new Uint8Array(text),
-      });
+      const request = post(`${ORIGIN}/api/upload`, text);
       let received: Uint8Array | null = null;
       const response = await ctx.protection.handle(request, async (r) => {
         received = new Uint8Array(await r.arrayBuffer());
@@ -580,10 +653,7 @@ describe("handle: plaintext", () => {
 
     const strict = setup({ requireSealed: true });
     const text = encodeOuter(nacl.randomBytes(300), "base64");
-    const response = await strict.protection.handle(
-      new Request(`${ORIGIN}/api/upload`, { method: "POST", body: new Uint8Array(text) }),
-      echo,
-    );
+    const response = await strict.protection.handle(post(`${ORIGIN}/api/upload`, text), echo);
     expect(response.status).toBe(REFUSAL_STATUS);
     expect(strict.infos[0].info.refusal).toBe("open-failed");
   });
@@ -592,11 +662,7 @@ describe("handle: plaintext", () => {
     const ctx = setup();
     const client = ctx.client();
     const frame = client.socketFrame(null, "binary", true) as Uint8Array;
-    const request = new Request(TUNNEL, {
-      method: "POST",
-      body: new Uint8Array(frame),
-      headers: { "sec-fetch-site": "same-origin" },
-    });
+    const request = post(TUNNEL, frame, { "sec-fetch-site": "same-origin" });
     const response = await ctx.protection.handle(request, () => new Response("plain"));
     expect(await response.text()).toBe("plain");
     expect(ctx.protection.counters.openFailures).toBe(1);
@@ -615,6 +681,112 @@ describe("handle: plaintext", () => {
       expect(await response.text()).toBe("native");
     }
     expect(ctx.infos).toEqual([]);
+  });
+});
+
+describe("handle: body size", () => {
+  it("never reads a body over the default cap or without Content-Length before next", async () => {
+    for (const length of [DEFAULT_MAX_SEALED_BODY_BYTES + 1, null]) {
+      const ctx = setup();
+      const bytes = nacl.randomBytes(4096);
+      const { stream, pulls } = countedStream(bytes, 512);
+      const request = streamedPost(TUNNEL, stream, length);
+      const original = request.body;
+      let pulledBeforeNext = -1;
+      let received: Uint8Array | null = null;
+      const response = await ctx.protection.handle(request, async (r) => {
+        pulledBeforeNext = pulls.bytes;
+        expect(r).toBe(request);
+        expect(r.body).toBe(original);
+        received = new Uint8Array(await r.arrayBuffer());
+        return new Response("app", { status: 201 });
+      });
+      expect(response.status).toBe(201);
+      expect(pulledBeforeNext).toBe(0);
+      expect(received).toEqual(bytes);
+      expect(ctx.protection.counters).toMatchObject({ plaintext: 1, openFailures: 0 });
+      expect(ctx.infos[0].info.sealed).toBe(false);
+    }
+  });
+
+  it("passes a sealed record over maxSealedBodyBytes untouched, and refuses it with requireSealed", async () => {
+    const ctx = setup({ maxSealedBodyBytes: 200 });
+    const sealed = ctx.client().sealRequest({ method: "POST", target: "/api/big" }, "raw");
+    expect(sealed.body.length).toBeGreaterThan(200);
+    const request = tunnelRequest(sealed);
+    const original = request.body;
+    let seen: Request | null = null;
+    const response = await ctx.protection.handle(request, (r) => {
+      seen = r;
+      return new Response("plain");
+    });
+    expect(await response.text()).toBe("plain");
+    expect(seen).toBe(request);
+    expect(request.body).toBe(original);
+    expect(ctx.protection.counters).toMatchObject({ sealed: 0, plaintext: 1, openFailures: 0 });
+
+    const strict = setup({ maxSealedBodyBytes: 200, requireSealed: true });
+    const big = strict.client().sealRequest({ method: "POST", target: "/api/big" }, "base64");
+    const refused = await strict.protection.handle(tunnelRequest(big), () => {
+      throw new Error("next must not run");
+    });
+    expect(refused.status).toBe(REFUSAL_STATUS);
+    expect(strict.infos[0].info).toMatchObject({ refusal: "too-large", sealed: false });
+
+    const fits = setup({ maxSealedBodyBytes: 4096, requireSealed: true });
+    const small = await roundTrip(
+      fits,
+      fits.client(),
+      { method: "GET", target: "/api/ok" },
+      "json",
+    );
+    expect(small.outer.status).toBe(200);
+    expect(json(small.opened).url).toBe(`${ORIGIN}/api/ok`);
+  });
+
+  it("stops reading at the cap when Content-Length understates the body", async () => {
+    for (const requireSealed of [false, true]) {
+      const ctx = setup({ maxSealedBodyBytes: 1000, requireSealed });
+      const bytes = nacl.randomBytes(5000);
+      const { stream, pulls } = countedStream(bytes, 64);
+      let pulledBeforeNext = -1;
+      let received: Uint8Array | null = null;
+      const response = await ctx.protection.handle(streamedPost(TUNNEL, stream, 100), async (r) => {
+        pulledBeforeNext = pulls.bytes;
+        received = new Uint8Array(await r.arrayBuffer());
+        return new Response("app");
+      });
+      if (requireSealed) {
+        expect(response.status).toBe(REFUSAL_STATUS);
+        expect(ctx.infos[0].info.refusal).toBe("too-large");
+        expect(pulls.bytes).toBeLessThanOrEqual(1000 + 2 * 64);
+      } else {
+        expect(await response.text()).toBe("app");
+        expect(pulledBeforeNext).toBeLessThanOrEqual(1000 + 2 * 64);
+        expect(received).toEqual(bytes);
+      }
+    }
+  });
+
+  it("reads a record that arrives one byte per chunk", async () => {
+    const ctx = setup({ requireSealed: true });
+    const sealed = ctx.client().sealRequest({ method: "GET", target: "/api/bytes" }, "raw");
+    const { stream } = countedStream(new Uint8Array(sealed.body), 1);
+    const response = await ctx.protection.handle(
+      streamedPost(TUNNEL, stream, sealed.body.length),
+      echo,
+    );
+    expect(response.status).toBe(200);
+    expect(ctx.infos[0].info).toMatchObject({ sealed: true, path: "/api/bytes" });
+  });
+
+  it("never reads a body too short to hold a record", async () => {
+    const ctx = setup({ requireSealed: true });
+    const { stream, pulls } = countedStream(nacl.randomBytes(71), 71);
+    const response = await ctx.protection.handle(streamedPost(TUNNEL, stream, 71), echo);
+    expect(response.status).toBe(REFUSAL_STATUS);
+    expect(ctx.infos[0].info.refusal).toBe("unsealed");
+    expect(pulls.bytes).toBe(0);
   });
 });
 
@@ -715,18 +887,15 @@ describe("handle: fresh sessions", () => {
   it("refuses a plaintext body that looks like a record once the address is over the cap", async () => {
     const ctx = setup({ freshSessionsPerMinute: 1, clientAddress: () => "one" });
     const lookalike = () =>
-      new Request(`${ORIGIN}/api/upload`, {
-        method: "POST",
-        body: new Uint8Array(encodeOuter(nacl.randomBytes(300), "base64")),
-      });
+      post(`${ORIGIN}/api/upload`, encodeOuter(nacl.randomBytes(300), "base64"));
     const app = () => new Response("app saw it", { status: 201 });
     expect((await ctx.protection.handle(lookalike(), app)).status).toBe(201);
     expect((await ctx.protection.handle(lookalike(), app)).status).toBe(REFUSAL_STATUS);
     expect(ctx.infos[1].info).toMatchObject({ refusal: "rate-limited", sealed: false });
-    const plain = new Request(`${ORIGIN}/api/upload`, {
-      method: "POST",
-      body: JSON.stringify({ note: "a plaintext JSON body with more than one key", n: 1 }),
-    });
+    const plain = post(
+      `${ORIGIN}/api/upload`,
+      JSON.stringify({ note: "a plaintext JSON body with more than one key", n: 1 }),
+    );
     expect((await ctx.protection.handle(plain, app)).status).toBe(201);
     expect(ctx.protection.counters).toMatchObject({ openFailures: 1, refusals: 1, plaintext: 2 });
   });
@@ -853,6 +1022,14 @@ describe("createNetworkProtection: options", () => {
     expect(() =>
       createNetworkProtection({ privateKeys: privateKey, routes, allowedOrigins: ["nope"] }),
     ).toThrow(/allowedOrigins/);
+    for (const maxSealedBodyBytes of [0, 71, 1.5, Number.NaN, 2 ** 60]) {
+      expect(() =>
+        createNetworkProtection({ privateKeys: privateKey, routes, maxSealedBodyBytes }),
+      ).toThrow(/maxSealedBodyBytes/);
+    }
+    expect(() =>
+      createNetworkProtection({ privateKeys: privateKey, routes, maxSealedBodyBytes: 72 }),
+    ).not.toThrow();
   });
 
   it("names no key in its errors", () => {

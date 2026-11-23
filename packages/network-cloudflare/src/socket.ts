@@ -25,6 +25,7 @@ export type SocketProtectionSource =
 interface Session {
   state: SocketState | null;
   deadline: number;
+  address?: string | null;
 }
 
 interface Attachment {
@@ -39,7 +40,7 @@ interface Pending {
 
 export interface SocketProtection {
   readonly protection: NetworkProtection;
-  accept(socket: ProtectedSocket, attachment?: unknown): void;
+  accept(socket: ProtectedSocket, attachment?: unknown, request?: Request): void;
   restore(socket: ProtectedSocket): void;
   receive(
     socket: ProtectedSocket,
@@ -111,9 +112,10 @@ export function createSocketProtection(source: SocketProtectionSource): SocketPr
     );
   };
 
-  const accept = (socket: ProtectedSocket, attachment?: unknown) => {
+  const accept = (socket: ProtectedSocket, attachment?: unknown, request?: Request) => {
     const deadline = Date.now() + HANDSHAKE_TIMEOUT_MS;
-    write(socket, { np1: { state: null, deadline }, app: attachment ?? null });
+    const address = request === undefined ? null : protection.clientAddress(request);
+    write(socket, { np1: { state: null, deadline, address }, app: attachment ?? null });
     arm(socket, deadline);
   };
 
@@ -135,12 +137,12 @@ export function createSocketProtection(source: SocketProtectionSource): SocketPr
       refuse(socket);
       return null;
     }
-    const { state, deadline } = current.np1;
+    const { state, deadline, address } = current.np1;
     if (state === null && Date.now() > deadline) {
       refuse(socket);
       return null;
     }
-    const opened = protection.openSocket(state, message);
+    const opened = protection.openSocket(state, message, address);
     if (!opened.ok) {
       refuse(socket);
       return null;

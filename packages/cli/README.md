@@ -122,9 +122,11 @@ Sets up network protection, where a Pro build seals the app's own API and socket
 server's public key. `keygen` prints a new X25519 key pair in base64url and writes nothing. `init`
 also writes the public key and the protected routes (`network.publicKey`,
 `network.routes.include`, default `/api/**`) into `afterpack.json`, and prints the server snippet and
-the secret command for the platform it detects: Cloudflare when a `wrangler.toml` or
-`wrangler.jsonc` is in the working directory, any fetch-style server otherwise. It never runs that
-command, and it refuses to replace a public key the file already holds. The private key belongs only
+the secret command for the platform it detects: Cloudflare when a `wrangler.toml`,
+`wrangler.jsonc` or `wrangler.json` is in the working directory or a parent up to the one holding
+`afterpack.json`, any fetch-style server otherwise. It never runs that command, and it refuses to
+replace a public key the file already holds. Until a release accepts the `network` keys in
+`afterpack.json`, it writes nothing and prints the block to add. The private key belongs only
 in the server's secret store. The server packages are `@afterpack/network-core` and
 `@afterpack/network-cloudflare`; behind the tunnel, edge WAF and rate-limit rules keyed on an API
 path must move into the handler.

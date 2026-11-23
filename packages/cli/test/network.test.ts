@@ -203,6 +203,31 @@ describe("afterpack network init: once the config accepts network", () => {
     expect(stripAnsi(out.join("\n"))).toContain('routes: { include: ["/v1/**"] }');
   });
 
+  it("detects the wrangler file next to the afterpack.json it chose in a parent directory", async () => {
+    mkdirSync(join(root, "src", "worker"), { recursive: true });
+    writeFileSync(join(root, "afterpack.json"), "{}");
+    writeFileSync(join(root, "wrangler.jsonc"), "{}\n");
+    writeFileSync(join(root, "package.json"), JSON.stringify({ dependencies: { hono: "4.0.0" } }));
+    expect(
+      await invoke(["network", "init", "--diagnostics.format=json"], join(root, "src", "worker")),
+    ).toBe(0);
+    const doc = JSON.parse(out.join("\n"));
+    expect(doc.summary.platform).toBe("cloudflare");
+    expect(doc.summary.detectedFrom).toBe("../../wrangler.jsonc");
+    expect(doc.summary.snippet).toContain("networkProtection(app,");
+    expect((readConfig().network as { publicKey: string }).publicKey).toBe(doc.summary.publicKey);
+  });
+
+  it("looks for a wrangler file no higher than the afterpack.json it chose", async () => {
+    mkdirSync(join(root, "app"));
+    writeFileSync(join(root, "wrangler.toml"), "");
+    writeFileSync(join(root, "app", "afterpack.json"), "{}");
+    expect(await invoke(["network", "init", "--diagnostics.format=json"], join(root, "app"))).toBe(
+      0,
+    );
+    expect(JSON.parse(out.join("\n")).summary.platform).toBe("fetch");
+  });
+
   it("refuses to replace a public key, and leaves the file untouched", async () => {
     const before = JSON.stringify({
       network: { publicKey: "existing", routes: { include: ["/api/**"] } },

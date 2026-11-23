@@ -35,17 +35,37 @@ const FRAMING = new Set([
 
 const TUNNEL_BODY = new Set(["content-type", "content-encoding"]);
 
+const METHOD_OVERRIDES = new Set(["x-http-method", "x-http-method-override", "x-method-override"]);
+
+const FORBIDDEN_METHODS = new Set(["CONNECT", "TRACE", "TRACK"]);
+
 const RESPONSE_DROPPED = new Set([...FRAMING, "content-encoding", "set-cookie"]);
 
 export function isOuterOnly(name: string): boolean {
   return OUTER_ONLY.has(name) || OUTER_ONLY_PREFIXES.some((prefix) => name.startsWith(prefix));
 }
 
+function overridesForbiddenMethod(value: string): boolean {
+  return value
+    .replace(/["\\]/g, "")
+    .split(",")
+    .some((method) => FORBIDDEN_METHODS.has(method.trim().toUpperCase()));
+}
+
+function forbiddenOverrides(inner: HeaderPairs): Set<string> {
+  const names = new Set<string>();
+  for (const [name, value] of inner) {
+    if (METHOD_OVERRIDES.has(name) && overridesForbiddenMethod(value)) names.add(name);
+  }
+  return names;
+}
+
 export function unwrapHeaders(outer: Headers, inner: HeaderPairs): Headers {
   const out = new Headers();
   const fromInner = new Set<string>();
+  const forbidden = forbiddenOverrides(inner);
   for (const [name, value] of inner) {
-    if (isOuterOnly(name) || FRAMING.has(name)) continue;
+    if (isOuterOnly(name) || FRAMING.has(name) || forbidden.has(name)) continue;
     out.append(name, value);
     fromInner.add(name);
   }

@@ -1,5 +1,6 @@
 export {
   type Counters,
+  DEFAULT_MAX_SEALED_BODY_BYTES,
   generateKeyPair,
   type NetworkProtection,
   type NetworkProtectionOptions,
@@ -7,6 +8,7 @@ export {
   type RefusalReason,
   type RequestInfo,
   type Routes,
+  type SocketRefusal,
   type SocketState,
 } from "@afterpack/network-core";
 export {
