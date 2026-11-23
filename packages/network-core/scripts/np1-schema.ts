@@ -1,0 +1,528 @@
+export const NP1_LAYOUT = [
+  "NP1 test vectors: the byte-level contract every NP1 implementation, client or server, must pass. Every byte string is lowercase hex, and an empty one is the empty string.",
+  "",
+  "1. Keys. X25519 (RFC 7748). A secret is 32 bytes as drawn from the random source; X25519 clamps it. A public key is 32 bytes. The client sets bit 7 of byte 31 of its ephemeral public key at random before sending it (ephPublic); X25519 masks that bit on decode, so ephPublic and ephPublicCanonical give the same shared secret, and a server caching sessions by ephPublic keys the cache on the masked value.",
+  "",
+  "2. Session key. shared = X25519(ephSecret, serverPublic) = X25519(serverSecret, ephPublic). A low-order ephPublic gives an all-zero shared secret, and the receiver refuses it as zero-shared; an implementation that rejects low-order points before the ladder reaches the same outcome. key = HSalsa20(shared, 16 zero bytes) with the constant 'expand 32-byte k', which is NaCl crypto_box_beforenm. One key serves both directions of the session.",
+  "",
+  "3. Record. record = nonce(24) || box, where box = XSalsa20-Poly1305(key, nonce, inner) in the NaCl secretbox_easy layout: tag(16) || ciphertext(len(inner)). wire = ephPublic(32) || record for every client record on HTTP and for the first client frame of a socket, and wire = record everywhere else.",
+  "",
+  "4. Inner. inner = version(1 byte, 0x01) || kind(1 byte) || fields || padding. Field types: uint is an unsigned LEB128 integer; bytes is a uint length followed by that many bytes; string is bytes holding UTF-8; headers is a uint count followed by count pairs of (name string, value string). A LEB128 value is at most 0xFFFFFFFF, takes at most 5 bytes and is minimal (the last byte of a multi-byte value is not 0x00); anything else is malformed. Fields by kind, in order: 1 http-request (client to server, HTTP): method string, target string, headers, body bytes. 2 http-response (server to client, HTTP): status uint, headers, body bytes. 3 socket-client-text: text string. 4 socket-client-binary: payload bytes. 5 socket-server-text: text string. 6 socket-server-binary: payload bytes. 7 socket-handshake (client to server): no fields.",
+  "",
+  "5. Field values. Encoders write the UTF-8 of the JavaScript string, with a lone surrogate written as U+FFFD (EF BF BD), as TextEncoder and WebSocket.send do. Decoders refuse invalid UTF-8 (overlong forms, encoded surrogates, code points above U+10FFFF, cut sequences) as malformed, and keep a leading U+FEFF as content. method: a non-empty RFC 9110 token, after the Fetch standard's method normalisation. target: path and query as the URL serialises them, bytes 0x21 to 0x7E without '#', starting with '/' and not with '//' or '/\\'; anything else is malformed, so an inner target can never name a scheme or host. Header names: non-empty lowercase RFC 9110 tokens. Header values: the Headers ByteString (code points U+0000 to U+00FF) written as UTF-8; a value with a code point above U+00FF, NUL, CR or LF is malformed. Pairs keep their order and may repeat a name, and the receiver appends each one. status: 200 to 599, anything else is malformed; no status text travels. An http-response carries no set-cookie pair: the server hoists Set-Cookie onto the outer response, and a client ignores a set-cookie pair it finds.",
+  "",
+  "6. Padding. The bytes after the last field are padding. Encoders append zero bytes until len(inner) is the smallest bucket of their ladder that is at least the unpadded length; decoders ignore the padding's content and never check its length. The ladder with ratio r has the buckets ceil(256 * r^i) for i = 0, 1, 2, ... while they are below 65536, then every multiple of 65536. A client draws r = 1.5 or r = 2 per build; the server's default ladder is r = 2.",
+  "",
+  "7. Outer HTTP body. The encodings are raw (the wire bytes), base64 (RFC 4648 section 4 alphabet, padded with '='), base64url (RFC 4648 section 5 alphabet, no '=') and json (exactly {\"<key>\":\"<base64url of wire>\"} with no whitespace; the key is per build). Text must be canonical: re-encoding the decoded bytes gives the same text. The server detects the encoding in this order: (a) if the body is UTF-8 JSON for an object with exactly one property whose value is a string, it is json and the string is decoded as text; (b) otherwise, if every byte is one of A-Z a-z 0-9 + / = - _, it is text: base64 when it has the base64 form (length a multiple of 4, '=' only at the end), otherwise base64url when it has the base64url form (length mod 4 not 1); (c) otherwise it is raw. A json or text body that does not decode is bad-encoding. Text in both forms (only A-Z a-z 0-9, length a multiple of 4) decodes identically and counts as base64url. The server answers in the detected encoding and with the request's JSON key; the client decodes response text with the same either-form rule and does not check the JSON key's name. Content-Type plays no part in detection; the server answers with the request's Content-Type.",
+  "",
+  "8. Socket. The frame type is per build: a binary frame carries the wire bytes, a text frame carries base64url of the wire bytes (canonical, no '='). The server takes the frame type from the client's first frame and sends its own frames in it; a frame of the other type is bad-encoding. The first client frame is ephPublic || record of kind 7, or of kind 3 or 4 carrying the app's first message; later frames have no prefix. Kind 7 in any later frame is unexpected-handshake.",
+  "",
+  "9. Receiving. A receiver checks in this order and stops at the first failure: decode the outer body or frame (bad-encoding); wire shorter than prefix + 40 bytes (truncated); X25519 (zero-shared); open with each key it holds, a server trying every private key (open-failed); len(inner) < 2 (malformed); version not 1 (unsupported-version); kind outside 1 to 7 (unknown-kind); a kind for the other direction (wrong-direction); a kind for the other transport (wrong-transport); kind 7 outside the first frame (unexpected-handshake); the fields (malformed).",
+].join("\n");
+
+const hex = { type: "string", pattern: "^(?:[0-9a-f]{2})*$" };
+const hexN = (bytes: number) => ({ type: "string", pattern: `^[0-9a-f]{${bytes * 2}}$` });
+const key32 = hexN(32);
+const errorCode = {
+  enum: [
+    "bad-encoding",
+    "truncated",
+    "zero-shared",
+    "open-failed",
+    "malformed",
+    "unsupported-version",
+    "unknown-kind",
+    "wrong-direction",
+    "wrong-transport",
+    "unexpected-handshake",
+  ],
+};
+const direction = { enum: ["client-to-server", "server-to-client"] };
+const transport = { enum: ["http", "socket"] };
+const encoding = { enum: ["raw", "base64", "base64url", "json"] };
+const frameType = { enum: ["binary", "text"] };
+const ladderId = { enum: ["client-1.5", "client-2", "server", "none"] };
+
+const headers = {
+  type: "array",
+  items: {
+    type: "array",
+    prefixItems: [{ type: "string" }, { type: "string" }],
+    items: false,
+    minItems: 2,
+  },
+};
+
+const fieldsByKind = [
+  { kind: 1, required: ["method", "target", "headers", "body"] },
+  { kind: 2, required: ["status", "headers", "body"] },
+  { kind: 3, required: ["text"] },
+  { kind: 4, required: ["payload"] },
+  { kind: 5, required: ["text"] },
+  { kind: 6, required: ["payload"] },
+  { kind: 7, required: [] },
+];
+
+const fieldNames = ["method", "target", "status", "headers", "body", "text", "payload"];
+
+function conditional(condition: object, consequence: object, alternative?: object) {
+  return {
+    if: condition,
+    // biome-ignore lint/suspicious/noThenProperty: then is a JSON Schema keyword.
+    then: consequence,
+    ...(alternative === undefined ? {} : { else: alternative }),
+  };
+}
+
+const record = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "id",
+    "description",
+    "session",
+    "kind",
+    "kindName",
+    "direction",
+    "transport",
+    "ephPrefixed",
+    "fields",
+    "ladder",
+    "paddingByte",
+    "unpaddedLength",
+    "paddedLength",
+    "innerLayout",
+    "inner",
+    "serverSecret",
+    "serverPublic",
+    "ephSecret",
+    "ephPublic",
+    "shared",
+    "key",
+    "nonce",
+    "box",
+    "tag",
+    "ciphertext",
+    "record",
+    "wire",
+  ],
+  properties: {
+    id: { type: "string" },
+    description: { type: "string" },
+    session: { type: "string" },
+    kind: { type: "integer", minimum: 1, maximum: 7 },
+    kindName: { type: "string" },
+    direction,
+    transport,
+    ephPrefixed: {
+      type: "boolean",
+      description:
+        "Whether wire starts with ephPublic: every HTTP client record, and a socket's first client frame.",
+    },
+    fields: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        method: { type: "string" },
+        target: { type: "string" },
+        status: { type: "integer", minimum: 200, maximum: 599 },
+        headers,
+        body: hex,
+        bodyText: { type: "string" },
+        text: { type: "string" },
+        textInput: { type: "string" },
+        payload: hex,
+      },
+    },
+    ladder: ladderId,
+    paddingByte: { ...hexN(1), description: "The byte the padding repeats; encoders use 00." },
+    unpaddedLength: { type: "integer", minimum: 2 },
+    paddedLength: { type: "integer", minimum: 2 },
+    innerLayout: {
+      description: "inner split into its fields in order; the hex values concatenate to inner.",
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["field", "hex"],
+        properties: { field: { type: "string" }, hex },
+      },
+    },
+    inner: hex,
+    serverSecret: key32,
+    serverPublic: key32,
+    ephSecret: key32,
+    ephPublic: key32,
+    shared: key32,
+    key: key32,
+    nonce: hexN(24),
+    box: hex,
+    tag: hexN(16),
+    ciphertext: hex,
+    record: hex,
+    wire: hex,
+  },
+  allOf: fieldsByKind.map(({ kind, required }) =>
+    conditional(
+      { properties: { kind: { const: kind } } },
+      {
+        properties: {
+          fields:
+            required.length === 0
+              ? { type: "object", maxProperties: 0 }
+              : {
+                  type: "object",
+                  required,
+                  propertyNames: {
+                    enum: [
+                      ...required,
+                      ...(required.includes("body") ? ["bodyText"] : []),
+                      ...(required.includes("text") ? ["textInput"] : []),
+                    ],
+                  },
+                },
+        },
+      },
+    ),
+  ),
+};
+
+export const np1Schema = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  title: "NP1 test vectors",
+  description: NP1_LAYOUT,
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "$schema",
+    "protocol",
+    "version",
+    "description",
+    "kinds",
+    "primitives",
+    "ladders",
+    "sessions",
+    "records",
+    "bodies",
+    "sockets",
+    "rotation",
+    "negative",
+  ],
+  properties: {
+    $schema: { const: "./np1.schema.json" },
+    protocol: { const: "NP1" },
+    version: { const: 1 },
+    description: { type: "string" },
+    kinds: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["kind", "name", "direction", "transport", "fields"],
+        properties: {
+          kind: { type: "integer", minimum: 1, maximum: 7 },
+          name: { type: "string" },
+          direction,
+          transport,
+          fields: { type: "array", items: { enum: fieldNames } },
+        },
+      },
+    },
+    primitives: {
+      type: "object",
+      additionalProperties: false,
+      required: ["x25519", "x25519Iterated", "x25519Exchange", "hsalsa20", "secretbox", "box"],
+      properties: {
+        x25519: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["source", "scalar", "u", "output"],
+            properties: { source: { type: "string" }, scalar: key32, u: key32, output: key32 },
+          },
+        },
+        x25519Iterated: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["source", "iterations", "output"],
+            properties: {
+              source: { type: "string" },
+              iterations: { type: "integer", minimum: 1 },
+              output: key32,
+            },
+          },
+        },
+        x25519Exchange: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["source", "aliceSecret", "alicePublic", "bobSecret", "bobPublic", "shared"],
+            properties: {
+              source: { type: "string" },
+              aliceSecret: key32,
+              alicePublic: key32,
+              bobSecret: key32,
+              bobPublic: key32,
+              shared: key32,
+            },
+          },
+        },
+        hsalsa20: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["source", "key", "input", "output"],
+            properties: { source: { type: "string" }, key: key32, input: hexN(16), output: key32 },
+          },
+        },
+        secretbox: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["source", "key", "nonce", "plaintext", "box"],
+            properties: {
+              source: { type: "string" },
+              key: key32,
+              nonce: hexN(24),
+              plaintext: hex,
+              box: hex,
+            },
+          },
+        },
+        box: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: [
+              "source",
+              "senderSecret",
+              "recipientPublic",
+              "nonce",
+              "plaintext",
+              "sessionKey",
+              "box",
+            ],
+            properties: {
+              source: { type: "string" },
+              senderSecret: key32,
+              recipientPublic: key32,
+              nonce: hexN(24),
+              plaintext: hex,
+              sessionKey: key32,
+              box: hex,
+            },
+          },
+        },
+      },
+    },
+    ladders: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "ratio", "geometricBuckets", "stepBytes", "points"],
+        properties: {
+          id: ladderId,
+          ratio: { enum: [1.5, 2] },
+          geometricBuckets: { type: "array", items: { type: "integer" } },
+          stepBytes: { const: 65536 },
+          points: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["length", "padded"],
+              properties: { length: { type: "integer" }, padded: { type: "integer" } },
+            },
+          },
+        },
+      },
+    },
+    sessions: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "id",
+          "description",
+          "serverSecret",
+          "serverPublic",
+          "ephSecret",
+          "ephPublicCanonical",
+          "topBit",
+          "ephPublic",
+          "shared",
+          "key",
+        ],
+        properties: {
+          id: { type: "string" },
+          description: { type: "string" },
+          serverSecret: key32,
+          serverPublic: key32,
+          ephSecret: key32,
+          ephPublicCanonical: key32,
+          topBit: { enum: [0, 1] },
+          ephPublic: key32,
+          shared: key32,
+          key: key32,
+        },
+      },
+    },
+    records: { type: "array", items: record },
+    bodies: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "record", "direction", "encoding", "contentType", "wire", "body"],
+        properties: {
+          id: { type: "string" },
+          record: { type: "string" },
+          direction,
+          encoding,
+          contentType: {
+            type: "string",
+            description:
+              "A Content-Type a build may send with this encoding; receivers never use it to detect the encoding.",
+          },
+          jsonKey: { type: "string" },
+          wire: hex,
+          body: hex,
+          bodyText: { type: "string" },
+        },
+      },
+    },
+    sockets: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "description", "session", "frameType", "frames"],
+        properties: {
+          id: { type: "string" },
+          description: { type: "string" },
+          session: { type: "string" },
+          frameType,
+          frames: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["index", "record", "direction", "kind", "wire", "frame"],
+              properties: {
+                index: { type: "integer", minimum: 0 },
+                record: { type: "string" },
+                direction,
+                kind: { type: "integer", minimum: 3, maximum: 7 },
+                wire: hex,
+                frame: hex,
+                frameText: { type: "string" },
+              },
+            },
+          },
+        },
+      },
+    },
+    rotation: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "description", "record", "serverSecrets", "body", "opensWithIndex"],
+        properties: {
+          id: { type: "string" },
+          description: { type: "string" },
+          record: { type: "string" },
+          serverSecrets: { type: "array", items: key32 },
+          body: hex,
+          opensWithIndex: {
+            type: "integer",
+            minimum: 0,
+            description: "Index in serverSecrets of the key that opens the body.",
+          },
+        },
+      },
+    },
+    negative: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "description", "receiver", "transport", "input", "error", "intermediate"],
+        properties: {
+          id: { type: "string" },
+          description: { type: "string" },
+          receiver: { enum: ["server", "client"] },
+          transport,
+          serverSecrets: {
+            type: "array",
+            items: key32,
+            description: "The private keys a server receiver holds, tried in order.",
+          },
+          key: {
+            ...key32,
+            description:
+              "The session key a receiver already holds: a client's, or a server's after the socket's first frame.",
+          },
+          encoding: {
+            ...encoding,
+            description:
+              "HTTP only. For a client, the encoding it expects; for a server, the encoding the body is in or looks like.",
+          },
+          frameType: {
+            ...frameType,
+            description: "Socket only: the socket's frame type, taken from its first client frame.",
+          },
+          frameIndex: {
+            type: "integer",
+            minimum: 0,
+            description:
+              "Socket only: the frame's position among the frames this receiver has received; 0 is the first.",
+          },
+          input: { ...hex, description: "The bytes received: the outer body, or the frame." },
+          inputText: {
+            type: "string",
+            description:
+              "input as text, for a text body or a text frame (a text frame is received as this string).",
+          },
+          intermediate: {
+            description:
+              "The values a receiver derives before it stops; inner is present when the record opens.",
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              wire: hex,
+              ephPublic: key32,
+              shared: key32,
+              key: key32,
+              nonce: hexN(24),
+              box: hex,
+              inner: hex,
+            },
+          },
+          error: errorCode,
+        },
+        allOf: [
+          conditional({ properties: { receiver: { const: "client" } } }, { required: ["key"] }),
+          conditional(
+            { properties: { receiver: { const: "server" } } },
+            { required: ["serverSecrets"] },
+          ),
+          conditional(
+            { properties: { transport: { const: "socket" } } },
+            { required: ["frameType", "frameIndex"] },
+            { required: ["encoding"] },
+          ),
+        ],
+      },
+    },
+  },
+};

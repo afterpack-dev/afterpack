@@ -1,0 +1,80 @@
+{
+  "name": "@afterpack/network-core",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Server side of AfterPack network protection: the NP1 protocol on web-standard Request and Response",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      },
+      "default": "./dist/index.js"
+    },
+    "./vectors/np1.json": "./vectors/np1.json",
+    "./vectors/np1.schema.json": "./vectors/np1.schema.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "CHANGELOG.md",
+    "LICENSE",
+    "NOTICE",
+    "dist",
+    "vectors"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "vectors": "tsx scripts/np1-vectors.ts"
+  },
+  "dependencies": {
+    "@noble/ciphers": "2.4.0",
+    "@noble/curves": "2.4.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.4",
+    "@types/node": "^22.0.0",
+    "ajv": "8.20.0",
+    "tsdown": "^0.11.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.0.0",
+    "vitest": "^4.1.12"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/afterpack-dev/afterpack.git",
+    "directory": "packages/network-core"
+  },
+  "keywords": [
+    "network-protection",
+    "x25519",
+    "xsalsa20-poly1305",
+    "nacl",
+    "request-encryption",
+    "afterpack"
+  ],
+  "author": "AfterPack (https://www.afterpack.dev)",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/afterpack-dev/afterpack",
+  "bugs": {
+    "url": "https://github.com/afterpack-dev/afterpack/issues"
+  }
+}

@@ -35,6 +35,7 @@
       "**",
       "!packages/protection-map/demo",
       "!packages/protection-map/template.html",
+      "!packages/network-core/vectors",
       "!packages/*/e2e",
       "!!**/.claude"
     ],
