@@ -227,8 +227,9 @@ Commands:
                            source and unprotected JavaScript, streaming the
                            findings as they land. \`afterpack audit --help\`.
   network keygen|init      set up network protection: keygen prints a server key
-                           pair; init also writes the public key into
-                           afterpack.json and prints the server snippet and the
+                           pair; init also adds the public key to afterpack.json
+                           (or prints the block when this version does not
+                           accept it yet) and prints the server snippet and the
                            secret command for your platform.
                            \`afterpack network --help\`.
 

@@ -51,11 +51,11 @@ fresh-session limiter.
 | Option | Meaning |
 |---|---|
 | `privateKeys` | One or more X25519 private keys, base64url (32 bytes each) or `Uint8Array`. A string may hold several, separated by commas or whitespace. The server tries each one. |
-| `routes` | `{ include, exclude? }`: path globs (`*` within a segment, `**` across segments), the same as the build's `network.routes`. Requests outside them pass to `next` untouched. |
+| `routes` | `{ include, exclude? }`: path globs (`*` within a segment, `**` across segments), the same as the build's `network.routes`. Percent-escapes of unreserved characters (`%70` for `p`) are decoded before matching. Requests outside them pass to `next` untouched. |
 | `allowedOrigins` | Origins, besides the page's own, whose tunnel requests are accepted (`Origin` header match). Default none. |
 | `requireSealed` | Refuse plaintext on the protected routes. Default `false`. |
-| `freshSessionsPerMinute` | Cap on new sessions (new client keys, each costing one X25519) per client address per minute. Default no cap. |
-| `clientAddress(request)` | The address `freshSessionsPerMinute` counts by. Default `CF-Connecting-IP`, then `X-Real-IP`, then the first `X-Forwarded-For` entry. |
+| `freshSessionsPerMinute` | Cap on new sessions (new client keys, each costing one X25519) per client address per minute. Needs `clientAddress`. Default no cap. |
+| `clientAddress(request)` | The address `freshSessionsPerMinute` counts by. No default, because only your platform knows which address it vouches for. A header a client can set itself, such as `X-Forwarded-For` or `X-Real-IP` on a server reached directly, lets any client rotate it past the cap; return such a header only when a proxy you run overwrites it. A request it returns no address for (`null`, `undefined` or `""`) is not limited, and the first one logs a warning. On Cloudflare, `@afterpack/network-cloudflare` uses `CF-Connecting-IP`. |
 | `onRequest(request, info)` | Called once per request on a protected route, after the response is made. `info` is `{ method, path, status, sealed, durationMs, refusal? }`; `request` is the unwrapped request. |
 
 It returns:
@@ -95,10 +95,19 @@ It returns:
   outside `routes`, an inner request Fetch can't build (a `GET` with a body, `CONNECT`), a client
   address over `freshSessionsPerMinute`, and, with `requireSealed`, plaintext or a body that fails to
   open. The client runtime treats a refusal as a dropped session and retries once with a fresh one.
+- **Errors in `next`.** When `next` throws or its body fails to read on a sealed request, the error
+  goes to `console.error` and the client gets a sealed `500` with no headers and no body, so nothing
+  about it shows on the wire. `onRequest` reports status `500`.
 - **Plaintext** is accepted by default, so local development, the previous build during a rollout,
   and streamed calls keep working. A body that looks sealed but fails to open is passed through to
   `next` with its body intact and counted as an open failure. `onRequest` marks each call sealed or
   not, so production can alert on plaintext.
+- **Lookalikes and the session cap.** The cap is checked before the open, on every body that looks
+  like a record: a `POST` body of 72 bytes or more that is not UTF-8, base64 or base64url text, or a
+  one-property JSON object whose value is such text. With `freshSessionsPerMinute` set, a plaintext
+  body of that shape counts as a new session, costs one X25519, and past the cap gets the refusal
+  status even without `requireSealed`. If a protected route takes such plaintext bodies, set the cap
+  high enough for them, or leave it off and rate-limit in the handler.
 - **Cost.** One X25519 per new client session, cached per isolate by the client's public key (an LRU
   of 4096 sessions). Opening and sealing a record is microseconds for API-sized bodies.
 

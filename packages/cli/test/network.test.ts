@@ -2,11 +2,30 @@ import { createPrivateKey, createPublicKey, diffieHellman } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { loadConfigFile } from "@afterpack/integration-utils";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { engineCalls, processBatch } from "../../../test/core-fake.js";
+import { CONFIG_BY_PATH } from "../../integration-utils/src/registry.js";
 import { stripAnsi } from "../src/format.js";
 import { generateNetworkKeyPair, SECRET_NAME, serverSnippet } from "../src/network.js";
 import { run } from "../src/run.js";
+
+const registry = vi.hoisted(() => ({ acceptsNetwork: false }));
+
+vi.mock("@afterpack/integration-utils", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@afterpack/integration-utils")>();
+  return {
+    ...actual,
+    validateConfig: (input: unknown, surface: string) => {
+      const result = actual.validateConfig(input, surface);
+      if (!registry.acceptsNetwork) return result;
+      return {
+        ...result,
+        issues: result.issues.filter((issue) => !issue.path.startsWith("network")),
+      };
+    },
+  };
+});
 
 let root: string;
 let out: string[];
@@ -51,6 +70,7 @@ beforeEach(() => {
   out = [];
   err = [];
   engineCalls.length = 0;
+  registry.acceptsNetwork = true;
 });
 afterEach(() => {
   rmSync(root, { recursive: true, force: true });
@@ -89,7 +109,40 @@ describe("afterpack network keygen", () => {
   });
 });
 
-describe("afterpack network init", () => {
+describe("afterpack network init: against the real config registry", () => {
+  beforeEach(() => {
+    registry.acceptsNetwork = false;
+  });
+
+  it("leaves an afterpack.json that loads with no issue", async () => {
+    expect(await invoke(["network", "init"])).toBe(0);
+    expect(loadConfigFile(root).issues).toEqual([]);
+    const known = CONFIG_BY_PATH.has("network.publicKey");
+    expect(existsSync(join(root, "afterpack.json"))).toBe(known);
+    if (known) return;
+    const text = stripAnsi(out.join("\n"));
+    expect(text).toContain("init wrote nothing");
+    expect(text).toMatch(/"publicKey": "[A-Za-z0-9_-]{43}"/);
+    expect(text).toContain('import { createNetworkProtection } from "@afterpack/network-core";');
+  });
+
+  it("keeps an existing afterpack.json loadable, and byte for byte until it accepts network", async () => {
+    if (CONFIG_BY_PATH.has("network.publicKey")) return;
+    const before = `${JSON.stringify({ preset: "medium" }, null, 2)}\n`;
+    writeFileSync(join(root, "afterpack.json"), before);
+    expect(loadConfigFile(root).issues).toEqual([]);
+    expect(await invoke(["network", "init", "--diagnostics.format=json"])).toBe(0);
+    expect(readFileSync(join(root, "afterpack.json"), "utf8")).toBe(before);
+    expect(loadConfigFile(root).issues).toEqual([]);
+    const doc = JSON.parse(out.join("\n"));
+    expect(doc.summary.configWritten).toBe(false);
+    expect(doc.summary.network.publicKey).toBe(doc.summary.publicKey);
+    expect(doc.summary.network.routes).toEqual({ include: ["/api/**"] });
+    expect(doc.artifacts).toEqual({});
+  });
+});
+
+describe("afterpack network init: once the config accepts network", () => {
   it("detects Cloudflare from wrangler.toml, writes the public key and prints the snippet and secret line", async () => {
     writeFileSync(join(root, "wrangler.toml"), 'name = "app"\n');
     writeFileSync(join(root, "package.json"), JSON.stringify({ dependencies: { hono: "4.0.0" } }));
@@ -181,6 +234,7 @@ describe("afterpack network init", () => {
       routes: ["/api/**"],
     });
     expect(doc.summary.publicKey).toBe((readConfig().network as { publicKey: string }).publicKey);
+    expect(doc.summary.configWritten).toBe(true);
     expect(doc.artifacts).toEqual({ config: "afterpack.json" });
   });
 
@@ -212,8 +266,30 @@ describe("afterpack network: usage", () => {
 });
 
 describe("serverSnippet", () => {
-  it("mounts Hono on the first include prefix", () => {
-    expect(serverSnippet("cloudflare", true, ["/v2/**", "/ws"])).toContain('"/v2/*",');
+  it("mounts Hono on the one include prefix, and on every path for several", () => {
+    expect(serverSnippet("cloudflare", true, ["/v2/**"])).toContain('"/v2/*",');
     expect(serverSnippet("cloudflare", true, ["/graphql"])).toContain('"*",');
+    expect(serverSnippet("cloudflare", true, ["/api/*/v1/**"])).toContain('"*",');
+    const several = serverSnippet("cloudflare", true, ["/api/**", "/rpc/**"]);
+    expect(several).toContain('"*",');
+    expect(several).not.toContain('"/api/*",');
+    expect(several).toContain('routes: { include: ["/api/**", "/rpc/**"] }');
+  });
+
+  it("names every wrangler file it detects in the help", async () => {
+    for (const file of ["wrangler.toml", "wrangler.jsonc", "wrangler.json"]) {
+      const dir = mkdtempSync(join(tmpdir(), "afterpack-network-"));
+      writeFileSync(join(dir, file), file === "wrangler.toml" ? "" : "{}");
+      out = [];
+      expect(await invoke(["network", "init"], dir)).toBe(0);
+      expect(stripAnsi(out.join("\n"))).toContain(`Cloudflare (${file})`);
+      rmSync(dir, { recursive: true, force: true });
+    }
+    out = [];
+    expect(await invoke(["network", "--help"])).toBe(0);
+    const help = out.join("\n").replace(/\s+/g, " ");
+    for (const file of ["wrangler.toml", "wrangler.jsonc", "wrangler.json "]) {
+      expect(help).toContain(file);
+    }
   });
 });

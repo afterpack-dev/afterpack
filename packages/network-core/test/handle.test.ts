@@ -20,6 +20,7 @@ import {
 import { decodeOuter, type Encoding, encodeOuter, Np1TestClient } from "./np1-client.js";
 
 const ENCODINGS: Encoding[] = ["raw", "base64", "base64url", "json"];
+const byTestAddress = (request: Request) => request.headers.get("cf-connecting-ip");
 const utf8 = (bytes: Uint8Array) => Buffer.from(bytes).toString("utf8");
 
 afterEach(() => {
@@ -114,7 +115,7 @@ describe("handle: a sealed round trip with the independent client", () => {
   });
 
   it("reuses a session for every request of one page session", async () => {
-    const ctx = setup({ freshSessionsPerMinute: 1 });
+    const ctx = setup({ freshSessionsPerMinute: 1, clientAddress: byTestAddress });
     const client = ctx.client();
     for (let i = 0; i < 5; i++) {
       const { opened } = await roundTrip(
@@ -150,6 +151,64 @@ describe("handle: a sealed round trip with the independent client", () => {
 });
 
 describe("handle: response sealing", () => {
+  it("seals every response under a fresh nonce, even one session's identical responses", async () => {
+    const ctx = setup();
+    const client = ctx.client();
+    const records: Uint8Array[] = [];
+    for (let i = 0; i < 3; i++) {
+      const sealed = client.sealRequest({ method: "GET", target: "/api/same" }, "raw");
+      const outer = await ctx.protection.handle(tunnelRequest(sealed), () => new Response("same"));
+      const body = new Uint8Array(await outer.arrayBuffer());
+      expect(utf8(client.openResponse(body, "raw").body)).toBe("same");
+      records.push(decodeOuter(body, "raw"));
+    }
+    const hex = (bytes: Uint8Array) => Buffer.from(bytes).toString("hex");
+    expect(new Set(records.map((record) => hex(record.subarray(0, 24)))).size).toBe(3);
+    expect(new Set(records.map((record) => hex(record.subarray(24)))).size).toBe(3);
+  });
+
+  it("seals a 500 and reports it when next throws", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const ctx = setup();
+    for (const next of [
+      () => {
+        throw new Error("secret detail /srv/app.js:12");
+      },
+      () => Promise.reject(new Error("secret detail")),
+      () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.error(new Error("secret detail"));
+            },
+          }),
+          { headers: { "set-cookie": "half=1" } },
+        ),
+    ]) {
+      const { outer, outerBody, opened } = await roundTrip(
+        ctx,
+        ctx.client(),
+        { method: "POST", target: "/api/boom" },
+        "base64url",
+        next,
+      );
+      expect(outer.status).toBe(200);
+      expect(outer.headers.getSetCookie()).toEqual([]);
+      expect(utf8(outerBody)).not.toContain("secret");
+      expect(opened?.status).toBe(500);
+      expect(opened?.headers).toEqual([]);
+      expect(opened?.body).toEqual(new Uint8Array(0));
+    }
+    expect(ctx.infos.map((i) => [i.info.status, i.info.sealed, i.info.path])).toEqual([
+      [500, true, "/api/boom"],
+      [500, true, "/api/boom"],
+      [500, true, "/api/boom"],
+    ]);
+    expect(ctx.protection.counters).toMatchObject({ sealed: 3 });
+    expect(error).toHaveBeenCalledTimes(3);
+    error.mockRestore();
+  });
+
   it("pads the inner response to the server ladder", async () => {
     const ctx = setup();
     const client = ctx.client();
@@ -367,6 +426,39 @@ describe("handle: the inner target", () => {
     }
   });
 
+  it("matches routes after decoding escapes of unreserved characters", async () => {
+    for (const target of [
+      "/api/%70ublic/x",
+      "/api/pub%6cic/x",
+      "/api/pub%6Cic/x",
+      "/%61pi/public/x",
+    ]) {
+      const ctx = setup();
+      const { outer } = await roundTrip(ctx, ctx.client(), { method: "GET", target }, "raw");
+      expect(outer.status, target).toBe(REFUSAL_STATUS);
+      expect(ctx.seen, target).toEqual([]);
+      expect(ctx.infos[0].info.refusal).toBe("outside-routes");
+    }
+    const ctx = setup();
+    const { opened } = await roundTrip(
+      ctx,
+      ctx.client(),
+      { method: "GET", target: "/%61pi/items/%7E1" },
+      "raw",
+    );
+    expect(opened?.status).toBe(200);
+    expect(json(opened).url).toBe(`${ORIGIN}/%61pi/items/%7E1`);
+    const plain = setup();
+    const native = new Request(`${ORIGIN}/api/%70ublic/feed`);
+    let seen: Request | null = null;
+    await plain.protection.handle(native, (r) => {
+      seen = r;
+      return new Response("native");
+    });
+    expect(seen).toBe(native);
+    expect(plain.infos).toEqual([]);
+  });
+
   it("refuses an inner request Fetch can't build", async () => {
     for (const request of [
       { method: "GET", target: "/api/x", body: "body on a GET" },
@@ -530,7 +622,7 @@ describe("handle: fresh sessions", () => {
   it("refuses the session one past freshSessionsPerMinute from one address", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
-    const ctx = setup({ freshSessionsPerMinute: 3 });
+    const ctx = setup({ freshSessionsPerMinute: 3, clientAddress: byTestAddress });
     const from = (address: string) => ({ "cf-connecting-ip": address });
     const clients = [ctx.client(), ctx.client(), ctx.client(), ctx.client()];
     const statuses: number[] = [];
@@ -580,7 +672,7 @@ describe("handle: fresh sessions", () => {
   });
 
   it("keys the session cache on eph_public with its top bit masked", async () => {
-    const ctx = setup({ freshSessionsPerMinute: 1 });
+    const ctx = setup({ freshSessionsPerMinute: 1, clientAddress: byTestAddress });
     const ephSecret = nacl.randomBytes(32);
     const from = { "cf-connecting-ip": "192.0.2.7" };
     for (const topBit of [0, 1] as const) {
@@ -596,6 +688,47 @@ describe("handle: fresh sessions", () => {
       expect(outer.status).toBe(200);
       expect(json(opened).url).toBe(`${ORIGIN}/api/t`);
     }
+  });
+
+  it("counts no request under a shared empty address when clientAddress finds none", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    for (const none of [null, undefined, ""]) {
+      const ctx = setup({ freshSessionsPerMinute: 1, clientAddress: () => none });
+      const statuses: number[] = [];
+      for (let i = 0; i < 4; i++) {
+        const { outer } = await roundTrip(
+          ctx,
+          ctx.client(),
+          { method: "GET", target: "/api/s" },
+          "raw",
+          echo,
+          { "cf-connecting-ip": "198.51.100.1", "x-forwarded-for": "198.51.100.1" },
+        );
+        statuses.push(outer.status);
+      }
+      expect(statuses).toEqual([200, 200, 200, 200]);
+    }
+    expect(warn).toHaveBeenCalledTimes(3);
+    warn.mockRestore();
+  });
+
+  it("refuses a plaintext body that looks like a record once the address is over the cap", async () => {
+    const ctx = setup({ freshSessionsPerMinute: 1, clientAddress: () => "one" });
+    const lookalike = () =>
+      new Request(`${ORIGIN}/api/upload`, {
+        method: "POST",
+        body: new Uint8Array(encodeOuter(nacl.randomBytes(300), "base64")),
+      });
+    const app = () => new Response("app saw it", { status: 201 });
+    expect((await ctx.protection.handle(lookalike(), app)).status).toBe(201);
+    expect((await ctx.protection.handle(lookalike(), app)).status).toBe(REFUSAL_STATUS);
+    expect(ctx.infos[1].info).toMatchObject({ refusal: "rate-limited", sealed: false });
+    const plain = new Request(`${ORIGIN}/api/upload`, {
+      method: "POST",
+      body: JSON.stringify({ note: "a plaintext JSON body with more than one key", n: 1 }),
+    });
+    expect((await ctx.protection.handle(plain, app)).status).toBe(201);
+    expect(ctx.protection.counters).toMatchObject({ openFailures: 1, refusals: 1, plaintext: 2 });
   });
 
   it("takes the client address from clientAddress when given", async () => {
@@ -723,11 +856,27 @@ describe("createNetworkProtection: options", () => {
   });
 
   it("names no key in its errors", () => {
-    const secret = "A".repeat(42);
-    try {
-      createNetworkProtection({ privateKeys: secret, routes: { include: ["/**"] } });
-    } catch (error) {
-      expect(String(error)).not.toContain(secret);
+    for (const secret of ["A".repeat(42), "B".repeat(44), `${"C".repeat(43)}!`]) {
+      const attempt = () =>
+        createNetworkProtection({ privateKeys: secret, routes: { include: ["/**"] } });
+      expect(attempt).toThrow(/base64url/);
+      expect(attempt).not.toThrow(secret);
     }
+  });
+
+  it("needs clientAddress for freshSessionsPerMinute, and reads no header by default", () => {
+    const { privateKey } = generateKeyPair();
+    const routes = { include: ["/api/**"] };
+    expect(() =>
+      createNetworkProtection({ privateKeys: privateKey, routes, freshSessionsPerMinute: 5 }),
+    ).toThrow(/clientAddress/);
+    expect(() =>
+      createNetworkProtection({
+        privateKeys: privateKey,
+        routes,
+        freshSessionsPerMinute: 5,
+        clientAddress: () => "x",
+      }),
+    ).not.toThrow();
   });
 });

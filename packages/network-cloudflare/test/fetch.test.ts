@@ -151,6 +151,47 @@ describe("networkProtection: Hono middleware", () => {
   });
 });
 
+describe("freshSessionsPerMinute on Cloudflare", () => {
+  it("counts by CF-Connecting-IP, the address Cloudflare sets, unless clientAddress is given", async () => {
+    const { pair, client } = keys();
+    const env = { NETWORK_PRIVATE_KEYS: pair.privateKey };
+    const from = (address: string, spoof: string) => {
+      const c = client();
+      const sealed = c.sealRequest({ method: "GET", target: "/api/s" }, "raw");
+      const request = tunnel(sealed.body, sealed.contentType);
+      request.headers.set("cf-connecting-ip", address);
+      request.headers.set("x-forwarded-for", spoof);
+      request.headers.set("x-real-ip", spoof);
+      return request;
+    };
+    const wrapped = withNetworkProtection(() => new Response("ok"), {
+      privateKeys: pair.privateKey,
+      routes: { include: ["/api/**"] },
+      freshSessionsPerMinute: 1,
+    });
+    const statuses = [];
+    for (const [address, spoof] of [
+      ["203.0.113.1", "1.1.1.1"],
+      ["203.0.113.1", "2.2.2.2"],
+      ["203.0.113.2", "2.2.2.2"],
+    ]) {
+      statuses.push((await wrapped(from(address, spoof), env, {})).status);
+    }
+    expect(statuses).toEqual([200, REFUSAL_STATUS, 200]);
+
+    const custom = createNetworkProtection({
+      privateKeys: pair.privateKey,
+      routes: { include: ["/api/**"] },
+      freshSessionsPerMinute: 1,
+      clientAddress: (request) => request.headers.get("x-real-ip"),
+    });
+    const next = () => new Response("ok");
+    expect((await custom.handle(from("203.0.113.9", "4.4.4.4"), next)).status).toBe(200);
+    expect((await custom.handle(from("203.0.113.9", "5.5.5.5"), next)).status).toBe(200);
+    expect((await custom.handle(from("203.0.113.8", "5.5.5.5"), next)).status).toBe(REFUSAL_STATUS);
+  });
+});
+
 describe("withNetworkProtection: a plain Worker fetch handler", () => {
   const worker = {
     seen: [] as string[],

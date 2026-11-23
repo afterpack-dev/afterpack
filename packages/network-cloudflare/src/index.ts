@@ -1,6 +1,5 @@
 export {
   type Counters,
-  createNetworkProtection,
   generateKeyPair,
   type NetworkProtection,
   type NetworkProtectionOptions,
@@ -18,10 +17,16 @@ export {
   networkProtection,
   withNetworkProtection,
 } from "./fetch.js";
-export type { ProtectionSource } from "./resolve.js";
+export {
+  cloudflareClientAddress,
+  createNetworkProtection,
+  type ProtectionSource,
+} from "./resolve.js";
 export {
   createSocketProtection,
   HANDSHAKE_TIMEOUT_MS,
+  PENDING_BYTES_LIMIT,
+  PENDING_SEND_LIMIT,
   type ProtectedSocket,
   REFUSAL_CLOSE_CODE,
   type SocketProtection,

@@ -72,7 +72,9 @@ export default withNetworkProtection(worker, (env) => ({
 
 It also takes a bare `fetch(request, env, ctx)` function. The protection is built once per `env`.
 The options are those of `createNetworkProtection` in `@afterpack/network-core`, or a function of
-`env` that returns them.
+`env` that returns them. Here `clientAddress`, which `freshSessionsPerMinute` counts by, defaults to
+`CF-Connecting-IP`, the address Cloudflare sets and a client can't. This package's own
+`createNetworkProtection` applies the same default.
 
 ## Durable Object sockets
 
@@ -83,9 +85,13 @@ export class Room {
   constructor(ctx, env) {
     this.ctx = ctx;
     this.sockets = createSocketProtection({ privateKeys: env.NETWORK_PRIVATE_KEYS });
+    for (const socket of ctx.getWebSockets()) this.sockets.restore(socket);
   }
 
   async fetch(request) {
+    if (request.headers.get("origin") !== "https://example.com") {
+      return new Response(null, { status: 403 });
+    }
     const [client, server] = Object.values(new WebSocketPair());
     this.ctx.acceptWebSocket(server);
     this.sockets.accept(server, { seat: 1 });
@@ -108,8 +114,15 @@ export class Room {
 - `receive(socket, data)` returns the app's message (a string or an `ArrayBuffer`), or `null` for the
   handshake record and for a frame it refuses, after closing the socket with code 1008.
 - `send(socket, message)` seals and sends. Sends made before the client's first frame are buffered
-  and flushed when it arrives.
-- A socket that sends no first frame within 10 seconds is closed with code 1008.
+  and flushed when it arrives; more than 256 of them, or more than 1 MiB, close the socket with code
+  1008. A send to a socket the helper never accepted or has closed is dropped.
+- A socket that sends no first frame within 10 seconds is closed with code 1008. The timer lives in
+  memory, so after the object restarts, call `restore(socket)` for each of `ctx.getWebSockets()`:
+  it re-arms the deadline kept in the attachment, or closes the socket if it has passed. Without it,
+  a socket that never sends stays open until it does.
+- **Check `Origin` on the upgrade request.** A browser sends cross-site WebSocket upgrades with the
+  page's cookies and no CORS check, and anyone can seal a handshake, because the server key is
+  public. The helper does not see the upgrade request, so the check is yours, as for any socket.
 - Close reasons travel in clear: close a protected socket with numeric codes, never prose.
 
 ## License

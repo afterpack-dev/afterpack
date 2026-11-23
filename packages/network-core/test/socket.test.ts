@@ -11,6 +11,23 @@ function roundState(state: SocketState): SocketState {
 }
 
 describe("openSocket and sealSocket with the independent client", () => {
+  it("seals every server message under a fresh nonce", () => {
+    const { protection, client } = setup();
+    for (const frameType of FRAME_TYPES) {
+      const app = client(2);
+      const opened = protection.openSocket(null, app.socketFrame(null, frameType, true));
+      if (!opened.ok) throw new Error(opened.error);
+      const frames = [0, 1, 2].map(() => protection.sealSocket(opened.state, "same"));
+      expect(frames.map((frame) => app.openSocketFrame(frame))).toEqual(["same", "same", "same"]);
+      const wires = frames.map((frame) =>
+        typeof frame === "string" ? wireFromText(frame) : frame,
+      );
+      const hex = (bytes: Uint8Array) => Buffer.from(bytes).toString("hex");
+      expect(new Set(wires.map((wire) => hex(wire.subarray(0, 24)))).size).toBe(3);
+      expect(new Set(wires.map((wire) => hex(wire.subarray(24)))).size).toBe(3);
+    }
+  });
+
   for (const frameType of FRAME_TYPES) {
     it(`carries kinds 3 to 7 over ${frameType} frames, with the state serialised between frames`, () => {
       const { protection, client } = setup();

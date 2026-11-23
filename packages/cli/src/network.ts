@@ -1,7 +1,7 @@
 import { generateKeyPairSync } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { CONFIG_FILE_NAME, findUpward } from "@afterpack/integration-utils";
+import { CONFIG_FILE_NAME, findUpward, validateConfig } from "@afterpack/integration-utils";
 import { CONTACT_FOOTER } from "./args.js";
 import { commandLine } from "./dispatch.js";
 import { EXIT, type ExitCode } from "./exit.js";
@@ -37,9 +37,12 @@ Commands:
                            network.routes.include, default ${DEFAULT_ROUTES.join(", ")}),
                            and print the server snippet and the secret command
                            for the platform it detects (Cloudflare when a
-                           wrangler.toml or wrangler.jsonc is in the working
-                           directory). It never runs that command and refuses to
-                           replace a public key afterpack.json already holds.
+                           wrangler.toml, wrangler.jsonc or wrangler.json is in
+                           the working directory). It never runs that command and
+                           refuses to replace a public key afterpack.json already
+                           holds. When this version's afterpack.json does not
+                           accept the network keys yet, it writes nothing and
+                           prints the block to add instead.
 
 The private key belongs only in your server's secret store. To rotate, run
 keygen, add the new private key to the server's list ahead of the old one,
@@ -148,8 +151,9 @@ function usesHono(cwd: string): boolean {
 }
 
 function honoMountPath(include: readonly string[]): string {
-  const first = include[0] ?? "/**";
-  return first.endsWith("/**") ? `${first.slice(0, -3)}/*` : "*";
+  if (include.length !== 1) return "*";
+  const only = include[0];
+  return only.endsWith("/**") && !only.slice(0, -3).includes("*") ? `${only.slice(0, -3)}/*` : "*";
 }
 
 function routesLiteral(include: readonly string[]): string {
@@ -201,6 +205,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function acceptsNetwork(config: Record<string, unknown>): boolean {
+  return validateConfig(config, CONFIG_FILE_NAME).issues.every(
+    (issue) => issue.path !== "network" && !issue.path.startsWith("network."),
+  );
+}
+
 function init(deps: NetworkDeps): ExitCode {
   const { cwd } = deps;
   const configPath = findUpward(cwd, CONFIG_FILE_NAME) ?? join(cwd, CONFIG_FILE_NAME);
@@ -250,11 +260,10 @@ function init(deps: NetworkDeps): ExitCode {
       : DEFAULT_ROUTES;
 
   const pair = generateNetworkKeyPair();
-  const next = {
-    ...config,
-    network: { ...network, publicKey: pair.publicKey, routes: { ...routes, include } },
-  };
-  writeFileSync(configPath, `${JSON.stringify(next, null, 2)}\n`);
+  const block = { ...network, publicKey: pair.publicKey, routes: { ...routes, include } };
+  const next = { ...config, network: block };
+  const written = acceptsNetwork(next);
+  if (written) writeFileSync(configPath, `${JSON.stringify(next, null, 2)}\n`);
 
   const { platform, file } = detectPlatform(cwd);
   const hono = platform === "cloudflare" && usesHono(cwd);
@@ -277,19 +286,31 @@ function init(deps: NetworkDeps): ExitCode {
         secretName: SECRET_NAME,
         secretCommand,
         snippet,
+        configWritten: written,
+        network: block,
       },
-      { config: shown },
+      written ? { config: shown } : {},
     );
     return EXIT.ok;
   }
 
   const log = (line = "") => deps.logger.log(line);
-  log(`${green("✓")} wrote network.publicKey and network.routes.include to ${shown}`);
-  log(
-    dim(
-      `  protected routes: ${include.join(", ")} — edit network.routes in ${shown} to match your API`,
-    ),
-  );
+  if (written) {
+    log(`${green("✓")} wrote network.publicKey and network.routes.include to ${shown}`);
+    log(
+      dim(
+        `  protected routes: ${include.join(", ")} — edit network.routes in ${shown} to match your API`,
+      ),
+    );
+  } else {
+    log(
+      `${yellow("!")} this version of afterpack does not accept the network keys in ${shown} yet, ` +
+        "so init wrote nothing: a file holding them would fail every build. Add this block to " +
+        `${shown} once an afterpack release accepts it:`,
+    );
+    log("");
+    for (const line of JSON.stringify({ network: block }, null, 2).split("\n")) log(`   ${line}`);
+  }
   log("");
   log(bold("Private key") + dim(" — your server's secret store only, never in git:"));
   log(`  ${pair.privateKey}`);

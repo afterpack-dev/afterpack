@@ -1,13 +1,15 @@
-import {
-  createNetworkProtection,
-  type NetworkProtection,
-  type NetworkProtectionOptions,
-  type SocketData,
-  type SocketState,
+import type {
+  NetworkProtection,
+  NetworkProtectionOptions,
+  SocketData,
+  SocketState,
 } from "@afterpack/network-core";
+import { createNetworkProtection } from "./resolve.js";
 
 export const HANDSHAKE_TIMEOUT_MS = 10_000;
 export const REFUSAL_CLOSE_CODE = 1008;
+export const PENDING_SEND_LIMIT = 256;
+export const PENDING_BYTES_LIMIT = 1 << 20;
 
 export interface ProtectedSocket {
   send(message: string | ArrayBuffer | ArrayBufferView): void;
@@ -30,9 +32,15 @@ interface Attachment {
   app: unknown;
 }
 
+interface Pending {
+  messages: SocketData[];
+  bytes: number;
+}
+
 export interface SocketProtection {
   readonly protection: NetworkProtection;
   accept(socket: ProtectedSocket, attachment?: unknown): void;
+  restore(socket: ProtectedSocket): void;
   receive(
     socket: ProtectedSocket,
     message: string | ArrayBuffer | ArrayBufferView,
@@ -56,8 +64,9 @@ function toProtection(source: SocketProtectionSource): NetworkProtection {
 export function createSocketProtection(source: SocketProtectionSource): SocketProtection {
   const protection = toProtection(source);
   const local = new WeakMap<ProtectedSocket, Attachment>();
-  const pending = new Map<ProtectedSocket, SocketData[]>();
-  const timers = new Map<ProtectedSocket, ReturnType<typeof setTimeout>>();
+  const pending = new WeakMap<ProtectedSocket, Pending>();
+  const timers = new WeakMap<ProtectedSocket, ReturnType<typeof setTimeout>>();
+  const refused = new WeakSet<ProtectedSocket>();
 
   const read = (socket: ProtectedSocket): Attachment | undefined => {
     if (typeof socket.deserializeAttachment === "function") {
@@ -81,29 +90,46 @@ export function createSocketProtection(source: SocketProtectionSource): SocketPr
 
   const refuse = (socket: ProtectedSocket) => {
     forget(socket);
+    refused.add(socket);
     try {
       socket.close(REFUSAL_CLOSE_CODE);
     } catch {}
   };
 
-  const accept = (socket: ProtectedSocket, attachment?: unknown) => {
-    write(socket, {
-      np1: { state: null, deadline: Date.now() + HANDSHAKE_TIMEOUT_MS },
-      app: attachment ?? null,
-    });
+  const arm = (socket: ProtectedSocket, deadline: number) => {
+    const timer = timers.get(socket);
+    if (timer !== undefined) clearTimeout(timer);
     timers.set(
       socket,
-      setTimeout(() => {
-        timers.delete(socket);
-        if (read(socket)?.np1.state === null) refuse(socket);
-      }, HANDSHAKE_TIMEOUT_MS),
+      setTimeout(
+        () => {
+          timers.delete(socket);
+          if (read(socket)?.np1.state === null) refuse(socket);
+        },
+        Math.max(0, deadline - Date.now()),
+      ),
     );
+  };
+
+  const accept = (socket: ProtectedSocket, attachment?: unknown) => {
+    const deadline = Date.now() + HANDSHAKE_TIMEOUT_MS;
+    write(socket, { np1: { state: null, deadline }, app: attachment ?? null });
+    arm(socket, deadline);
+  };
+
+  const restore = (socket: ProtectedSocket) => {
+    if (refused.has(socket) || timers.has(socket)) return;
+    const current = read(socket);
+    if (current === undefined || current.np1.state !== null) return;
+    if (Date.now() >= current.np1.deadline) refuse(socket);
+    else arm(socket, current.np1.deadline);
   };
 
   const receive = (
     socket: ProtectedSocket,
     message: string | ArrayBuffer | ArrayBufferView,
   ): string | ArrayBuffer | null => {
+    if (refused.has(socket)) return null;
     const current = read(socket);
     if (current === undefined) {
       refuse(socket);
@@ -121,7 +147,7 @@ export function createSocketProtection(source: SocketProtectionSource): SocketPr
     }
     if (state === null) {
       write(socket, { np1: { state: opened.state, deadline }, app: current.app });
-      const queued = pending.get(socket) ?? [];
+      const queued = pending.get(socket)?.messages ?? [];
       forget(socket);
       for (const data of queued) socket.send(protection.sealSocket(opened.state, data));
     }
@@ -131,14 +157,23 @@ export function createSocketProtection(source: SocketProtectionSource): SocketPr
   };
 
   const send = (socket: ProtectedSocket, message: SocketData) => {
-    const state = read(socket)?.np1.state ?? null;
-    if (state === null) {
-      const queue = pending.get(socket) ?? [];
-      queue.push(typeof message === "string" ? message : copy(message));
-      pending.set(socket, queue);
+    if (refused.has(socket)) return;
+    const current = read(socket);
+    if (current === undefined) return;
+    const state = current.np1.state;
+    if (state !== null) {
+      socket.send(protection.sealSocket(state, message));
       return;
     }
-    socket.send(protection.sealSocket(state, message));
+    const item = typeof message === "string" ? message : copy(message);
+    const queue = pending.get(socket) ?? { messages: [], bytes: 0 };
+    queue.messages.push(item);
+    queue.bytes += typeof item === "string" ? item.length * 3 : item.byteLength;
+    if (queue.messages.length > PENDING_SEND_LIMIT || queue.bytes > PENDING_BYTES_LIMIT) {
+      refuse(socket);
+      return;
+    }
+    pending.set(socket, queue);
   };
 
   const attachment = (socket: ProtectedSocket): unknown => read(socket)?.app ?? null;
@@ -149,7 +184,7 @@ export function createSocketProtection(source: SocketProtectionSource): SocketPr
     write(socket, { np1: current.np1, app: value });
   };
 
-  return { protection, accept, receive, send, attachment, setAttachment };
+  return { protection, accept, restore, receive, send, attachment, setAttachment };
 }
 
 function copy(data: ArrayBuffer | ArrayBufferView): Uint8Array {

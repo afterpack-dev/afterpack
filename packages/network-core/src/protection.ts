@@ -9,6 +9,7 @@ import {
   encodeBody,
   type FrameType,
   frameToWire,
+  type HeaderPairs,
   type InnerMessage,
   MIN_PREFIXED_WIRE,
   type Np1Error,
@@ -80,6 +81,8 @@ export interface NetworkProtection {
 }
 
 export const REFUSAL_STATUS = 400;
+const INTERNAL_ERROR_STATUS = 500;
+const BAD_GATEWAY_STATUS = 502;
 
 type Attempt =
   | { kind: "plaintext" }
@@ -95,16 +98,6 @@ type Attempt =
 
 function randomNonce(): Uint8Array {
   return globalThis.crypto.getRandomValues(new Uint8Array(NONCE_BYTES));
-}
-
-function defaultClientAddress(request: Request): string {
-  const headers = request.headers;
-  return (
-    headers.get("cf-connecting-ip") ??
-    headers.get("x-real-ip") ??
-    headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    ""
-  );
 }
 
 function normaliseOrigin(origin: string): string {
@@ -190,7 +183,15 @@ export function createNetworkProtection(options: NetworkProtectionOptions): Netw
   const allowedOrigins = new Set((options.allowedOrigins ?? []).map(normaliseOrigin));
   const requireSealed = options.requireSealed === true;
   const takeFreshSession = freshSessionLimiter(options.freshSessionsPerMinute);
-  const clientAddress = options.clientAddress ?? defaultClientAddress;
+  const clientAddress =
+    options.freshSessionsPerMinute === undefined ? undefined : options.clientAddress;
+  if (options.freshSessionsPerMinute !== undefined && typeof clientAddress !== "function") {
+    throw new TypeError(
+      "freshSessionsPerMinute needs clientAddress(request), the address your platform vouches " +
+        "for: a header a client can set itself is no limit",
+    );
+  }
+  let warnedNoAddress = false;
   const onRequest = options.onRequest;
   const counters: Counters = { sealed: 0, plaintext: 0, openFailures: 0, refusals: 0 };
 
@@ -217,9 +218,17 @@ export function createNetworkProtection(options: NetworkProtectionOptions): Netw
       return { kind: "plaintext" };
     }
     const ephPublic = detected.wire.subarray(0, 32);
-    if (!isCachedSession(deriver, ephPublic)) {
-      const address = clientAddress(request) ?? "";
-      if (!takeFreshSession(address, Date.now())) return { kind: "rate-limited" };
+    if (clientAddress !== undefined && !isCachedSession(deriver, ephPublic)) {
+      const address = clientAddress(request);
+      if (typeof address === "string" && address !== "") {
+        if (!takeFreshSession(address, Date.now())) return { kind: "rate-limited" };
+      } else if (!warnedNoAddress) {
+        warnedNoAddress = true;
+        console.warn(
+          "network protection: clientAddress gave no address, so freshSessionsPerMinute does " +
+            "not limit such requests",
+        );
+      }
     }
     const opened = openRecord(
       detected.wire,
@@ -311,30 +320,38 @@ export function createNetworkProtection(options: NetworkProtectionOptions): Netw
       return refuse(request, started, "bad-request", true, message.method, innerUrl.pathname);
     }
 
-    const response = await next(inner);
-    const status = response.status;
-    const sealable = status >= 200 && status <= 599;
-    const innerBody = sealable ? new Uint8Array(await response.arrayBuffer()) : new Uint8Array(0);
+    let status = INTERNAL_ERROR_STATUS;
+    let innerHeaders: HeaderPairs = [];
+    let innerBody: Uint8Array = new Uint8Array(0);
+    let setCookies: string[] = [];
+    try {
+      const response = await next(inner);
+      if (response.status >= 200 && response.status <= 599) {
+        innerBody = new Uint8Array(await response.arrayBuffer());
+        status = response.status;
+        innerHeaders = responseHeaderPairs(response.headers);
+        setCookies = setCookiesOf(response.headers);
+      } else {
+        status = BAD_GATEWAY_STATUS;
+      }
+    } catch (error) {
+      console.error(error);
+    }
     const sealedInner = buildInner(
-      {
-        kind: 2,
-        status: sealable ? status : 502,
-        headers: sealable ? responseHeaderPairs(response.headers) : [],
-        body: innerBody,
-      },
+      { kind: 2, status, headers: innerHeaders, body: innerBody },
       SERVER_LADDER_RATIO,
     );
     const record = sealRecord(attempt.key, randomNonce(), sealedInner);
     const outerHeaders = new Headers({ "cache-control": "no-store" });
     const contentType = request.headers.get("content-type");
     if (contentType !== null) outerHeaders.set("content-type", contentType);
-    for (const cookie of setCookiesOf(response.headers)) outerHeaders.append("set-cookie", cookie);
+    for (const cookie of setCookies) outerHeaders.append("set-cookie", cookie);
 
     counters.sealed += 1;
     report(inner, {
       method: inner.method,
       path: innerUrl.pathname,
-      status: sealable ? status : 502,
+      status,
       sealed: true,
       durationMs: Date.now() - started,
     });

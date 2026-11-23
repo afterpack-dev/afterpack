@@ -3,6 +3,14 @@ export interface Routes {
   exclude?: readonly string[];
 }
 
+const UNRESERVED_ESCAPE = /%(?:[46][1-9A-Fa-f]|[57][0-9Aa]|3[0-9]|2[DEde]|5[Ff]|7[Ee])/g;
+
+function decodeUnreserved(path: string): string {
+  return path.replace(UNRESERVED_ESCAPE, (match) =>
+    String.fromCharCode(Number.parseInt(match.slice(1), 16)),
+  );
+}
+
 function segments(path: string): string[] {
   return path.split("/").filter((part) => part !== "");
 }
@@ -81,7 +89,7 @@ export function compileRoutes(routes: Routes): (pathname: string) => boolean {
   const include = routes.include.map(segments);
   const excluded = exclude.map(segments);
   return (pathname) => {
-    const path = segments(pathname);
+    const path = segments(decodeUnreserved(pathname));
     return (
       include.some((pattern) => segmentsMatch(pattern, path)) &&
       !excluded.some((pattern) => segmentsMatch(pattern, path))

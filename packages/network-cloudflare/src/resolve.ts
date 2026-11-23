@@ -1,5 +1,5 @@
 import {
-  createNetworkProtection,
+  createNetworkProtection as createCoreProtection,
   type NetworkProtection,
   type NetworkProtectionOptions,
 } from "@afterpack/network-core";
@@ -16,6 +16,17 @@ function isProtection(value: unknown): value is NetworkProtection {
     typeof (value as NetworkProtection).handle === "function" &&
     typeof (value as NetworkProtection).openSocket === "function"
   );
+}
+
+export function cloudflareClientAddress(request: Request): string | null {
+  return request.headers.get("cf-connecting-ip");
+}
+
+export function createNetworkProtection(options: NetworkProtectionOptions): NetworkProtection {
+  return createCoreProtection({
+    ...options,
+    clientAddress: options.clientAddress ?? cloudflareClientAddress,
+  });
 }
 
 function build(value: NetworkProtection | NetworkProtectionOptions): NetworkProtection {

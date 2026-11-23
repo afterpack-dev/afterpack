@@ -4,6 +4,8 @@ import { Np1TestClient } from "../../network-core/test/np1-client.js";
 import {
   createSocketProtection,
   HANDSHAKE_TIMEOUT_MS,
+  PENDING_BYTES_LIMIT,
+  PENDING_SEND_LIMIT,
   type ProtectedSocket,
   REFUSAL_CLOSE_CODE,
 } from "../src/index.js";
@@ -162,6 +164,74 @@ describe("createSocketProtection: the Durable Object socket helper", () => {
     expect(sockets.attachment(socket)).toBe("data");
     vi.advanceTimersByTime(HANDSHAKE_TIMEOUT_MS);
     expect(socket.closed).toBeNull();
+  });
+
+  it("drops sends to a socket it never accepted or already refused", () => {
+    const { sockets, client } = setup();
+    const stranger = new FakeSocket();
+    sockets.send(stranger, "lost");
+    expect(stranger.sent).toEqual([]);
+    expect(stranger.closed).toBeNull();
+
+    const late = new FakeSocket();
+    sockets.accept(late);
+    vi.advanceTimersByTime(HANDSHAKE_TIMEOUT_MS);
+    expect(late.closed).toBe(REFUSAL_CLOSE_CODE);
+    sockets.send(late, "after refusal");
+    expect(sockets.receive(late, client().socketFrame(null, "binary", true))).toBeNull();
+    expect(late.sent).toEqual([]);
+
+    const broken = new FakeSocket();
+    sockets.accept(broken);
+    sockets.receive(broken, "not a record");
+    sockets.send(broken, "after a bad frame");
+    vi.advanceTimersByTime(HANDSHAKE_TIMEOUT_MS);
+    expect(broken.sent).toEqual([]);
+  });
+
+  it("closes a socket whose buffered sends pass the cap before its first frame", () => {
+    const { sockets } = setup();
+    const many = new FakeSocket();
+    sockets.accept(many);
+    for (let i = 0; i < PENDING_SEND_LIMIT; i++) sockets.send(many, "x");
+    expect(many.closed).toBeNull();
+    sockets.send(many, "one too many");
+    expect(many.closed).toBe(REFUSAL_CLOSE_CODE);
+
+    const big = new FakeSocket();
+    sockets.accept(big);
+    sockets.send(big, new Uint8Array(PENDING_BYTES_LIMIT));
+    expect(big.closed).toBeNull();
+    sockets.send(big, new Uint8Array(1));
+    expect(big.closed).toBe(REFUSAL_CLOSE_CODE);
+    expect([...many.sent, ...big.sent]).toEqual([]);
+  });
+
+  it("re-arms the handshake deadline with restore after the object restarts", () => {
+    const { sockets, client } = setup();
+    const waiting = new FakeSocket();
+    const done = new FakeSocket();
+    const expired = new FakeSocket();
+    sockets.accept(waiting);
+    sockets.accept(done);
+    sockets.receive(done, client().socketFrame(null, "text", true));
+    expired.stored = waiting.stored;
+    vi.clearAllTimers();
+    vi.advanceTimersByTime(4_000);
+
+    const restarted = createSocketProtection(sockets.protection);
+    for (const socket of [waiting, done]) restarted.restore(socket);
+    restarted.restore(waiting);
+    vi.advanceTimersByTime(HANDSHAKE_TIMEOUT_MS - 4_000 - 1);
+    expect(waiting.closed).toBeNull();
+    vi.advanceTimersByTime(1);
+    expect(waiting.closed).toBe(REFUSAL_CLOSE_CODE);
+    expect(done.closed).toBeNull();
+
+    const again = createSocketProtection(sockets.protection);
+    again.restore(expired);
+    expect(expired.closed).toBe(REFUSAL_CLOSE_CODE);
+    again.restore(new FakeSocket());
   });
 
   it("closes a socket it never accepted", () => {
