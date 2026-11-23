@@ -12,3 +12,19 @@ export {
   sharedSecret,
   TAG_BYTES,
 } from "./crypto.js";
+export { generateKeyPair, type KeyPair, type PrivateKeysInput, publicKeyFor } from "./keys.js";
+export type { BodyEncoding, FrameType, Np1Error } from "./np1.js";
+export {
+  type Counters,
+  createNetworkProtection,
+  type NetworkProtection,
+  type NetworkProtectionOptions,
+  type Next,
+  REFUSAL_STATUS,
+  type RefusalReason,
+  type RequestInfo,
+  type SocketData,
+  type SocketOpened,
+  type SocketState,
+} from "./protection.js";
+export type { Routes } from "./routes.js";

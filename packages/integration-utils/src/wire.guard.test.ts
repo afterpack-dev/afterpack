@@ -340,6 +340,7 @@ const NETWORK_ALLOWED = new Set([
   "integration-utils/src/hash-salt.ts",
   "cli/src/sse.ts",
   "cli/src/audit.ts",
+  "network-cloudflare/src/fetch.ts",
 ]);
 
 const NETWORK =

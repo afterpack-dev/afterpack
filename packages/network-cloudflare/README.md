@@ -1,0 +1,122 @@
+# @afterpack/network-cloudflare
+
+## Read this first: your edge loses sight of the API
+
+Behind the tunnel, every protected call reaches your Worker as `POST` to one tunnel path, with an
+encrypted body. **Cloudflare WAF custom rules and rate-limiting rules keyed on an API path, and any
+rule that reads the request body, now see only that `POST`.** Move them into the Worker, keyed on the
+unwrapped request: the middleware hands the real request to your routes, and `onRequest` reports its
+method, path, status, timing and whether it was sealed. Your app's own authentication and validation
+stay the authority.
+
+## What it is
+
+[AfterPack](https://www.afterpack.dev) network protection on Cloudflare: Hono middleware, a wrapper
+for a plain Worker `fetch` handler, and a Durable Object socket helper. It builds on
+[`@afterpack/network-core`](https://github.com/afterpack-dev/afterpack/tree/main/packages/network-core), whose README documents the NP1 protocol.
+
+## Install
+
+```sh
+npm install @afterpack/network-cloudflare
+npx afterpack network init
+npx wrangler secret put NETWORK_PRIVATE_KEYS
+```
+
+`afterpack network init` makes a key pair, writes the public key into `afterpack.json` and prints the
+private key once, for the secret. During a rotation the secret holds both private keys, new first,
+separated by a comma.
+
+## Hono
+
+```js
+import { Hono } from "hono";
+import { networkProtection } from "@afterpack/network-cloudflare";
+
+const app = new Hono();
+
+app.use(
+  "/api/*",
+  networkProtection(app, (env) => ({
+    privateKeys: env.NETWORK_PRIVATE_KEYS,
+    routes: { include: ["/api/**"] },
+    allowedOrigins: ["https://staging.example.com"],
+  })),
+);
+
+app.get("/api/items/:id", (c) => c.json({ id: c.req.param("id") }));
+
+export default app;
+```
+
+Pass the top-level app: the middleware routes the unwrapped request through `app.fetch`, so it
+reaches the route its real method and path name, and middleware mounted before it sees the tunnel
+`POST`. Plaintext requests continue down the chain unchanged.
+
+## A plain Worker
+
+```js
+import { withNetworkProtection } from "@afterpack/network-cloudflare";
+
+const worker = {
+  async fetch(request, env, ctx) {
+    return new Response("hello");
+  },
+};
+
+export default withNetworkProtection(worker, (env) => ({
+  privateKeys: env.NETWORK_PRIVATE_KEYS,
+  routes: { include: ["/api/**"] },
+}));
+```
+
+It also takes a bare `fetch(request, env, ctx)` function. The protection is built once per `env`.
+The options are those of `createNetworkProtection` in `@afterpack/network-core`, or a function of
+`env` that returns them.
+
+## Durable Object sockets
+
+```js
+import { createSocketProtection } from "@afterpack/network-cloudflare";
+
+export class Room {
+  constructor(ctx, env) {
+    this.ctx = ctx;
+    this.sockets = createSocketProtection({ privateKeys: env.NETWORK_PRIVATE_KEYS });
+  }
+
+  async fetch(request) {
+    const [client, server] = Object.values(new WebSocketPair());
+    this.ctx.acceptWebSocket(server);
+    this.sockets.accept(server, { seat: 1 });
+    this.sockets.send(server, "welcome");
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  webSocketMessage(socket, data) {
+    const message = this.sockets.receive(socket, data);
+    if (message === null) return;
+    this.sockets.send(socket, `echo ${message}`);
+  }
+}
+```
+
+- `accept(socket, attachment?)` starts the session. The session state (the key and the frame type)
+  is kept in the socket's attachment with `serializeAttachment`, so a hibernated object resumes. Read
+  and write your own attachment data through `attachment(socket)` and `setAttachment(socket, value)`,
+  not `serializeAttachment` directly.
+- `receive(socket, data)` returns the app's message (a string or an `ArrayBuffer`), or `null` for the
+  handshake record and for a frame it refuses, after closing the socket with code 1008.
+- `send(socket, message)` seals and sends. Sends made before the client's first frame are buffered
+  and flushed when it arrives.
+- A socket that sends no first frame within 10 seconds is closed with code 1008.
+- Close reasons travel in clear: close a protected socket with numeric codes, never prose.
+
+## License
+
+Apache-2.0.
+
+## Feedback
+
+Questions, suggestions and bug reports: [afterpack.dev/contact](https://www.afterpack.dev/contact).
+You can also file a bug on [GitHub Issues](https://github.com/afterpack-dev/afterpack/issues).
