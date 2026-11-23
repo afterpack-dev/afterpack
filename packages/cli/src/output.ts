@@ -111,7 +111,7 @@ export function displayDir(cwd: string, dir: string): string {
 
 export const JSON_SCHEMA_VERSION = 1;
 
-export type CommandName = "obfuscate" | "verify" | "restore" | "audit";
+export type CommandName = "obfuscate" | "verify" | "restore" | "audit" | "network";
 
 export interface JsonDiagnostic {
   code: string;

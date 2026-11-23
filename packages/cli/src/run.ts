@@ -79,6 +79,7 @@ import { colorSupported, dim, green, isCiTruthy, red, setColorEnabled, yellow } 
 import { printHeader } from "./header.js";
 import { detectHashedLayout, type HashedLayout, keptNamesNotice } from "./layout.js";
 import { acquireLock, type HeldLock, LockHeldError } from "./lock.js";
+import { NETWORK_HELP, network } from "./network.js";
 import {
   type CommandName,
   displayDir,
@@ -138,7 +139,7 @@ const NOT_A_COMMAND: Readonly<Record<string, string>> = {
 };
 
 const COMMAND_HINT =
-  "the commands are `verify`, `restore` and `audit`; obfuscation is `afterpack <path>`, " +
+  "the commands are `verify`, `restore`, `audit` and `network`; obfuscation is `afterpack <path>`, " +
   "with no subcommand";
 
 function unknownCommand(
@@ -794,7 +795,12 @@ async function runHolding(deps: CliDeps, locks: HeldLock[]): Promise<number> {
   }
 
   const command = argv[0];
-  if (command === "verify" || command === "audit" || command === "restore") {
+  if (
+    command === "verify" ||
+    command === "audit" ||
+    command === "restore" ||
+    command === "network"
+  ) {
     return runSubcommand(command, argv.slice(1), { ...deps, cwd, env, stdout, argv });
   }
 
@@ -1186,14 +1192,17 @@ async function runHolding(deps: CliDeps, locks: HeldLock[]): Promise<number> {
   return EXIT.ok;
 }
 
-const SUBCOMMAND_HELP: Readonly<Record<"verify" | "audit" | "restore", string>> = {
+type Subcommand = "verify" | "audit" | "restore" | "network";
+
+const SUBCOMMAND_HELP: Readonly<Record<Subcommand, string>> = {
   verify: VERIFY_HELP,
   restore: RESTORE_HELP,
   audit: AUDIT_HELP,
+  network: NETWORK_HELP,
 };
 
 async function runSubcommand(
-  command: "verify" | "audit" | "restore",
+  command: Subcommand,
   rest: string[],
   deps: CliDeps & { env: Record<string, string | undefined>; stdout: CliStdout },
 ): Promise<number> {
@@ -1225,6 +1234,9 @@ async function runSubcommand(
   }
   if (command === "restore") {
     return restore({ cwd, logger, report, positionals: args.positionals, mode, version });
+  }
+  if (command === "network") {
+    return network({ cwd, logger, report, positionals: args.positionals, mode, version });
   }
   return audit({
     cwd,

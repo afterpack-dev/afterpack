@@ -4,30 +4,35 @@ import { dirname, join } from "node:path";
 interface PackageManager {
   name: string;
   install(pkg: string): string;
+  add(pkg: string): string;
   run(script: string): string;
 }
 
 const NPM: PackageManager = {
   name: "npm",
   install: (pkg) => `npm install -D ${pkg}`,
+  add: (pkg) => `npm install ${pkg}`,
   run: (script) => `npm run ${script}`,
 };
 
 const PNPM: PackageManager = {
   name: "pnpm",
   install: (pkg) => `pnpm add -D ${pkg}`,
+  add: (pkg) => `pnpm add ${pkg}`,
   run: (script) => `pnpm ${script}`,
 };
 
 const YARN: PackageManager = {
   name: "yarn",
   install: (pkg) => `yarn add -D ${pkg}`,
+  add: (pkg) => `yarn add ${pkg}`,
   run: (script) => `yarn ${script}`,
 };
 
 const BUN: PackageManager = {
   name: "bun",
   install: (pkg) => `bun add -d ${pkg}`,
+  add: (pkg) => `bun add ${pkg}`,
   run: (script) => `bun run ${script}`,
 };
 

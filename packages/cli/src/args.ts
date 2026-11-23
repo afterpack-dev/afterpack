@@ -90,7 +90,8 @@ export const USAGE =
   "usage: afterpack [path] [--key=value ...] [--help] [--version]\n" +
   "       afterpack verify [dir]\n" +
   "       afterpack restore [dir]\n" +
-  "       afterpack audit <url>";
+  "       afterpack audit <url>\n" +
+  "       afterpack network keygen|init";
 
 export const OUTPUT_DIR_LIST = OUTPUT_DIRS.map((dir) => `${dir}/`).join(", ");
 
@@ -225,6 +226,11 @@ Commands:
   audit <url>              scan a DEPLOYED site for leaked secrets, exposed
                            source and unprotected JavaScript, streaming the
                            findings as they land. \`afterpack audit --help\`.
+  network keygen|init      set up network protection: keygen prints a server key
+                           pair; init also writes the public key into
+                           afterpack.json and prints the server snippet and the
+                           secret command for your platform.
+                           \`afterpack network --help\`.
 
 Options:
 ${optionLines()}
