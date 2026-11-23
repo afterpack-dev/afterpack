@@ -74,7 +74,8 @@ export default withNetworkProtection(worker, (env) => ({
 It also takes a bare `fetch(request, env, ctx)` function. The protection is built once per `env`.
 The options are those of `createNetworkProtection` in `@afterpack/network-core`, or a function of
 `env` that returns them. Here `clientAddress`, which `freshSessionsPerMinute` counts by, defaults to
-`CF-Connecting-IP`, the address Cloudflare sets and a client can't. This package's own
+`CF-Connecting-IP`, the address Cloudflare sets and a client can't, keyed on its /64 prefix for an
+IPv6 client, which can rotate addresses within it. This package's own
 `createNetworkProtection` applies the same default.
 
 ## Durable Object sockets

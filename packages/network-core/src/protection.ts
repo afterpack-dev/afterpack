@@ -1,4 +1,5 @@
 import { decodeUtf8, fromBase64url, toBase64url, toBytes, toHex } from "./bytes.js";
+import { contentCodings, decodeContent } from "./content-coding.js";
 import { NONCE_BYTES, publicKeyOf, SESSION_KEY_BYTES } from "./crypto.js";
 import { responseHeaderPairs, setCookiesOf, unwrapHeaders } from "./headers.js";
 import { type PrivateKeysInput, parsePrivateKeys } from "./keys.js";
@@ -207,14 +208,16 @@ function refusalResponse(): Response {
   });
 }
 
-function parseSocketState(state: SocketState): Uint8Array {
+function socketKey(state: SocketState): Uint8Array | null {
   const key = typeof state?.key === "string" ? fromBase64url(state.key) : null;
-  if (key === null || key.length !== SESSION_KEY_BYTES) {
-    throw new TypeError("socket state holds no session key");
-  }
-  if (state.frameType !== "binary" && state.frameType !== "text") {
-    throw new TypeError("socket state holds no frame type");
-  }
+  if (key === null || key.length !== SESSION_KEY_BYTES) return null;
+  if (state.frameType !== "binary" && state.frameType !== "text") return null;
+  return key;
+}
+
+function parseSocketState(state: SocketState): Uint8Array {
+  const key = socketKey(state);
+  if (key === null) throw new TypeError("socket state holds no session key and frame type");
   return key;
 }
 
@@ -238,6 +241,7 @@ export function createNetworkProtection(options: NetworkProtectionOptions): Netw
   const requireSealed = options.requireSealed === true;
   const maxBody = bodyLimit(options.maxSealedBodyBytes);
   const takeFreshSession = freshSessionLimiter(options.freshSessionsPerMinute);
+  const takeForeignSession = freshSessionLimiter(options.freshSessionsPerMinute);
   const clientAddress =
     options.freshSessionsPerMinute === undefined ? undefined : options.clientAddress;
   if (options.freshSessionsPerMinute !== undefined && typeof clientAddress !== "function") {
@@ -260,10 +264,10 @@ export function createNetworkProtection(options: NetworkProtectionOptions): Netw
     }
   };
 
-  const isSameOrigin = (request: Request): boolean => {
+  const isSameOrigin = (request: Request, outerOrigin: string): boolean => {
     if (request.headers.get("sec-fetch-site") === "same-origin") return true;
     const origin = request.headers.get("origin");
-    return origin !== null && allowedOrigins.has(origin);
+    return origin !== null && (origin === outerOrigin || allowedOrigins.has(origin));
   };
 
   const addressOf = (request: Request): string | null => {
@@ -272,7 +276,7 @@ export function createNetworkProtection(options: NetworkProtectionOptions): Netw
     return typeof address === "string" && address !== "" ? address : null;
   };
 
-  const attemptOpen = async (request: Request): Promise<Attempt> => {
+  const attemptOpen = async (request: Request, sameOrigin: boolean): Promise<Attempt> => {
     if (request.method !== "POST" || request.body === null) return { kind: "plaintext" };
     const length = declaredLength(request);
     if (length === null || length < MIN_PREFIXED_WIRE) return { kind: "plaintext" };
@@ -289,7 +293,8 @@ export function createNetworkProtection(options: NetworkProtectionOptions): Netw
     if (clientAddress !== undefined && !isCachedSession(deriver, ephPublic)) {
       const address = addressOf(request);
       if (address !== null) {
-        if (!takeFreshSession(address, Date.now())) return { kind: "rate-limited" };
+        const take = sameOrigin ? takeFreshSession : takeForeignSession;
+        if (!take(address, Date.now())) return { kind: "rate-limited" };
       } else if (!warnedNoAddress) {
         warnedNoAddress = true;
         console.warn(
@@ -354,7 +359,8 @@ export function createNetworkProtection(options: NetworkProtectionOptions): Netw
     const outerUrl = new URL(request.url);
     if (!inRoutes(outerUrl.pathname)) return next(request);
 
-    const attempt = await attemptOpen(request);
+    const sameOrigin = isSameOrigin(request, outerUrl.origin);
+    const attempt = await attemptOpen(request, sameOrigin);
     if (attempt.kind === "rate-limited") return refuse(request, started, "rate-limited", false);
     if (attempt.kind === "too-large") {
       if (requireSealed) return refuse(request, started, "too-large", false);
@@ -371,7 +377,7 @@ export function createNetworkProtection(options: NetworkProtectionOptions): Netw
     }
 
     const { message } = attempt;
-    if (!isSameOrigin(request)) return refuse(request, started, "cross-site", true);
+    if (!sameOrigin) return refuse(request, started, "cross-site", true);
     const innerUrl = new URL(message.target, outerUrl);
     if (innerUrl.origin !== outerUrl.origin || !inRoutes(innerUrl.pathname)) {
       return refuse(request, started, "outside-routes", true, message.method, innerUrl.pathname);
@@ -399,10 +405,21 @@ export function createNetworkProtection(options: NetworkProtectionOptions): Netw
     try {
       const response = await next(inner);
       if (response.status >= 200 && response.status <= 599) {
-        innerBody = new Uint8Array(await response.arrayBuffer());
-        status = response.status;
-        innerHeaders = responseHeaderPairs(response.headers);
-        setCookies = setCookiesOf(response.headers);
+        const raw = new Uint8Array(await response.arrayBuffer());
+        const codings = response.url ? [] : contentCodings(response.headers);
+        const decoded = codings.length === 0 ? raw : await decodeContent(raw, codings);
+        if (decoded === null) {
+          console.error(
+            `network protection: cannot decode a response in Content-Encoding ` +
+              `"${codings.join(", ")}" to seal it; answer the unwrapped request uncompressed`,
+          );
+          status = BAD_GATEWAY_STATUS;
+        } else {
+          innerBody = decoded;
+          status = response.status;
+          innerHeaders = responseHeaderPairs(response.headers);
+          setCookies = setCookiesOf(response.headers);
+        }
       } else {
         status = BAD_GATEWAY_STATUS;
       }
@@ -480,7 +497,8 @@ export function createNetworkProtection(options: NetworkProtectionOptions): Netw
         message: socketMessage(opened.message),
       };
     }
-    const key = parseSocketState(state);
+    const key = socketKey(state);
+    if (key === null) return fail("malformed");
     if (frameType !== state.frameType) return fail("bad-encoding");
     const wire = frameToWire(data, frameType);
     if (wire === null) return fail("bad-encoding");

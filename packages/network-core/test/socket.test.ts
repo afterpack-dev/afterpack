@@ -184,5 +184,16 @@ describe("openSocket and sealSocket with the independent client", () => {
     expect(() =>
       protection.sealSocket({ key: "A".repeat(43), frameType: "carrier" as FrameType }, "x"),
     ).toThrow(TypeError);
+    for (const state of [
+      { key: "short", frameType: "text" },
+      { key: "A".repeat(43), frameType: "carrier" as FrameType },
+      { key: 7 as unknown as string, frameType: "binary" },
+    ] as SocketState[]) {
+      expect(protection.openSocket(state, "AAAA")).toEqual({
+        ok: false,
+        error: "malformed",
+        state,
+      });
+    }
   });
 });

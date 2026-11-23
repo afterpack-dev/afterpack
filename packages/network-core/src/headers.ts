@@ -71,9 +71,10 @@ export function unwrapHeaders(outer: Headers, inner: HeaderPairs): Headers {
   }
   for (const [name, value] of outer) {
     if (FRAMING.has(name) || TUNNEL_BODY.has(name) || fromInner.has(name)) continue;
-    if (name === "set-cookie") continue;
+    if (name === "set-cookie" || name === "accept-encoding") continue;
     out.append(name, value);
   }
+  out.set("accept-encoding", "identity");
   return out;
 }
 

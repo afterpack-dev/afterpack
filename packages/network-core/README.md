@@ -54,11 +54,11 @@ fresh-session limiter.
 |---|---|
 | `privateKeys` | One or more X25519 private keys, base64url (32 bytes each) or `Uint8Array`. A string may hold several, separated by commas or whitespace. The server tries each one. |
 | `routes` | `{ include, exclude? }`: path globs (`*` within a segment, `**` across segments), the same as the build's `network.routes`. Percent-escapes of unreserved characters (`%70` for `p`) are decoded before matching. Requests outside them pass to `next` untouched. |
-| `allowedOrigins` | Origins, besides the page's own, whose tunnel requests are accepted (`Origin` header match). Default none. |
+| `allowedOrigins` | Origins, besides the page's own, whose tunnel requests are accepted (`Origin` header match). The page's own origin is recognised by `Sec-Fetch-Site: same-origin`, or by an `Origin` equal to the origin of the URL the server sees; list it too when a proxy in front rewrites that URL's scheme or host. Default none. |
 | `requireSealed` | Refuse plaintext on the protected routes. Default `false`. |
-| `freshSessionsPerMinute` | Cap on new sessions (new client keys, each costing one X25519) per client address per minute, for tunnel requests and for sockets whose first frame comes with an address. Needs `clientAddress`. Default no cap. |
+| `freshSessionsPerMinute` | Cap on new sessions (new client keys, each costing one X25519) per client address per minute, for tunnel requests and for sockets whose first frame comes with an address. Requests that are not same-origin count against a separate cap of the same size, so a cross-site page can't use up a visitor's sessions. Each cap tracks up to 10,000 addresses per isolate and forgets the oldest past that. Needs `clientAddress`. Default no cap. |
 | `maxSealedBodyBytes` | The largest tunnel body `handle` reads, in bytes. Default 1 MiB (`DEFAULT_MAX_SEALED_BODY_BYTES`). A `POST` whose `Content-Length` is larger, or whose body turns out larger, is never buffered: it goes to `next` untouched as plaintext, or gets the refusal status with `requireSealed`. Raise it if a protected route takes larger bodies; a sealed body is the app's body plus headers, padded up to the next 64 KiB step past 64 KiB, and a third larger in a text encoding. |
-| `clientAddress(request)` | The address `freshSessionsPerMinute` counts by. No default, because only your platform knows which address it vouches for. A header a client can set itself, such as `X-Forwarded-For` or `X-Real-IP` on a server reached directly, lets any client rotate it past the cap; return such a header only when a proxy you run overwrites it. A request it returns no address for (`null`, `undefined` or `""`) is not limited, and the first one logs a warning. On Cloudflare, `@afterpack/network-cloudflare` uses `CF-Connecting-IP`. |
+| `clientAddress(request)` | The address `freshSessionsPerMinute` counts by. No default, because only your platform knows which address it vouches for. A header a client can set itself, such as `X-Forwarded-For` or `X-Real-IP` on a server reached directly, lets any client rotate it past the cap; return such a header only when a proxy you run overwrites it. A request it returns no address for (`null`, `undefined` or `""`) is not limited, and the first one logs a warning. Return an IPv6 client's /64 prefix rather than its full address, because a client can rotate addresses within its /64. On Cloudflare, `@afterpack/network-cloudflare` uses `CF-Connecting-IP`, keyed on the /64 for IPv6. |
 | `onRequest(request, info)` | Called once per request on a protected route, after the response is made. `info` is `{ method, path, status, sealed, durationMs, refusal? }`; `request` is the unwrapped request. |
 
 It returns:
@@ -70,8 +70,9 @@ It returns:
   Pass `null` as the state for the first client frame, and the client address you took from the
   upgrade request with `clientAddress(request)`, so `freshSessionsPerMinute` counts the socket.
   `openSocket` returns `{ ok: true, state, message }` (the message is `null` for a handshake record)
-  or `{ ok: false, error, state }`, where `error` is an NP1 error or `rate-limited`; close the socket
-  on a refusal, with a numeric code and no reason text.
+  or `{ ok: false, error, state }`, where `error` is an NP1 error or `rate-limited`, and `malformed`
+  for a stored state it can't read; close the socket on a refusal, with a numeric code and no reason
+  text.
 - `clientAddress(request)`: the address `freshSessionsPerMinute` counts `request` under, or `null`
   when the cap is off or the option gives none. Keep it with the socket for its first frame.
 - `counters`: `{ sealed, plaintext, openFailures, refusals }` since the protection was created.
@@ -91,17 +92,21 @@ It returns:
   header with one of those names is dropped, and so is an inner `X-HTTP-Method`,
   `X-HTTP-Method-Override` or `X-Method-Override` that names `CONNECT`, `TRACE` or `TRACK`, as Fetch
   forbids. The outer `Content-Type` describes the tunnel body and
-  is never passed on; for every other name the inner value wins.
+  is never passed on; for every other name the inner value wins. The real request always carries
+  `Accept-Encoding: identity`, so the app answers uncompressed and the client reads the body as is.
 - **Same origin only.** A tunnel request is accepted when `Sec-Fetch-Site` is `same-origin`, or its
-  `Origin` is in `allowedOrigins`. Anyone can seal a record, because the server key is public; without
+  `Origin` is the request URL's own origin or is in `allowedOrigins`. Anyone can seal a record, because the server key is public; without
   this check the tunnel would turn the app's preflighted JSON calls into simple cross-site `POST`s.
   This stops browser CSRF only.
 - **Responses.** The outer response is `200` with `Cache-Control: no-store`, the request's
   `Content-Type` and the sealed record in the request's encoding. The real status, headers and body
   travel inside; `Set-Cookie` values are read with `getSetCookie()` and appended to the outer response
   one by one, because a browser stores cookies only from it. An inner `3xx` is returned untouched.
-  `Content-Encoding` and the framing headers are not sealed, because the sealed body is the decoded
-  one.
+  The sealed body is always the decoded one, so `Content-Encoding` and the framing headers are not
+  sealed. A response the app built with a `gzip` or `deflate` body is decoded before sealing; a body
+  in another coding (`br`, `zstd`), or one that fails to decode, gets a sealed `502` and an error on
+  `console.error`. A response returned straight from `fetch` is already decoded, whatever its
+  `Content-Encoding` says, and is sealed as it reads.
 - **Refusals** get status `400` and a plain `Bad Request` body: a cross-site tunnel request, a target
   outside `routes`, an inner request Fetch can't build (a `GET` with a body, `CONNECT`), a client
   address over `freshSessionsPerMinute`, and, with `requireSealed`, plaintext, a body over
@@ -115,12 +120,15 @@ It returns:
   not, so production can alert on plaintext.
 - **Lookalikes and the session cap.** The cap is checked before the open, on every body that looks
   like a record: a `POST` body of 72 bytes or more that is not UTF-8, base64 or base64url text, or a
-  one-property JSON object whose value is such text. With `freshSessionsPerMinute` set, a plaintext
+  one-property JSON object whose value is such text. A request that is not same-origin counts against
+  its own cap, never against the address's same-origin sessions. With `freshSessionsPerMinute` set, a plaintext
   body of that shape counts as a new session, costs one X25519, and past the cap gets the refusal
   status even without `requireSealed`. If a protected route takes such plaintext bodies, set the cap
   high enough for them, or leave it off and rate-limit in the handler.
 - **Cost.** One X25519 per new client session, cached per isolate by the client's public key (an LRU
-  of 4096 sessions). Opening and sealing a record is microseconds for API-sized bodies.
+  of 4096 sessions). The cache lives on `globalThis` under a `Symbol.for` key, so the ESM and
+  CommonJS builds share it; code running in the same isolate can read it, as it can read the
+  private key from the environment. Opening and sealing a record is microseconds for API-sized bodies.
 
 ## NP1, for auditors
 

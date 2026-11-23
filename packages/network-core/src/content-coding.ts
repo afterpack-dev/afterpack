@@ -1,0 +1,47 @@
+type Format = "gzip" | "deflate";
+
+const DECODABLE = new Map<string, Format>([
+  ["gzip", "gzip"],
+  ["x-gzip", "gzip"],
+  ["deflate", "deflate"],
+]);
+
+export function contentCodings(headers: Headers): string[] {
+  const value = headers.get("content-encoding");
+  if (value === null) return [];
+  return value
+    .split(",")
+    .map((coding) => coding.trim().toLowerCase())
+    .filter((coding) => coding !== "" && coding !== "identity");
+}
+
+function looksEncoded(format: Format, bytes: Uint8Array): boolean {
+  if (bytes.length < 2) return false;
+  if (format === "gzip") return bytes[0] === 0x1f && bytes[1] === 0x8b;
+  return (bytes[0] & 0x0f) === 8 && bytes[0] >> 4 <= 7 && ((bytes[0] << 8) | bytes[1]) % 31 === 0;
+}
+
+async function decompress(bytes: Uint8Array, format: Format): Promise<Uint8Array> {
+  const source = new Response(new Uint8Array(bytes)).body;
+  if (source === null) return new Uint8Array(0);
+  const decoded = source.pipeThrough(new DecompressionStream(format));
+  return new Uint8Array(await new Response(decoded).arrayBuffer());
+}
+
+export async function decodeContent(
+  body: Uint8Array,
+  codings: readonly string[],
+): Promise<Uint8Array | null> {
+  let out = body;
+  for (let i = codings.length - 1; i >= 0; i--) {
+    const format = DECODABLE.get(codings[i]);
+    if (format === undefined) return null;
+    if (!looksEncoded(format, out)) return out;
+    try {
+      out = await decompress(out, format);
+    } catch {
+      return null;
+    }
+  }
+  return out;
+}

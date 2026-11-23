@@ -1,8 +1,10 @@
 import { generateKeyPair, type RequestInfo } from "@afterpack/network-core";
 import { Hono } from "hono";
+import { compress } from "hono/compress";
 import { describe, expect, it } from "vitest";
 import { Np1TestClient } from "../../network-core/test/np1-client.js";
 import {
+  cloudflareClientAddress,
   createNetworkProtection,
   networkProtection,
   REFUSAL_STATUS,
@@ -149,6 +151,39 @@ describe("networkProtection: Hono middleware", () => {
     expect(outer.status).toBe(REFUSAL_STATUS);
   });
 
+  it("seals the JSON itself when the app compresses its responses", async () => {
+    const { pair, client } = keys();
+    const hono = new Hono<{ Bindings: Env }>();
+    hono.use(
+      "/api/*",
+      networkProtection(hono, (env: Env) => ({
+        privateKeys: env.NETWORK_PRIVATE_KEYS,
+        routes: { include: ["/api/**"] },
+      })),
+    );
+    hono.use(compress());
+    const items = Array.from({ length: 400 }, (_, i) => ({ id: i, name: `item ${i}` }));
+    hono.get("/api/big", (c) => c.json({ items }));
+    const env = { NETWORK_PRIVATE_KEYS: pair.privateKey };
+
+    const plain = new Request(`${ORIGIN}/api/big`, { headers: { "accept-encoding": "gzip" } });
+    expect((await hono.fetch(plain, env)).headers.get("content-encoding")).toBe("gzip");
+
+    for (const encoding of ["raw", "json"] as const) {
+      const c = client();
+      const sealed = c.sealRequest({ method: "GET", target: "/api/big" }, encoding);
+      const request = tunnel(sealed.body, sealed.contentType);
+      request.headers.set("accept-encoding", "gzip, deflate, br");
+      const outer = await hono.fetch(request, env);
+      expect(outer.headers.get("content-encoding")).toBeNull();
+      const opened = c.openResponse(new Uint8Array(await outer.arrayBuffer()), encoding);
+      expect(opened.status).toBe(200);
+      expect(opened.body.length).toBeGreaterThan(1024);
+      expect(JSON.parse(Buffer.from(opened.body).toString())).toEqual({ items });
+      expect(opened.headers.map(([name]) => name)).not.toContain("content-encoding");
+    }
+  });
+
   it("refuses an app that is not one", () => {
     expect(() =>
       networkProtection(null as never, { privateKeys: "x", routes: { include: ["/**"] } }),
@@ -194,6 +229,50 @@ describe("freshSessionsPerMinute on Cloudflare", () => {
     expect((await custom.handle(from("203.0.113.9", "4.4.4.4"), next)).status).toBe(200);
     expect((await custom.handle(from("203.0.113.9", "5.5.5.5"), next)).status).toBe(200);
     expect((await custom.handle(from("203.0.113.8", "5.5.5.5"), next)).status).toBe(REFUSAL_STATUS);
+  });
+
+  it("counts an IPv6 client by its /64, so rotating within it gains nothing", () => {
+    const at = (address: string) =>
+      cloudflareClientAddress(
+        new Request(`${ORIGIN}/api/s`, { headers: { "cf-connecting-ip": address } }),
+      );
+    const prefix = "2001:db8:1:2::/64";
+    for (const address of [
+      "2001:db8:1:2::1",
+      "2001:0db8:0001:0002:ffff:ffff:ffff:ffff",
+      "2001:DB8:1:2:a:b:c:d",
+      "2001:db8:1:2::",
+      "2001:db8:1:2::7%eth0",
+    ]) {
+      expect(at(address), address).toBe(prefix);
+    }
+    expect(at("2001:db8:1:3::1")).toBe("2001:db8:1:3::/64");
+    expect(at("::1")).toBe("0:0:0:0::/64");
+    expect(at("203.0.113.1")).toBe("203.0.113.1");
+    expect(at("::ffff:203.0.113.1")).toBe("::ffff:203.0.113.1");
+    expect(at("not:an:address::x")).toBe("not:an:address::x");
+    expect(cloudflareClientAddress(new Request(`${ORIGIN}/api/s`))).toBeNull();
+  });
+
+  it("refuses a fresh IPv6 session from a rotated address in the same /64", async () => {
+    const { pair, client } = keys();
+    const protection = createNetworkProtection({
+      privateKeys: pair.privateKey,
+      routes: { include: ["/api/**"] },
+      freshSessionsPerMinute: 1,
+    });
+    const from = (address: string) => {
+      const sealed = client().sealRequest({ method: "GET", target: "/api/s" }, "raw");
+      const request = tunnel(sealed.body, sealed.contentType);
+      request.headers.set("cf-connecting-ip", address);
+      return request;
+    };
+    const next = () => new Response("ok");
+    const statuses = [];
+    for (const address of ["2001:db8::1", "2001:db8::2", "2001:db8:0:1::1"]) {
+      statuses.push((await protection.handle(from(address), next)).status);
+    }
+    expect(statuses).toEqual([200, REFUSAL_STATUS, 200]);
   });
 });
 

@@ -1,4 +1,5 @@
 import { generateKeyPairSync } from "node:crypto";
+import { brotliCompressSync, deflateSync, gzipSync } from "node:zlib";
 import nacl from "tweetnacl";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -307,6 +308,82 @@ describe("handle: response sealing", () => {
     expect(utf8(opened?.body ?? new Uint8Array())).toBe("not found");
   });
 
+  it("asks next for an uncompressed response, whatever the browser accepts", async () => {
+    const ctx = setup();
+    const { opened } = await roundTrip(
+      ctx,
+      ctx.client(),
+      { method: "GET", target: "/api/z", headers: [["accept-encoding", "gzip"]] },
+      "raw",
+      echo,
+      { "accept-encoding": "gzip, deflate, br, zstd" },
+    );
+    const sent = json(opened).headers.filter(([name]) => name === "accept-encoding");
+    expect(sent).toEqual([["accept-encoding", "identity"]]);
+  });
+
+  it("seals the decoded body of a response next compressed anyway", async () => {
+    const payload = JSON.stringify({ items: Array.from({ length: 200 }, (_, i) => `item-${i}`) });
+    for (const [coding, compress] of [
+      ["gzip", (b: Buffer) => gzipSync(b)],
+      ["x-gzip", (b: Buffer) => gzipSync(b)],
+      ["deflate", (b: Buffer) => deflateSync(b)],
+      ["deflate, gzip", (b: Buffer) => gzipSync(deflateSync(b))],
+    ] as const) {
+      const ctx = setup();
+      const { opened } = await roundTrip(
+        ctx,
+        ctx.client(),
+        { method: "GET", target: "/api/z" },
+        "base64url",
+        () =>
+          new Response(new Uint8Array(compress(Buffer.from(payload))), {
+            headers: { "content-encoding": coding, "content-type": "application/json" },
+          }),
+      );
+      expect(opened?.status, coding).toBe(200);
+      expect(utf8(opened?.body ?? new Uint8Array()), coding).toBe(payload);
+      expect(opened?.headers, coding).toEqual([["content-type", "application/json"]]);
+    }
+  });
+
+  it("answers 502 for a compressed response it can't decode, and keeps a fetched body as is", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const payload = "x".repeat(2048);
+    for (const [coding, body] of [
+      ["br", new Uint8Array(brotliCompressSync(Buffer.from(payload)))],
+      ["zstd", new Uint8Array([0x28, 0xb5, 0x2f, 0xfd, 0, 0, 0, 0])],
+      ["gzip", new Uint8Array([0x1f, 0x8b, 8, 0, 1, 2, 3, 4, 5])],
+    ] as const) {
+      const ctx = setup();
+      const { opened } = await roundTrip(
+        ctx,
+        ctx.client(),
+        { method: "GET", target: "/api/z" },
+        "raw",
+        () => new Response(body, { headers: { "content-encoding": coding } }),
+      );
+      expect(opened?.status, coding).toBe(502);
+      expect(opened?.body.length, coding).toBe(0);
+      expect(ctx.infos[0].info.status, coding).toBe(502);
+    }
+    expect(error).toHaveBeenCalledTimes(3);
+    error.mockRestore();
+
+    const ctx = setup();
+    const fetched = new Response(payload, { headers: { "content-encoding": "br" } });
+    Object.defineProperty(fetched, "url", { value: "https://upstream.example/data" });
+    const { opened } = await roundTrip(
+      ctx,
+      ctx.client(),
+      { method: "GET", target: "/api/z" },
+      "raw",
+      () => fetched,
+    );
+    expect(opened?.status).toBe(200);
+    expect(utf8(opened?.body ?? new Uint8Array())).toBe(payload);
+  });
+
   it("drops framing headers from the inner response", async () => {
     const ctx = setup();
     const { opened } = await roundTrip(
@@ -580,6 +657,16 @@ describe("handle: cross-site requests", () => {
     const bare = post(TUNNEL, sealed.body);
     expect((await ctx.protection.handle(bare, echo)).status).toBe(REFUSAL_STATUS);
     expect(ctx.seen).toEqual([]);
+  });
+
+  it("accepts the page's own Origin from a browser without Fetch metadata", async () => {
+    const ctx = setup({ allowedOrigins: [] });
+    const sealed = ctx.client().sealRequest({ method: "GET", target: "/api/ok" }, "raw");
+    const request = tunnelRequest(sealed, { origin: ORIGIN });
+    request.headers.delete("sec-fetch-site");
+    expect((await ctx.protection.handle(request, echo)).status).toBe(200);
+    expect(ctx.seen).toEqual([]);
+    expect(ctx.protection.counters.sealed).toBe(1);
   });
 
   it("accepts an Origin listed in allowedOrigins", async () => {
@@ -898,6 +985,51 @@ describe("handle: fresh sessions", () => {
     );
     expect((await ctx.protection.handle(plain, app)).status).toBe(201);
     expect(ctx.protection.counters).toMatchObject({ openFailures: 1, refusals: 1, plaintext: 2 });
+  });
+
+  it("never lets cross-site requests use up an address's sessions", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+    const ctx = setup({ freshSessionsPerMinute: 3, clientAddress: byTestAddress });
+    const victim = { "cf-connecting-ip": "198.51.100.77" };
+    const app = () => new Response("app saw it");
+    for (let i = 0; i < 10; i++) {
+      for (const encoding of ["base64", "raw"] as const) {
+        const lookalike = post(TUNNEL, encodeOuter(nacl.randomBytes(80), encoding), {
+          ...victim,
+          "sec-fetch-site": "cross-site",
+          "sec-fetch-mode": "no-cors",
+          origin: "https://evil.example",
+          "content-type": "text/plain",
+        });
+        await ctx.protection.handle(lookalike, app);
+      }
+      const sealed = ctx.client().sealRequest({ method: "POST", target: "/api/pay" }, "raw");
+      const forged = tunnelRequest(sealed, {
+        ...victim,
+        "sec-fetch-site": "cross-site",
+        origin: "https://evil.example",
+      });
+      expect((await ctx.protection.handle(forged, echo)).status).toBe(REFUSAL_STATUS);
+    }
+    const statuses: number[] = [];
+    for (let i = 0; i < 4; i++) {
+      const { outer } = await roundTrip(
+        ctx,
+        ctx.client(),
+        { method: "GET", target: "/api/s" },
+        "raw",
+        echo,
+        victim,
+      );
+      statuses.push(outer.status);
+    }
+    expect(statuses).toEqual([200, 200, 200, REFUSAL_STATUS]);
+    expect(ctx.seen.map((request) => new URL(request.url).pathname)).toEqual([
+      "/api/s",
+      "/api/s",
+      "/api/s",
+    ]);
   });
 
   it("takes the client address from clientAddress when given", async () => {

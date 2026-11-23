@@ -265,6 +265,19 @@ describe("createSocketProtection: the Durable Object socket helper", () => {
     expect(first.socket.closed).toBeNull();
   });
 
+  it("closes a socket whose stored session it can't read", () => {
+    const { sockets, client } = setup();
+    for (const np1 of [
+      { state: { key: "short", frameType: "binary" }, deadline: 0 },
+      { state: { key: "A".repeat(43), frameType: "carrier" }, deadline: 0 },
+    ]) {
+      const socket = new FakeSocket();
+      socket.stored = JSON.stringify({ np1, app: null });
+      expect(sockets.receive(socket, client().socketFrame("x", "binary", false))).toBeNull();
+      expect(socket.closed).toBe(REFUSAL_CLOSE_CODE);
+    }
+  });
+
   it("closes a socket it never accepted", () => {
     const { sockets, client } = setup();
     const socket = new FakeSocket();
