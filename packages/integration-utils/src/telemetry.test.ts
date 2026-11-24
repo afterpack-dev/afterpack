@@ -197,7 +197,7 @@ describe("reporter", () => {
 
   it("says what it sends and how to turn it off", () => {
     const notice = TELEMETRY_NOTICE.join("\n");
-    expect(notice).toContain("AFTERPACK_telemetry_enabled=false");
+    expect(notice).toContain("AFTERPACK_TELEMETRY_ENABLED=false");
     expect(notice).toContain("--telemetry.enabled=false");
     expect(notice).toContain("telemetry: { enabled: false }");
     expect(notice).toContain("never sends your source");

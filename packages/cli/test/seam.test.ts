@@ -113,9 +113,9 @@ describe("afterpack.json + AFTERPACK_ + --flag, through processBatch to a real b
     expect(fromFile.code).toBe(64);
     expect(fromFile.errors.join("\n")).toContain("expected one of: minify, light, medium");
 
-    const fromEnv = await build(null, { AFTERPACK_PRESET: "hard" }, []);
+    const fromEnv = await build(null, { AFTERPACK_STRINGS_MIN_LENGHT: "4" }, []);
     expect(fromEnv.code).toBe(64);
-    expect(fromEnv.errors.join("\n")).toContain("write `AFTERPACK_preset`");
+    expect(fromEnv.errors.join("\n")).toContain("did you mean `AFTERPACK_STRINGS_MIN_LENGTH`?");
 
     const fromFlag = await build(null, {}, ["--strings=on"]);
     expect(fromFlag.code).toBe(64);

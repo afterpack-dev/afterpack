@@ -155,16 +155,18 @@ are tool directives such as `biome-ignore`.
 **Configuration naming.** One registry (`packages/integration-utils/src/registry.ts`) defines every
 user-facing key, and everything else is derived from it: the TypeScript options type, the runtime
 validator, the CLI help, and the subset forwarded to the engine. Keys are dot-delimited camelCase
-and are spelled **identically** on all four surfaces:
+and are spelled **identically** on every surface except the environment, which writes the same
+path in SCREAMING_SNAKE_CASE:
 
 | Surface | Form |
 | --- | --- |
 | `afterpack.json` | nested: `{ "protectionMap": { "enabled": false } }` |
 | command line | `--protectionMap.enabled=false` |
-| environment | `AFTERPACK_protectionMap_enabled=false` |
+| environment | `AFTERPACK_PROTECTION_MAP_ENABLED=false` |
 | plugin options | `{ protectionMap: { enabled: false } }` |
 
 There are no short flags, no `--no-` forms and no space-separated values. A boolean key written
 alone means `true`. An unknown key, a kebab-cased key or a malformed value **fails** the run naming
 the canonical spelling — it is never silently ignored. Adding a key means adding it to the registry;
-every surface then accepts it without further work.
+every surface then accepts it without further work. Its environment variable must fit in 42
+characters, or 54 for a `transforms.*` key; a unit test holds every key to that.

@@ -417,7 +417,7 @@ describe("two builds into one output dir", () => {
     expect(listed(dir).map((f) => f.path)).toEqual(["b.js"]);
     expect(verifyProtectionReceipt(protectionReceiptPath(dir), dir).problems).toEqual([
       "receipt lists 1 file(s) but the engine changed NONE of them — " +
-        "this build shipped its source (check `paths.exclude` and AFTERPACK_paths_exclude)",
+        "this build shipped its source (check `paths.exclude` and AFTERPACK_PATHS_EXCLUDE)",
     ]);
   });
 

@@ -282,7 +282,7 @@ export const TELEMETRY_NOTICE: readonly string[] = [
   "AfterPack:   days.",
   "AfterPack: It never sends your source, file names, paths, project name, diagnostic",
   "AfterPack:   message text, or exact byte counts. A clean build sends nothing.",
-  "AfterPack: Turn it off with AFTERPACK_telemetry_enabled=false, --telemetry.enabled=false, or",
+  "AfterPack: Turn it off with AFTERPACK_TELEMETRY_ENABLED=false, --telemetry.enabled=false, or",
   "AfterPack:   `telemetry: { enabled: false }` in your config.",
   "AfterPack: https://www.afterpack.dev/privacy",
 ];

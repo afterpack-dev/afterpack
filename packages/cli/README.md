@@ -136,7 +136,7 @@ path must move into the handler.
 Every option has one name, written the same way everywhere:
 
 - `--preset=hard` on the command line
-- `AFTERPACK_preset=hard` in the environment (dots become underscores)
+- `AFTERPACK_PRESET=hard` in the environment (`strings.minLength` is `AFTERPACK_STRINGS_MIN_LENGTH`)
 - `"preset": "hard"` in `afterpack.json`, the nearest one at or above the working directory
 
 A flag wins over the environment, which wins over the file. A boolean flag on its own means `true`.

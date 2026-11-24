@@ -269,7 +269,7 @@ export function reportDiagnostics(input: ReportDiagnosticsInput): DiagnosticsSum
       logger.warn(
         prefix(
           `${list[0].severity} ${code} · +${hidden} more occurrence(s) ` +
-            "(AFTERPACK_diagnostics_level=all to list them)",
+            "(AFTERPACK_DIAGNOSTICS_LEVEL=all to list them)",
         ),
       );
     }

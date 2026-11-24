@@ -1,12 +1,16 @@
 import {
   type AfterpackConfig,
+  CONFIG_BY_ENV_NAME,
   CONFIG_BY_PATH,
   type ConfigIssue,
   type ConfigKeyDef,
   canonicalSpelling,
   checkValue,
+  claimsEnvSuffix,
   DOCS_URL,
   EMPTY_CONFIG,
+  ENV_PREFIX,
+  envName,
   groupBooleanKey,
   mergeConfig,
   misdirectedHint,
@@ -14,8 +18,9 @@ import {
   suggestKey,
   unknownKeyMessage,
 } from "./registry.js";
+import { isOwnEnvExport, SEED_ENV_VAR } from "./seed.js";
 
-export const ENV_PREFIX = "AFTERPACK_";
+export { ENV_PREFIX };
 
 type ParseSurface = "cli" | "env" | "directive";
 
@@ -46,8 +51,12 @@ function parseListLiteral(
 
 function spellKey(path: string, surface: ParseSurface): string {
   if (surface === "cli") return `--${path}`;
-  if (surface === "env") return `${ENV_PREFIX}${path.replace(/\./g, "_")}`;
+  if (surface === "env") return envName(path);
   return path;
+}
+
+function writtenKey(key: string, surface: ParseSurface): string {
+  return surface === "env" ? `${ENV_PREFIX}${key.replace(/\./g, "_")}` : spellKey(key, surface);
 }
 
 function surfaceLabel(surface: ParseSurface): string {
@@ -111,7 +120,7 @@ function kebabIssue(key: string, surface: ParseSurface): ConfigIssue {
     : " — keys are dot-delimited camelCase";
   return {
     path: key,
-    message: `kebab-case is not a configuration key (\`${spellKey(key, surface)}\`)${canonical}`,
+    message: `kebab-case is not a configuration key (\`${writtenKey(key, surface)}\`)${canonical}`,
   };
 }
 
@@ -141,7 +150,8 @@ function parseAssignment(
   const path = grouped && boolish ? grouped.path : key;
   const def = CONFIG_BY_PATH.get(path);
   if (!def) {
-    return { issue: { path: key, message: unknownKeyMessage(key, surfaceLabel(surface)) } };
+    const spell = (p: string): string => (surface === "env" ? envName(p) : p);
+    return { issue: { path: key, message: unknownKeyMessage(key, surfaceLabel(surface), spell) } };
   }
   if (def.shape === "structured") return { issue: structuredIssue(def, surface) };
   if (raw === true) {
@@ -249,31 +259,29 @@ export function parseCliOptions(argv: string[]): CliParseResult {
   return { config: collect(assignments), positionals, help, version, issues };
 }
 
-export const LIVE_SCREAMING_ENV: ReadonlySet<string> = new Set(["SEED", "KEY"]);
-
-function screamingIssue(name: string, suffix: string): ConfigIssue {
-  const dotted = suffix.replace(/_/g, ".");
-  const envForm = (path: string): string => `${ENV_PREFIX}${path.replace(/\./g, "_")}`;
-  const spelling = canonicalSpelling(dotted);
+function unclaimedEnvIssue(name: string, suffix: string): ConfigIssue {
+  const spelling = canonicalSpelling(suffix);
+  const near = spelling ? undefined : suggestKey(suffix);
   let tail = `see ${DOCS_URL}`;
-  if (spelling && "key" in spelling) tail = `write \`${envForm(spelling.key)}\``;
-  else if (spelling && spelling.group.length === 1)
-    tail = `write \`${envForm(spelling.group[0])}\``;
-  else if (spelling) {
-    tail = `its keys are ${spelling.group.map((k) => `\`${envForm(k)}\``).join(", ")}`;
-  }
+  if (spelling && "key" in spelling) tail = `did you mean \`${envName(spelling.key)}\`?`;
+  else if (spelling && spelling.group.length === 1) {
+    tail = `did you mean \`${envName(spelling.group[0])}\`?`;
+  } else if (spelling) {
+    tail = `its keys are ${spelling.group.map((k) => `\`${envName(k)}\``).join(", ")}`;
+  } else if (near) tail = `did you mean \`${envName(near)}\`?`;
   return {
     path: suffix,
-    message:
-      `\`${name}\` is not a configuration variable — an AfterPack variable spells its key ` +
-      `exactly, dots as underscores and case preserved: ${tail}`,
+    message: `\`${name}\` is not a configuration variable — ${tail}`,
   };
 }
 
-function isReservedEnvSuffix(suffix: string): boolean {
-  if (/[a-z]/.test(suffix)) return false;
-  const dotted = suffix.replace(/_/g, ".");
-  return LIVE_SCREAMING_ENV.has(suffix) || canonicalSpelling(dotted) === undefined;
+function conflictIssue(path: string, first: string, second: string): ConfigIssue {
+  return {
+    path,
+    message:
+      `\`${first}\` and \`${second}\` both set \`${path}\`, to different values — ` +
+      `keep one: \`${envName(path)}\``,
+  };
 }
 
 export interface EnvParseResult {
@@ -284,20 +292,40 @@ export interface EnvParseResult {
 export function parseEnvOptions(env: Record<string, string | undefined>): EnvParseResult {
   const assignments: Assignment[] = [];
   const issues: ConfigIssue[] = [];
+  const setBy = new Map<string, { name: string; value: string }>();
 
   for (const name of Object.keys(env).sort()) {
     if (!name.startsWith(ENV_PREFIX)) continue;
     const suffix = name.slice(ENV_PREFIX.length);
-    if (suffix === "" || isReservedEnvSuffix(suffix)) continue;
     const raw = env[name];
-    if (raw === undefined) continue;
+    if (suffix === "" || raw === undefined) continue;
+    let key = suffix.replace(/_/g, ".");
     if (!/[a-z]/.test(suffix)) {
-      issues.push(screamingIssue(name, suffix));
+      if (raw === "") continue;
+      const path = CONFIG_BY_ENV_NAME.get(name);
+      if (path === undefined) {
+        if (claimsEnvSuffix(suffix) || canonicalSpelling(suffix) !== undefined) {
+          issues.push(unclaimedEnvIssue(name, suffix));
+        }
+        continue;
+      }
+      if (name === SEED_ENV_VAR && isOwnEnvExport(env, raw)) continue;
+      key = path;
+    }
+    const parsed = parseAssignment(key, raw, "env");
+    if ("issue" in parsed) {
+      issues.push(parsed.issue);
       continue;
     }
-    const parsed = parseAssignment(suffix.replace(/_/g, "."), raw, "env");
-    if ("issue" in parsed) issues.push(parsed.issue);
-    else assignments.push(parsed.assignment);
+    const { path, value } = parsed.assignment;
+    const prior = setBy.get(path);
+    const written = JSON.stringify(value);
+    if (prior && prior.value !== written) {
+      issues.push(conflictIssue(path, prior.name, name));
+      continue;
+    }
+    setBy.set(path, { name, value: written });
+    assignments.push(parsed.assignment);
   }
 
   return { config: collect(assignments), issues };

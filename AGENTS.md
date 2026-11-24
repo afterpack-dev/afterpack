@@ -85,8 +85,10 @@ process (seed sessions, Electron notices) lives on `globalThis` under a `Symbol.
 two copies share it.
 
 **Configuration naming.** One dot-delimited camelCase name per option. Every option is spelled
-identically as an `afterpack.json` field, a `--flag`, an `AFTERPACK_env` variable, and a plugin
-option. An unknown key fails the run naming the canonical spelling — it is never silently ignored.
+identically as an `afterpack.json` field, a `--flag` and a plugin option; its environment variable
+is the same path in SCREAMING_SNAKE_CASE (`strings.minLength` is `AFTERPACK_STRINGS_MIN_LENGTH`,
+`envName` in the registry), and the case-kept `AFTERPACK_strings_minLength` is also read. An
+unknown key fails the run naming the canonical spelling — it is never silently ignored.
 
 **No explanatory comments.** Code says what it does; tests say what it must do. The only comments
 are tool directives such as `biome-ignore`.

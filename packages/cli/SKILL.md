@@ -103,8 +103,8 @@ The backup and the Protection Map contain the original source. `.afterpack/` car
 Every option has one dot-delimited camelCase name, used the same way in every place:
 
 1. `--key=value` on the command line
-2. `AFTERPACK_<key with dots as underscores>` in the environment, for example
-   `AFTERPACK_diagnostics_format=json`
+2. `AFTERPACK_<KEY>` in the environment, the key in SCREAMING_SNAKE_CASE, for example
+   `AFTERPACK_DIAGNOSTICS_FORMAT=json` for `diagnostics.format`
 3. `afterpack.json`, the nearest one at or above the working directory
 
 Higher in the list wins. A boolean flag on its own means `true`; `=false` turns it off. There is

@@ -19,7 +19,7 @@ options.
 
 [Presets](https://www.afterpack.dev/docs/config#preset) go from `minify` through `light`, `medium`
 and `hard` to `extreme`. Every option has one name everywhere: `--preset=hard` on the command line,
-`AFTERPACK_preset=hard` in the environment, `"preset": "hard"` in `afterpack.json`, and `preset` in
+`AFTERPACK_PRESET=hard` in the environment, `"preset": "hard"` in `afterpack.json`, and `preset` in
 a plugin's options. The [configuration reference](https://www.afterpack.dev/docs/config) lists
 every option.
 

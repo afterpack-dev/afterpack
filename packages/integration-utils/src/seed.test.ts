@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { parseEnvOptions } from "./config-parse.js";
 import {
   parseSeedValue,
   randomSeed,
@@ -41,6 +42,13 @@ describe("resolveBuildSeed — the cross-bundle build-seed contract", () => {
     const env = ENV();
     resolveBuildSeed(undefined, { root: "/app", leg: "main" }, { randomSeed: () => 4242, env });
     expect(env[SEED_ENV_VAR]).toBe("4242");
+  });
+
+  it("keeps its own published seed out of the next configuration read in this process", () => {
+    const env = ENV();
+    resolveBuildSeed(undefined, { root: "/app", leg: "main" }, { randomSeed: () => 4242, env });
+    expect(parseEnvOptions(env)).toEqual({ config: {}, issues: [] });
+    expect(parseEnvOptions({ ...env }).config).toEqual({ seed: 4242 });
   });
 
   it("an ancestor-set env var wins over the session and is coerced like --seed", () => {

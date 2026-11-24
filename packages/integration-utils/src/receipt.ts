@@ -343,7 +343,7 @@ export function verifyProtectionReceipt(
   if (parsed.files.length > 0 && transformed === 0) {
     problems.push(
       `receipt lists ${parsed.files.length} file(s) but the engine changed NONE of them — ` +
-        "this build shipped its source (check `paths.exclude` and AFTERPACK_paths_exclude)",
+        "this build shipped its source (check `paths.exclude` and AFTERPACK_PATHS_EXCLUDE)",
     );
   }
   for (const entry of parsed.files) {

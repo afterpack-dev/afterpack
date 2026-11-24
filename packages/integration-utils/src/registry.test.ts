@@ -3,18 +3,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { loadConfigFile } from "./config-file.js";
-import {
-  ENV_PREFIX,
-  LIVE_SCREAMING_ENV,
-  parseCliOptions,
-  parseEnvOptions,
-} from "./config-parse.js";
+import { ENV_PREFIX, parseCliOptions, parseEnvOptions } from "./config-parse.js";
 import { configSample, nest } from "./config-probe.js";
 import { resolvePluginConfig } from "./plugin-config.js";
 import {
   type AfterpackConfig,
   CONFIG_KEYS,
+  CONFIG_PREFIXES,
   DIRECTIVES_ENABLED_DEFAULT,
+  envName,
   getPath,
   sourceTypeForOutputFormat,
   toEngineConfig,
@@ -24,9 +21,13 @@ import {
 const writable = CONFIG_KEYS.filter((k) => k.shape !== "structured");
 const structured = CONFIG_KEYS.filter((k) => k.shape === "structured");
 
-function envName(path: string): string {
+function caseKeptName(path: string): string {
   return `${ENV_PREFIX}${path.replace(/\./g, "_")}`;
 }
+
+const ENV_NAME_LIMIT = 42;
+
+const ENV_NAME_LIMIT_BY_GROUP: Record<string, number> = { transforms: 54 };
 
 function tempProject(files: Record<string, string> = {}): string {
   const dir = mkdtempSync(join(tmpdir(), "afterpack-registry-"));
@@ -64,9 +65,11 @@ describe("every scalar and list key, through each place", () => {
     expect(cli.issues).toEqual([]);
     expect(getPath(cli.config, path)).toEqual(chosen.value);
 
-    const env = parseEnvOptions({ [envName(path)]: chosen.flat as string });
-    expect(env.issues).toEqual([]);
-    expect(getPath(env.config, path)).toEqual(chosen.value);
+    for (const name of new Set([envName(path), caseKeptName(path)])) {
+      const env = parseEnvOptions({ [name]: chosen.flat as string });
+      expect(env.issues, name).toEqual([]);
+      expect(getPath(env.config, path), name).toEqual(chosen.value);
+    }
 
     const nested = nest(path, chosen.value);
     const dir = tempProject({ "afterpack.json": JSON.stringify(nested) });
@@ -83,10 +86,12 @@ describe("a structured key never rides a flag or a variable", () => {
     expect(cli.issues[0].message).toContain("afterpack.json");
     expect(cli.issues[0].message).toContain(key.configFileForm ?? "");
 
-    const env = parseEnvOptions({ [envName(path)]: "x" });
-    expect(env.issues).toHaveLength(1);
-    expect(env.issues[0].message).toContain("afterpack.json");
-    expect(env.issues[0].message).toContain(key.configFileForm ?? "");
+    for (const name of new Set([envName(path), caseKeptName(path)])) {
+      const env = parseEnvOptions({ [name]: "x" });
+      expect(env.issues, name).toHaveLength(1);
+      expect(env.issues[0].message).toContain("afterpack.json");
+      expect(env.issues[0].message).toContain(key.configFileForm ?? "");
+    }
   });
 
   it("accepts the structured value in afterpack.json", () => {
@@ -305,7 +310,7 @@ describe("parse errors", () => {
       "write `--preset=hard`",
     );
     expect(parseEnvOptions({ AFTERPACK_complexity: "hard" }).issues[0].message).toContain(
-      "write `AFTERPACK_preset=hard`",
+      "write `AFTERPACK_PRESET=hard`",
     );
     expect(validateConfig({ complexity: "hard" }, "afterpack.json").issues[0].message).toContain(
       'write `"preset": "hard"`',
@@ -354,10 +359,76 @@ describe("parse errors", () => {
 });
 
 describe("the environment mapper", () => {
-  it("maps underscores to dots and preserves case", () => {
+  it("spells every key in SCREAMING_SNAKE_CASE, humps and dots as underscores", () => {
+    expect(envName("strings.minLength")).toBe("AFTERPACK_STRINGS_MIN_LENGTH");
+    expect(envName("sourceMap.emitUrl")).toBe("AFTERPACK_SOURCE_MAP_EMIT_URL");
+    expect(envName("build.autorun")).toBe("AFTERPACK_BUILD_AUTORUN");
+    expect(envName("key")).toBe("AFTERPACK_KEY");
+    expect(envName("transforms.controlFlowFlatten.enabled")).toBe(
+      "AFTERPACK_TRANSFORMS_CONTROL_FLOW_FLATTEN_ENABLED",
+    );
+  });
+
+  it("gives no two keys or groups the same SCREAMING name", () => {
+    const names = new Map<string, string>();
+    for (const path of [...CONFIG_KEYS.map((k) => k.path), ...CONFIG_PREFIXES]) {
+      const name = envName(path);
+      expect(names.get(name), `${path} and ${names.get(name)} share ${name}`).toBeUndefined();
+      names.set(name, path);
+    }
+  });
+
+  it("keeps every SCREAMING name within 42 characters, 54 for a transforms key", () => {
+    const over = CONFIG_KEYS.filter(
+      (k) =>
+        envName(k.path).length > (ENV_NAME_LIMIT_BY_GROUP[k.path.split(".")[0]] ?? ENV_NAME_LIMIT),
+    ).map((k) => envName(k.path));
+    expect(over, "choose a shorter key path").toEqual([]);
+  });
+
+  it("decodes every SCREAMING name back to its key", () => {
+    for (const key of writable) {
+      const chosen = configSample(key);
+      if (!chosen) continue;
+      const env = parseEnvOptions({ [envName(key.path)]: chosen.flat as string });
+      expect(env.issues, envName(key.path)).toEqual([]);
+      expect(getPath(env.config, key.path)).toEqual(chosen.value);
+    }
+  });
+
+  it("still takes the case-kept spelling", () => {
     const env = parseEnvOptions({ AFTERPACK_strings_minLength: "12" });
     expect(env.issues).toEqual([]);
     expect(getPath(env.config, "strings.minLength")).toBe(12);
+  });
+
+  it("takes both spellings of one key when they agree", () => {
+    const env = parseEnvOptions({
+      AFTERPACK_STRINGS_MIN_LENGTH: "12",
+      AFTERPACK_strings_minLength: "12",
+    });
+    expect(env.issues).toEqual([]);
+    expect(getPath(env.config, "strings.minLength")).toBe(12);
+  });
+
+  it("refuses both spellings of one key set to different values, naming both", () => {
+    const issues = parseEnvOptions({
+      AFTERPACK_STRINGS_MIN_LENGTH: "12",
+      AFTERPACK_strings_minLength: "8",
+    }).issues;
+    expect(issues).toHaveLength(1);
+    expect(issues[0].message).toContain("`AFTERPACK_STRINGS_MIN_LENGTH`");
+    expect(issues[0].message).toContain("`AFTERPACK_strings_minLength`");
+    expect(issues[0].message).toContain("`strings.minLength`");
+  });
+
+  it("never echoes the values of a conflict, so a key stays out of the log", () => {
+    const issues = parseEnvOptions({
+      AFTERPACK_KEY: "ap_live_a",
+      AFTERPACK_key: "ap_live_b",
+    }).issues;
+    expect(issues).toHaveLength(1);
+    expect(issues[0].message).not.toContain("ap_live_");
   });
 
   it("leaves the non-configuration AFTERPACK_ variables alone", () => {
@@ -365,6 +436,8 @@ describe("the environment mapper", () => {
       AFTERPACK_NOT_A_KEY: "1",
       AFTERPACK_ALSO_NOT_A_KEY: "1",
       AFTERPACK_API_URL: "http://localhost",
+      AFTERPACK_CLOUD_API: "1",
+      AFTERPACK_DIR: ".afterpack",
       AFTERPACK_ROOT: "/tmp",
       AFTERPACK_STILL_NOT_A_KEY: "x",
       AFTERPACK_REALLY_NOT_A_KEY: "1",
@@ -374,53 +447,83 @@ describe("the environment mapper", () => {
     expect(env.config).toEqual({});
   });
 
-  it("keeps the SCREAMING twins that still have a live reader working and silent", () => {
-    expect([...LIVE_SCREAMING_ENV].sort()).toEqual(["KEY", "SEED"]);
+  it("reads AFTERPACK_SEED and AFTERPACK_KEY as seed and key", () => {
     const env = parseEnvOptions({ AFTERPACK_SEED: "9", AFTERPACK_KEY: "ap_live_x" });
     expect(env.issues).toEqual([]);
-    expect(env.config).toEqual({});
+    expect(env.config).toEqual({ seed: 9, key: "ap_live_x" });
   });
 
-  it("rejects a lower-case variable that names no key, pointing at the one it meant", () => {
+  it("accepts an all-caps variable that names a real key or group", () => {
+    expect(parseEnvOptions({ AFTERPACK_PRESET: "hard" })).toEqual({
+      config: { preset: "hard" },
+      issues: [],
+    });
+    expect(getPath(parseEnvOptions({ AFTERPACK_SOURCE_TYPE: "module" }).config, "sourceType")).toBe(
+      "module",
+    );
+    expect(
+      getPath(parseEnvOptions({ AFTERPACK_TELEMETRY: "false" }).config, "telemetry.enabled"),
+    ).toBe(false);
+  });
+
+  it("rejects a lower-case variable that names no key, pointing at the SCREAMING one it meant", () => {
     const issues = parseEnvOptions({ AFTERPACK_autorun: "0" }).issues;
     expect(issues).toHaveLength(1);
     expect(issues[0].message).toContain("unknown configuration key `autorun`");
-    expect(issues[0].message).toContain("did you mean `build.autorun`?");
+    expect(issues[0].message).toContain("did you mean `AFTERPACK_BUILD_AUTORUN`?");
   });
 
-  it("rejects an all-caps variable that names a real key, pointing at its lower-case twin", () => {
-    expect(parseEnvOptions({ AFTERPACK_PRESET: "hard" }).issues[0].message).toContain(
-      "write `AFTERPACK_preset`",
+  it("rejects an all-caps typo inside a key's group, suggesting the SCREAMING name", () => {
+    const typo = parseEnvOptions({ AFTERPACK_STRINGS_MIN_LENGHT: "4" });
+    expect(typo.config).toEqual({});
+    expect(typo.issues).toHaveLength(1);
+    expect(typo.issues[0].message).toContain(
+      "`AFTERPACK_STRINGS_MIN_LENGHT` is not a configuration variable",
     );
-    expect(parseEnvOptions({ AFTERPACK_TELEMETRY: "0" }).issues[0].message).toContain(
-      "write `AFTERPACK_telemetry_enabled`",
-    );
-    expect(parseEnvOptions({ AFTERPACK_COMPLEXITY: "40" }).issues[0].message).toContain(
-      "write `AFTERPACK_complexity`",
-    );
-    expect(parseEnvOptions({ AFTERPACK_SOURCE_TYPE: "module" }).issues[0].message).toContain(
-      "write `AFTERPACK_sourceType`",
-    );
-    expect(parseEnvOptions({ AFTERPACK_IDENTIFIERS: "x" }).issues[0].message).toContain(
-      "its keys are `AFTERPACK_identifiers_rename`",
-    );
-    expect(parseEnvOptions({ AFTERPACK_PRESET: "hard" }).config).toEqual({});
+    expect(typo.issues[0].message).toContain("did you mean `AFTERPACK_STRINGS_MIN_LENGTH`?");
+
+    const squashed = parseEnvOptions({ AFTERPACK_SOURCE_MAP_EMITURL: "true" }).issues;
+    expect(squashed[0].message).toContain("did you mean `AFTERPACK_SOURCE_MAP_EMIT_URL`?");
+
+    const unknown = parseEnvOptions({ AFTERPACK_BUILD_SOMETHING_ELSE_ENTIRELY: "1" }).issues;
+    expect(unknown).toHaveLength(1);
+    expect(unknown[0].message).toContain("not a configuration variable");
+  });
+
+  it("names a group's SCREAMING keys when it is given a non-boolean", () => {
+    const message = parseEnvOptions({ AFTERPACK_IDENTIFIERS: "x" }).issues[0].message;
+    expect(message).toContain("is a group of configuration keys");
+    expect(message).toContain("`AFTERPACK_IDENTIFIERS_RENAME`");
+  });
+
+  it("derives the claimed groups from the registry", () => {
+    for (const key of CONFIG_KEYS) {
+      const group = envName(key.path.split(".")[0]);
+      const issues = parseEnvOptions({ [`${group}_ZZ_NOT_A_KEY`]: "1" }).issues;
+      expect(issues, `${group}_ZZ_NOT_A_KEY was silently dropped`).toHaveLength(1);
+    }
+  });
+
+  it("is loud on an uppercased case-kept name, pointing at the SCREAMING one", () => {
+    for (const { path } of CONFIG_KEYS) {
+      const naive = `AFTERPACK_${path.replace(/\./g, "_").toUpperCase()}`;
+      if (naive === envName(path)) continue;
+      const issues = parseEnvOptions({ [naive]: "1" }).issues;
+      expect(issues, `${naive} was silently dropped`).toHaveLength(1);
+      expect(issues[0].message).toContain(`\`${envName(path)}\``);
+    }
+  });
+
+  it("treats an empty all-caps variable as unset", () => {
+    expect(parseEnvOptions({ AFTERPACK_SEED: "", AFTERPACK_KEY: "" })).toEqual({
+      config: {},
+      issues: [],
+    });
   });
 
   it("documents the directives.enabled default as a LITERAL that still matches the constant", () => {
     const key = CONFIG_KEYS.find((k) => k.path === "directives.enabled");
     expect(key?.default).toBe(String(DIRECTIVES_ENABLED_DEFAULT));
-  });
-
-  it("is loud on the SCREAMING twin of every registry key, never silent", () => {
-    for (const key of CONFIG_KEYS) {
-      const screaming = envName(key.path).toUpperCase();
-      if (LIVE_SCREAMING_ENV.has(screaming.slice(ENV_PREFIX.length))) continue;
-      const issues = parseEnvOptions({ [screaming]: "1" }).issues;
-      expect(issues, `${screaming} was silently dropped`).toHaveLength(1);
-      expect(issues[0].message).toContain("not a configuration variable");
-      expect(issues[0].message).toContain(envName(key.path));
-    }
   });
 });
 
@@ -553,8 +656,9 @@ describe("a boolean written on a group name", () => {
       expect(getPath(validateConfig(nest(group, false), "options").config, enabled)).toBe(false);
       expect(getPath(parseCliOptions([`--${group}=false`]).config, enabled)).toBe(false);
       expect(getPath(parseCliOptions([`--${group}`]).config, enabled)).toBe(true);
-      const variable = `${ENV_PREFIX}${group.replace(/\./g, "_")}`;
-      expect(getPath(parseEnvOptions({ [variable]: "false" }).config, enabled)).toBe(false);
+      for (const variable of [envName(group), caseKeptName(group)]) {
+        expect(getPath(parseEnvOptions({ [variable]: "false" }).config, enabled)).toBe(false);
+      }
     }
   });
 

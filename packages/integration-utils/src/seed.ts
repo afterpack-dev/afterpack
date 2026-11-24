@@ -83,7 +83,7 @@ export function resetBuildSessions(): void {
   ownEnvExports.length = 0;
 }
 
-function isOwnEnvExport(env: Record<string, string | undefined>, value: string): boolean {
+export function isOwnEnvExport(env: Record<string, string | undefined>, value: string): boolean {
   return ownEnvExports.some((e) => e.env === env && e.value === value);
 }
 

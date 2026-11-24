@@ -499,6 +499,34 @@ export const CONFIG_PREFIXES: ReadonlySet<string> = new Set(
   }),
 );
 
+export const ENV_PREFIX = "AFTERPACK_";
+
+function screamingSnake(path: string): string {
+  return path
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/\./g, "_")
+    .toUpperCase();
+}
+
+export function envName(path: string): string {
+  return `${ENV_PREFIX}${screamingSnake(path)}`;
+}
+
+export const CONFIG_BY_ENV_NAME: ReadonlyMap<string, string> = new Map(
+  [...CONFIG_KEYS.map((k) => k.path), ...CONFIG_PREFIXES].map((path) => [envName(path), path]),
+);
+
+const ENV_GROUPS: ReadonlySet<string> = new Set(
+  CONFIG_KEYS.map((k) => screamingSnake(k.path.split(".")[0])),
+);
+
+export function claimsEnvSuffix(suffix: string): boolean {
+  for (const group of ENV_GROUPS) {
+    if (suffix === group || suffix.startsWith(`${group}_`)) return true;
+  }
+  return false;
+}
+
 const CONFIG_CHILDREN: ReadonlyMap<string, readonly string[]> = new Map(
   [...CONFIG_PREFIXES].map((prefix) => [
     prefix,
@@ -588,18 +616,22 @@ export interface ConfigIssue {
 
 export const DOCS_URL = "https://www.afterpack.dev/docs/config";
 
-export function unknownKeyMessage(path: string, surface: string): string {
+export function unknownKeyMessage(
+  path: string,
+  surface: string,
+  spell: (path: string) => string = (p) => p,
+): string {
   const group = CHILDREN_BY_NORMALIZED.get(normalizeKey(path));
   if (group && group.length > 0) {
-    const list = group.map((child) => `\`${child}\``).join(", ");
+    const list = group.map((child) => `\`${spell(child)}\``).join(", ");
     const tail = group.length === 1 ? `did you mean ${list}?` : `its keys are ${list}`;
     const canonical = PREFIX_BY_NORMALIZED.get(normalizeKey(path));
     const enabled = canonical ? groupBooleanKey(canonical) : undefined;
-    const rule = enabled ? `; a boolean here means \`${enabled.path}\`` : "";
+    const rule = enabled ? `; a boolean here means \`${spell(enabled.path)}\`` : "";
     return `\`${path}\` is a group of configuration keys, not a key itself (${surface}) — ${tail}${rule}`;
   }
   const suggestion = suggestKey(path);
-  const tail = suggestion ? ` — did you mean \`${suggestion}\`?` : ` — see ${DOCS_URL}`;
+  const tail = suggestion ? ` — did you mean \`${spell(suggestion)}\`?` : ` — see ${DOCS_URL}`;
   return `unknown configuration key \`${path}\` (${surface})${tail}`;
 }
 

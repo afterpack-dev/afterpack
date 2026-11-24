@@ -191,11 +191,11 @@ it processes every emitted file in place. On a Next.js, Angular, Vite or
 webpack build it also renames each content-hashed file to match its
 obfuscated bytes, and rewrites every reference to it.
 
-Every option below is written the same way in all four places: as
-\`--key=value\` here, as AFTERPACK_<key with dots replaced by underscores> in
-the environment, nested in afterpack.json (the nearest one at or above the
-working directory), and — for the region-scoped keys — in an
-\`/* @afterpack key=value */\` source directive. A boolean key written alone
+Every option below has one name in all four places: \`--key=value\` here,
+AFTERPACK_<KEY> in the environment with the key in SCREAMING_SNAKE_CASE
+(strings.minLength is AFTERPACK_STRINGS_MIN_LENGTH), nested in afterpack.json
+(the nearest one at or above the working directory), and — for the
+region-scoped keys — in an \`/* @afterpack key=value */\` source directive. A boolean key written alone
 means true; \`=false\` switches it off. Most specific wins: a directive, then a
 flag, then the environment, then afterpack.json.
 

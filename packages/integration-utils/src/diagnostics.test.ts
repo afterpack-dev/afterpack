@@ -233,7 +233,7 @@ describe("reportDiagnostics", () => {
     expect(r.warnings).toHaveLength(6);
     expect(r.warnings[5]).toBe(
       "[afterpack] error DIAG_PARSE_ERROR · +4 more occurrence(s) " +
-        "(AFTERPACK_diagnostics_level=all to list them)",
+        "(AFTERPACK_DIAGNOSTICS_LEVEL=all to list them)",
     );
   });
 
