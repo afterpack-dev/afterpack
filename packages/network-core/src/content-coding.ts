@@ -1,9 +1,9 @@
-type Format = "gzip" | "deflate";
-
-const DECODABLE = new Map<string, Format>([
+const FORMATS = new Map<string, string>([
   ["gzip", "gzip"],
   ["x-gzip", "gzip"],
   ["deflate", "deflate"],
+  ["br", "brotli"],
+  ["zstd", "zstd"],
 ]);
 
 export function contentCodings(headers: Headers): string[] {
@@ -15,17 +15,25 @@ export function contentCodings(headers: Headers): string[] {
     .filter((coding) => coding !== "" && coding !== "identity");
 }
 
-function looksEncoded(format: Format, bytes: Uint8Array): boolean {
+function looksEncoded(format: string, bytes: Uint8Array): boolean {
+  if (format !== "gzip" && format !== "deflate") return true;
   if (bytes.length < 2) return false;
   if (format === "gzip") return bytes[0] === 0x1f && bytes[1] === 0x8b;
   return (bytes[0] & 0x0f) === 8 && bytes[0] >> 4 <= 7 && ((bytes[0] << 8) | bytes[1]) % 31 === 0;
 }
 
-async function decompress(bytes: Uint8Array, format: Format): Promise<Uint8Array> {
+function decompressor(format: string): DecompressionStream | null {
+  try {
+    return new DecompressionStream(format as CompressionFormat);
+  } catch {
+    return null;
+  }
+}
+
+async function decompress(bytes: Uint8Array, stream: DecompressionStream): Promise<Uint8Array> {
   const source = new Response(new Uint8Array(bytes)).body;
   if (source === null) return new Uint8Array(0);
-  const decoded = source.pipeThrough(new DecompressionStream(format));
-  return new Uint8Array(await new Response(decoded).arrayBuffer());
+  return new Uint8Array(await new Response(source.pipeThrough(stream)).arrayBuffer());
 }
 
 export async function decodeContent(
@@ -34,11 +42,12 @@ export async function decodeContent(
 ): Promise<Uint8Array | null> {
   let out = body;
   for (let i = codings.length - 1; i >= 0; i--) {
-    const format = DECODABLE.get(codings[i]);
-    if (format === undefined) return null;
+    const format = FORMATS.get(codings[i]) ?? codings[i];
+    const stream = decompressor(format);
+    if (stream === null) return null;
     if (!looksEncoded(format, out)) return out;
     try {
-      out = await decompress(out, format);
+      out = await decompress(out, stream);
     } catch {
       return null;
     }

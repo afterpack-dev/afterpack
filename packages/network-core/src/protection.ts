@@ -1,7 +1,7 @@
 import { decodeUtf8, fromBase64url, toBase64url, toBytes, toHex } from "./bytes.js";
 import { contentCodings, decodeContent } from "./content-coding.js";
 import { NONCE_BYTES, publicKeyOf, SESSION_KEY_BYTES } from "./crypto.js";
-import { responseHeaderPairs, setCookiesOf, unwrapHeaders } from "./headers.js";
+import { identityHeaderSet, responseHeaderPairs, setCookiesOf, unwrapHeaders } from "./headers.js";
 import { type PrivateKeysInput, parsePrivateKeys } from "./keys.js";
 import {
   type BodyEncoding,
@@ -51,12 +51,16 @@ export interface NetworkProtectionOptions {
   privateKeys: PrivateKeysInput;
   routes: Routes;
   allowedOrigins?: readonly string[];
+  identityHeaders?: readonly string[];
+  responseBodies?: ResponseBodies;
   requireSealed?: boolean;
   freshSessionsPerMinute?: number;
   maxSealedBodyBytes?: number;
   clientAddress?: (request: Request) => string | null | undefined;
   onRequest?: (request: Request, info: RequestInfo) => void;
 }
+
+export type ResponseBodies = "encoded" | "decoded";
 
 export interface Counters {
   sealed: number;
@@ -87,6 +91,7 @@ export interface NetworkProtection {
   ): SocketOpened;
   sealSocket(state: SocketState, message: SocketData): string | Uint8Array;
   clientAddress(request: Request): string | null;
+  readonly responseBodies: ResponseBodies;
   readonly counters: Readonly<Counters>;
 }
 
@@ -151,6 +156,12 @@ function freshSessionLimiter(cap: number | undefined): (address: string, now: nu
     entry.count += 1;
     return true;
   };
+}
+
+function responseBodiesOf(value: unknown): ResponseBodies {
+  if (value === undefined || value === "encoded") return "encoded";
+  if (value === "decoded") return "decoded";
+  throw new TypeError('responseBodies is "encoded" or "decoded"');
 }
 
 function bodyLimit(value: number | undefined): number {
@@ -238,6 +249,8 @@ export function createNetworkProtection(options: NetworkProtectionOptions): Netw
   };
   const inRoutes = compileRoutes(options.routes);
   const allowedOrigins = new Set((options.allowedOrigins ?? []).map(normaliseOrigin));
+  const identityHeaders = identityHeaderSet(options.identityHeaders);
+  const responseBodies = responseBodiesOf(options.responseBodies);
   const requireSealed = options.requireSealed === true;
   const maxBody = bodyLimit(options.maxSealedBodyBytes);
   const takeFreshSession = freshSessionLimiter(options.freshSessionsPerMinute);
@@ -387,7 +400,7 @@ export function createNetworkProtection(options: NetworkProtectionOptions): Netw
     try {
       const init: RequestInit & { cf?: unknown } = {
         method: message.method,
-        headers: unwrapHeaders(request.headers, message.headers),
+        headers: unwrapHeaders(request.headers, message.headers, identityHeaders),
         body: message.body.length > 0 ? new Uint8Array(message.body) : null,
       };
       if (request.signal) init.signal = request.signal;
@@ -406,7 +419,8 @@ export function createNetworkProtection(options: NetworkProtectionOptions): Netw
       const response = await next(inner);
       if (response.status >= 200 && response.status <= 599) {
         const raw = new Uint8Array(await response.arrayBuffer());
-        const codings = response.url ? [] : contentCodings(response.headers);
+        const codings =
+          responseBodies === "decoded" || response.url ? [] : contentCodings(response.headers);
         const decoded = codings.length === 0 ? raw : await decodeContent(raw, codings);
         if (decoded === null) {
           console.error(
@@ -523,6 +537,7 @@ export function createNetworkProtection(options: NetworkProtectionOptions): Netw
     openSocket,
     sealSocket,
     clientAddress: addressOf,
+    responseBodies,
     get counters() {
       return { ...counters };
     },

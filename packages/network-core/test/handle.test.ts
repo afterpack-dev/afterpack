@@ -1,4 +1,5 @@
 import { generateKeyPairSync } from "node:crypto";
+import * as zlib from "node:zlib";
 import { brotliCompressSync, deflateSync, gzipSync } from "node:zlib";
 import nacl from "tweetnacl";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -25,6 +26,20 @@ import { decodeOuter, type Encoding, encodeOuter, Np1TestClient } from "./np1-cl
 const ENCODINGS: Encoding[] = ["raw", "base64", "base64url", "json"];
 const byTestAddress = (request: Request) => request.headers.get("cf-connecting-ip");
 const utf8 = (bytes: Uint8Array) => Buffer.from(bytes).toString("utf8");
+
+function supports(format: string): boolean {
+  try {
+    new DecompressionStream(format as CompressionFormat);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function zstdOf(text: string): Uint8Array | null {
+  const compress = (zlib as { zstdCompressSync?: (input: Buffer) => Buffer }).zstdCompressSync;
+  return compress === undefined ? null : new Uint8Array(compress(Buffer.from(text)));
+}
 
 function countedStream(bytes: Uint8Array, chunk: number) {
   const pulls = { bytes: 0 };
@@ -347,29 +362,74 @@ describe("handle: response sealing", () => {
     }
   });
 
-  it("answers 502 for a compressed response it can't decode, and keeps a fetched body as is", async () => {
+  it("decodes br and zstd through DecompressionStream where the runtime has the format", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    const payload = "x".repeat(2048);
-    for (const [coding, body] of [
-      ["br", new Uint8Array(brotliCompressSync(Buffer.from(payload)))],
-      ["zstd", new Uint8Array([0x28, 0xb5, 0x2f, 0xfd, 0, 0, 0, 0])],
-      ["gzip", new Uint8Array([0x1f, 0x8b, 8, 0, 1, 2, 3, 4, 5])],
-    ] as const) {
+    const payload = JSON.stringify({ items: Array.from({ length: 200 }, (_, i) => `item-${i}`) });
+    const brotli = new Uint8Array(brotliCompressSync(Buffer.from(payload)));
+    const zstd = zstdOf(payload);
+    const cases: [string, Uint8Array | null, string][] = [
+      ["br", brotli, "brotli"],
+      ["br, gzip", new Uint8Array(gzipSync(brotli)), "brotli"],
+      ["zstd", zstd, "zstd"],
+    ];
+    let failures = 0;
+    for (const [coding, body, format] of cases) {
+      if (body === null) continue;
       const ctx = setup();
       const { opened } = await roundTrip(
         ctx,
         ctx.client(),
         { method: "GET", target: "/api/z" },
         "raw",
-        () => new Response(body, { headers: { "content-encoding": coding } }),
+        () =>
+          new Response(new Uint8Array(body), {
+            headers: { "content-encoding": coding, "content-type": "application/json" },
+          }),
+      );
+      if (supports(format)) {
+        expect(opened?.status, coding).toBe(200);
+        expect(utf8(opened?.body ?? new Uint8Array()), coding).toBe(payload);
+        expect(opened?.headers, coding).toEqual([["content-type", "application/json"]]);
+      } else {
+        failures += 1;
+        expect(opened?.status, coding).toBe(502);
+      }
+    }
+    expect(error).toHaveBeenCalledTimes(failures);
+    error.mockRestore();
+  });
+
+  it("answers a sealed 502 for a coding the runtime can't decode or a body that fails to", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const payload = "x".repeat(2048);
+    const cases: [string, Uint8Array][] = [
+      ["compress", new Uint8Array(Buffer.from(payload))],
+      ["x-custom", new Uint8Array(Buffer.from(payload))],
+      ["gzip", new Uint8Array([0x1f, 0x8b, 8, 0, 1, 2, 3, 4, 5])],
+    ];
+    if (supports("brotli")) cases.push(["br", new Uint8Array([0xff, 0xff, 0xff, 0xff])]);
+    if (!supports("zstd")) cases.push(["zstd", new Uint8Array([0x28, 0xb5, 0x2f, 0xfd, 0, 0])]);
+    for (const [coding, body] of cases) {
+      const ctx = setup();
+      const { opened } = await roundTrip(
+        ctx,
+        ctx.client(),
+        { method: "GET", target: "/api/z" },
+        "raw",
+        () => new Response(new Uint8Array(body), { headers: { "content-encoding": coding } }),
       );
       expect(opened?.status, coding).toBe(502);
       expect(opened?.body.length, coding).toBe(0);
+      expect(opened?.headers, coding).toEqual([]);
       expect(ctx.infos[0].info.status, coding).toBe(502);
     }
-    expect(error).toHaveBeenCalledTimes(3);
+    expect(error).toHaveBeenCalledTimes(cases.length);
+    expect(String(error.mock.calls[0][0])).toContain('"compress"');
     error.mockRestore();
+  });
 
+  it("keeps a fetched body as is, whatever its Content-Encoding says", async () => {
+    const payload = "x".repeat(2048);
     const ctx = setup();
     const fetched = new Response(payload, { headers: { "content-encoding": "br" } });
     Object.defineProperty(fetched, "url", { value: "https://upstream.example/data" });
@@ -382,6 +442,54 @@ describe("handle: response sealing", () => {
     );
     expect(opened?.status).toBe(200);
     expect(utf8(opened?.body ?? new Uint8Array())).toBe(payload);
+  });
+
+  it('seals every body as read with responseBodies "decoded", for any coding', async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const payload = JSON.stringify({ items: Array.from({ length: 50 }, (_, i) => `item-${i}`) });
+    const gzipLookalike = new Uint8Array([0x1f, 0x8b, 8, 0, 1, 2, 3, 4, 5]);
+    const cases: [string, Uint8Array][] = [
+      ["br", new Uint8Array(Buffer.from(payload))],
+      ["zstd", new Uint8Array(Buffer.from(payload))],
+      ["gzip", new Uint8Array(Buffer.from(payload))],
+      ["deflate", new Uint8Array(Buffer.from(payload))],
+      ["compress", new Uint8Array(Buffer.from(payload))],
+      ["br, gzip", new Uint8Array(Buffer.from(payload))],
+      ["gzip", gzipLookalike],
+    ];
+    for (const [coding, body] of cases) {
+      const ctx = setup({ responseBodies: "decoded" });
+      expect(ctx.protection.responseBodies).toBe("decoded");
+      const { opened } = await roundTrip(
+        ctx,
+        ctx.client(),
+        { method: "GET", target: "/api/z" },
+        "raw",
+        () =>
+          new Response(new Uint8Array(body), {
+            headers: {
+              "content-encoding": coding,
+              "content-length": "17",
+              "content-type": "application/json",
+              "x-app": "1",
+            },
+          }),
+      );
+      expect(opened?.status, coding).toBe(200);
+      expect(opened?.body, coding).toEqual(body);
+      expect(opened?.headers, coding).toEqual([
+        ["content-type", "application/json"],
+        ["x-app", "1"],
+      ]);
+    }
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it("takes responseBodies as encoded by default and refuses any other value", () => {
+    expect(setup().protection.responseBodies).toBe("encoded");
+    expect(setup({ responseBodies: "encoded" }).protection.responseBodies).toBe("encoded");
+    expect(() => setup({ responseBodies: "auto" as never })).toThrow(TypeError);
   });
 
   it("drops framing headers from the inner response", async () => {
@@ -465,6 +573,68 @@ describe("handle: header rules", () => {
         /inner|evil|999|chunked|close|websocket/,
       );
     }
+  });
+
+  it("lets the outer request win for every client-address header, and for identityHeaders", async () => {
+    const addressHeaders = [
+      "forwarded",
+      "fastly-client-ip",
+      "x-client-ip",
+      "x-cluster-client-ip",
+      "client-ip",
+      "cf-connecting-ipv6",
+      "x-original-forwarded-for",
+      "true-client-ip",
+      "fly-client-ip",
+      "x-envoy-external-address",
+      "x-nf-client-connection-ip",
+      "x-vercel-forwarded-for",
+      "x-azure-clientip",
+      "x-azure-socketip",
+      "x-appengine-user-ip",
+    ];
+    const inner: [string, string][] = [
+      ...addressHeaders.map((name): [string, string] => [name, "6.6.6.6"]),
+      ["x-tenant-ip", "6.6.6.6"],
+      ["x-app", "inner"],
+    ];
+    const outer = Object.fromEntries(
+      ["fastly-client-ip", "forwarded", "x-tenant-ip"].map((name) => [name, "203.0.113.5"]),
+    );
+
+    const ctx = setup({ identityHeaders: ["X-Tenant-IP"] });
+    const { opened } = await roundTrip(
+      ctx,
+      ctx.client(),
+      { method: "POST", target: "/api/ip", headers: inner, body: "ip" },
+      "raw",
+      echo,
+      outer,
+    );
+    const headers = new Map(json(opened).headers);
+    for (const name of [...addressHeaders, "x-tenant-ip"]) {
+      expect(headers.get(name) ?? null, name).toBe(name in outer ? "203.0.113.5" : null);
+      expect(ctx.seen[0].headers.get(name) ?? "", name).not.toContain("6.6.6.6");
+    }
+    expect(headers.get("x-app")).toBe("inner");
+
+    const plain = setup();
+    const without = await roundTrip(
+      plain,
+      plain.client(),
+      { method: "POST", target: "/api/ip", headers: inner, body: "ip" },
+      "raw",
+      echo,
+      outer,
+    );
+    expect(new Map(json(without.opened).headers).get("x-tenant-ip")).toBe("6.6.6.6");
+  });
+
+  it("refuses identityHeaders that are not header names", () => {
+    expect(() => setup({ identityHeaders: ["x ip"] })).toThrow(TypeError);
+    expect(() => setup({ identityHeaders: [""] })).toThrow(TypeError);
+    expect(() => setup({ identityHeaders: [1 as never] })).toThrow(TypeError);
+    expect(() => setup({ identityHeaders: "x-ip" as never })).toThrow(TypeError);
   });
 
   it("drops inner method-override headers that name a method Fetch forbids", async () => {

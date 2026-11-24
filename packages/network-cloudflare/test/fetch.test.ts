@@ -1,4 +1,8 @@
-import { generateKeyPair, type RequestInfo } from "@afterpack/network-core";
+import {
+  createNetworkProtection as createCoreProtection,
+  generateKeyPair,
+  type RequestInfo,
+} from "@afterpack/network-core";
 import { Hono } from "hono";
 import { compress } from "hono/compress";
 import { describe, expect, it } from "vitest";
@@ -6,6 +10,7 @@ import { Np1TestClient } from "../../network-core/test/np1-client.js";
 import {
   cloudflareClientAddress,
   createNetworkProtection,
+  createSocketProtection,
   networkProtection,
   REFUSAL_STATUS,
   withNetworkProtection,
@@ -342,5 +347,91 @@ describe("withNetworkProtection: a plain Worker fetch handler", () => {
     });
     expect((await wrapped(new Request(`${ORIGIN}/api/x`), {}, {})).status).toBe(REFUSAL_STATUS);
     expect(await (await wrapped(new Request(`${ORIGIN}/page`), {}, {})).text()).toBe("plain");
+  });
+});
+
+describe("Content-Encoding on Workers, where every body reads decoded", () => {
+  const payload = JSON.stringify({ items: Array.from({ length: 300 }, (_, i) => `item ${i}`) });
+  const proxied = (coding: string) => {
+    const fetched = new Response(payload, {
+      headers: {
+        "content-encoding": coding,
+        "content-length": "123",
+        "content-type": "application/json",
+      },
+    });
+    return new Response(fetched.body, fetched);
+  };
+  const codings = ["br", "zstd", "gzip", "deflate", "br, gzip", "x-unknown"];
+
+  it("seals a proxied br body as read through the Hono middleware", async () => {
+    const { pair, client } = keys();
+    const hono = new Hono<{ Bindings: Env }>();
+    hono.use(
+      "/api/*",
+      networkProtection(hono, (env: Env) => ({
+        privateKeys: env.NETWORK_PRIVATE_KEYS,
+        routes: { include: ["/api/**"] },
+      })),
+    );
+    hono.get("/api/proxy/:coding", (c) => proxied(decodeURIComponent(c.req.param("coding"))));
+    const env = { NETWORK_PRIVATE_KEYS: pair.privateKey };
+    for (const coding of codings) {
+      const c = client();
+      const sealed = c.sealRequest(
+        { method: "GET", target: `/api/proxy/${encodeURIComponent(coding)}` },
+        "base64url",
+      );
+      const outer = await hono.fetch(tunnel(sealed.body, sealed.contentType), env);
+      expect(outer.status, coding).toBe(200);
+      expect(outer.headers.get("content-encoding"), coding).toBeNull();
+      const opened = c.openResponse(new Uint8Array(await outer.arrayBuffer()), "base64url");
+      expect(opened.status, coding).toBe(200);
+      expect(Buffer.from(opened.body).toString(), coding).toBe(payload);
+      const names = opened.headers.map(([name]) => name);
+      expect(names, coding).toContain("content-type");
+      expect(names, coding).not.toContain("content-encoding");
+      expect(names, coding).not.toContain("content-length");
+    }
+  });
+
+  it("seals a proxied br body as read through withNetworkProtection", async () => {
+    const { pair, client } = keys();
+    const wrapped = withNetworkProtection(
+      (request: Request) => proxied(new URL(request.url).searchParams.get("coding") ?? ""),
+      { privateKeys: pair.privateKey, routes: { include: ["/api/**"] } },
+    );
+    for (const coding of codings) {
+      const c = client();
+      const sealed = c.sealRequest(
+        { method: "GET", target: `/api/p?coding=${encodeURIComponent(coding)}` },
+        "raw",
+      );
+      const outer = await wrapped(tunnel(sealed.body, sealed.contentType), {}, {});
+      const opened = c.openResponse(new Uint8Array(await outer.arrayBuffer()), "raw");
+      expect(opened.status, coding).toBe(200);
+      expect(Buffer.from(opened.body).toString(), coding).toBe(payload);
+    }
+  });
+
+  it("builds every protection with decoded response bodies and refuses one that is not", async () => {
+    const { pair } = keys();
+    const options = { privateKeys: pair.privateKey, routes: { include: ["/api/**"] } };
+    expect(createNetworkProtection(options).responseBodies).toBe("decoded");
+    expect(createNetworkProtection({ ...options, responseBodies: "encoded" }).responseBodies).toBe(
+      "decoded",
+    );
+    expect(createSocketProtection(options).protection.responseBodies).toBe("decoded");
+    expect(() =>
+      withNetworkProtection(() => new Response("x"), createCoreProtection(options)),
+    ).toThrow(TypeError);
+    const fromEnv = withNetworkProtection(
+      () => new Response("x"),
+      () => createCoreProtection(options),
+    );
+    expect(() => fromEnv(new Request(`${ORIGIN}/api/x`), {}, {})).toThrow(TypeError);
+    const decoded = createCoreProtection({ ...options, responseBodies: "decoded" });
+    const kept = withNetworkProtection(() => new Response("x"), decoded);
+    expect(await (await kept(new Request(`${ORIGIN}/api/x`), {}, {})).text()).toBe("x");
   });
 });

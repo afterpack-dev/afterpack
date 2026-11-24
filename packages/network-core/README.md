@@ -13,7 +13,7 @@ authority; the tunnel is not authentication.
 
 The server side of [AfterPack](https://www.afterpack.dev) network protection: NP1, the protocol that
 seals an app's API and WebSocket traffic, on web-standard `Request` and `Response`. It runs on any
-fetch-style server (Deno, Bun, Node 18+, Cloudflare Workers). On Cloudflare, use
+fetch-style server (Deno, Bun, Node 20.19+, Cloudflare Workers). On Cloudflare, use
 [`@afterpack/network-cloudflare`](https://github.com/afterpack-dev/afterpack/tree/main/packages/network-cloudflare), which wraps it.
 
 ## Install
@@ -55,6 +55,8 @@ fresh-session limiter.
 | `privateKeys` | One or more X25519 private keys, base64url (32 bytes each) or `Uint8Array`. A string may hold several, separated by commas or whitespace. The server tries each one. |
 | `routes` | `{ include, exclude? }`: path globs (`*` within a segment, `**` across segments), the same as the build's `network.routes`. Percent-escapes of unreserved characters (`%70` for `p`) are decoded before matching. Requests outside them pass to `next` untouched. |
 | `allowedOrigins` | Origins, besides the page's own, whose tunnel requests are accepted (`Origin` header match). The page's own origin is recognised by `Sec-Fetch-Site: same-origin`, or by an `Origin` equal to the origin of the URL the server sees; list it too when a proxy in front rewrites that URL's scheme or host. Default none. |
+| `identityHeaders` | More header names where the outer request wins and an inner header of that name is dropped, on top of the built-in list under "Headers" below, such as the client-address header a proxy of yours sets. Case-insensitive. Default none. |
+| `responseBodies` | `"encoded"` (default): a `Response` the app built holds the bytes its `Content-Encoding` names, as on Node, Deno and Bun. `"decoded"`: the runtime hands every body over already decoded and treats `Content-Encoding` as an instruction to compress on output, as Cloudflare Workers does; the body is sealed as read, whatever the header says. `@afterpack/network-cloudflare` sets `"decoded"`. |
 | `requireSealed` | Refuse plaintext on the protected routes. Default `false`. |
 | `freshSessionsPerMinute` | Cap on new sessions (new client keys, each costing one X25519) per client address per minute, for tunnel requests and for sockets whose first frame comes with an address. Requests that are not same-origin count against a separate cap of the same size, so a cross-site page can't use up a visitor's sessions. Each cap tracks up to 10,000 addresses per isolate and forgets the oldest past that. Needs `clientAddress`. Default no cap. |
 | `maxSealedBodyBytes` | The largest tunnel body `handle` reads, in bytes. Default 1 MiB (`DEFAULT_MAX_SEALED_BODY_BYTES`). A `POST` whose `Content-Length` is larger, or whose body turns out larger, is never buffered: it goes to `next` untouched as plaintext, or gets the refusal status with `requireSealed`. Raise it if a protected route takes larger bodies; a sealed body is the app's body plus headers, padded up to the next 64 KiB step past 64 KiB, and a third larger in a text encoding. |
@@ -75,6 +77,7 @@ It returns:
   text.
 - `clientAddress(request)`: the address `freshSessionsPerMinute` counts `request` under, or `null`
   when the cap is off or the option gives none. Keep it with the socket for its first frame.
+- `responseBodies`: the `responseBodies` mode it was built with.
 - `counters`: `{ sealed, plaintext, openFailures, refusals }` since the protection was created.
 
 ### What `handle` does
@@ -87,9 +90,13 @@ It returns:
 - **Headers.** The app's inner headers plus the outer request's browser-set headers. The outer request
   wins for every header a page can't set, that carries identity, or that frames the request: the
   Fetch standard's forbidden request headers, `Cookie`, `Origin`, `Host`, `Referer`, `Sec-*`,
-  `Proxy-*`, `cf-*`, `X-Forwarded-*`, `X-Real-IP`, `True-Client-IP`, `Forwarded`, and `Connection`,
-  `Upgrade`, `Transfer-Encoding`, `Content-Length`, `TE`, `Trailer`, `Keep-Alive`, `Expect`. An inner
-  header with one of those names is dropped, and so is an inner `X-HTTP-Method`,
+  `Proxy-*`, `cf-*` (so `CF-Connecting-IP` and `CF-Connecting-IPv6`), `X-Forwarded-*`, `Forwarded`,
+  `X-Original-Forwarded-For`, the client-address headers `X-Real-IP`, `True-Client-IP`,
+  `X-Client-IP`, `Client-IP`, `X-Cluster-Client-IP`, `Fastly-Client-IP`, `Fly-Client-IP`,
+  `X-Envoy-External-Address`, `X-NF-Client-Connection-IP`, `X-Vercel-Forwarded-For`,
+  `X-Azure-ClientIP`, `X-Azure-SocketIP`, `X-AppEngine-User-IP`, the names in `identityHeaders`, and
+  `Connection`, `Upgrade`, `Transfer-Encoding`, `Content-Length`, `TE`, `Trailer`, `Keep-Alive`,
+  `Expect`. An inner header with one of those names is dropped, and so is an inner `X-HTTP-Method`,
   `X-HTTP-Method-Override` or `X-Method-Override` that names `CONNECT`, `TRACE` or `TRACK`, as Fetch
   forbids. The outer `Content-Type` describes the tunnel body and
   is never passed on; for every other name the inner value wins. The real request always carries
@@ -102,9 +109,12 @@ It returns:
   `Content-Type` and the sealed record in the request's encoding. The real status, headers and body
   travel inside; `Set-Cookie` values are read with `getSetCookie()` and appended to the outer response
   one by one, because a browser stores cookies only from it. An inner `3xx` is returned untouched.
-  The sealed body is always the decoded one, so `Content-Encoding` and the framing headers are not
-  sealed. A response the app built with a `gzip` or `deflate` body is decoded before sealing; a body
-  in another coding (`br`, `zstd`), or one that fails to decode, gets a sealed `502` and an error on
+  The sealed body is always the decoded one, so `Content-Encoding`, `Content-Length` and the other
+  framing headers are not sealed. With `responseBodies: "decoded"` every body is sealed as it reads.
+  By default, a response the app built with a `gzip` or `deflate` body is decoded before sealing (a
+  body that doesn't start like one is taken as already decoded), and any other coding the runtime's
+  `DecompressionStream` supports (`br` as `brotli`, `zstd`) is decoded through it. A coding the
+  runtime can't decode, or a body that fails to decode, gets a sealed `502` and an error on
   `console.error`. A response returned straight from `fetch` is already decoded, whatever its
   `Content-Encoding` says, and is sealed as it reads.
 - **Refusals** get status `400` and a plain `Bad Request` body: a cross-site tunnel request, a target

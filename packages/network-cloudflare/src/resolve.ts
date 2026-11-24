@@ -48,16 +48,28 @@ export function createNetworkProtection(options: NetworkProtectionOptions): Netw
   return createCoreProtection({
     ...options,
     clientAddress: options.clientAddress ?? cloudflareClientAddress,
+    responseBodies: "decoded",
   });
 }
 
 function build(value: NetworkProtection | NetworkProtectionOptions): NetworkProtection {
-  return isProtection(value) ? value : createNetworkProtection(value);
+  if (!isProtection(value)) return createNetworkProtection(value);
+  if (value.responseBodies !== "decoded") {
+    throw new TypeError(
+      'a protection for a Worker needs responseBodies: "decoded", because Workers decode every ' +
+        "response body: build it with createNetworkProtection from @afterpack/network-cloudflare",
+    );
+  }
+  return value;
 }
 
 export function protectionResolver<Env>(
   source: ProtectionSource<Env>,
 ): (env: Env) => NetworkProtection {
+  if (isProtection(source)) {
+    const built = build(source);
+    return () => built;
+  }
   if (typeof source !== "function") {
     let built: NetworkProtection | undefined;
     return () => {

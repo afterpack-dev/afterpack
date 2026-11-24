@@ -78,6 +78,14 @@ The options are those of `createNetworkProtection` in `@afterpack/network-core`,
 IPv6 client, which can rotate addresses within it. This package's own
 `createNetworkProtection` applies the same default.
 
+A Worker reads every response body decoded: `Content-Encoding` only tells the runtime to compress
+on the way out, so a proxied `new Response(upstream.body, upstream)` with `Content-Encoding: br`
+holds plain bytes. Every entry point here builds the protection with `responseBodies: "decoded"`,
+which seals the body as read and leaves `Content-Encoding` and `Content-Length` out of the sealed
+headers, and refuses with a `TypeError` a protection built by `@afterpack/network-core` without it.
+A body built with `encodeBody: "manual"` is sealed as the compressed bytes it holds, which the
+client can't read: on protected routes, let the runtime compress.
+
 ## Durable Object sockets
 
 ```js

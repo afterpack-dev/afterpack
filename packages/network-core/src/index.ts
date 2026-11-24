@@ -24,6 +24,7 @@ export {
   REFUSAL_STATUS,
   type RefusalReason,
   type RequestInfo,
+  type ResponseBodies,
   type SocketData,
   type SocketOpened,
   type SocketRefusal,
