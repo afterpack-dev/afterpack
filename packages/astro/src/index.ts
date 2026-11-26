@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import type { AfterpackPluginOptions } from "@afterpack/integration-utils";
+import type { AfterpackConfig, AfterpackPluginOptions } from "@afterpack/integration-utils";
 import { afterpackVite } from "@afterpack/vite";
 import {
   ASTRO_POST_BUILD_PLACEHOLDERS,
@@ -33,18 +33,9 @@ export interface AfterpackAstroIntegration {
   };
 }
 
-function serverOptionsOf(options: AfterpackAstroOptions): AfterpackAstroOptions {
-  return {
-    ...options,
-    strings: {
-      ...options.strings,
-      preserveLiterals: [
-        ...(options.strings?.preserveLiterals ?? []),
-        ...ASTRO_POST_BUILD_PLACEHOLDERS,
-      ],
-    },
-  };
-}
+const SERVER_LISTS: AfterpackConfig = {
+  strings: { preserveLiterals: [...ASTRO_POST_BUILD_PLACEHOLDERS] },
+};
 
 export function afterpackAstro(options: AfterpackAstroOptions = {}): AfterpackAstroIntegration {
   return {
@@ -57,7 +48,7 @@ export function afterpackAstro(options: AfterpackAstroOptions = {}): AfterpackAs
           applyToEnvironment: (environment: { name: string }) => environment.name === "client",
         };
         const serverPlugin = {
-          ...afterpackVite(serverOptionsOf(options)),
+          ...afterpackVite(options, { appendLists: SERVER_LISTS }),
           applyToEnvironment: (environment: { name: string }) =>
             SERVER_VITE_ENVIRONMENT_NAMES.includes(environment.name),
         };

@@ -6,7 +6,7 @@ import {
   CONFIG_KEYS,
   type ConfigKeyDef,
   getPath,
-  mergeConfig,
+  mergeLayers,
 } from "@afterpack/integration-utils";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { __reset, __setProcessResult, engineCalls, processBatch } from "../../../test/core-fake.js";
@@ -29,7 +29,7 @@ function everyKeyNested(keys: readonly ConfigKeyDef[]): AfterpackConfig {
   let out = {} as AfterpackConfig;
   for (const key of keys) {
     const sample = configSample(key);
-    if (sample) out = mergeConfig(out, nest(key.path, sample.value) as AfterpackConfig);
+    if (sample) out = mergeLayers([out, nest(key.path, sample.value) as AfterpackConfig]);
   }
   return out;
 }
@@ -261,7 +261,8 @@ const BUILD_PROBES: Record<string, () => Promise<void>> = {
     const env: Record<string, string | undefined> = { AFTERPACK_key: "ap_live_probe" };
     const ran = await runCli(root, ["dist", "--telemetry.enabled=false"], env);
     expect(ran.code).toBe(0);
-    expect(ran.env.AFTERPACK_KEY).toBe("ap_live_probe");
+    expect(engineCalls[0].config.key).toBe("ap_live_probe");
+    expect(ran.env.AFTERPACK_KEY).toBeUndefined();
   },
 };
 

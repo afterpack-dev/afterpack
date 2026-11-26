@@ -86,6 +86,8 @@ export function afterpackRollup(options: AfterpackRollupOptions = {}): Plugin {
       if (!outDir) return;
       const prepared = await prepareHashSalt({
         seed: settings.seed,
+        seedFallback: settings.seedFallback,
+        key: settings.key,
         root: process.cwd(),
         leg: outDir,
         localEngineVersion: await readEngineVersion({ version }),

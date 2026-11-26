@@ -32,7 +32,7 @@ const FORWARDS: Record<string, RegExp> = {
   "build.autorun": /build\?\.autorun/,
   "directives.enabled": /directivesEnabled:\s*[A-Za-z]|passSettings\(/,
   "diagnostics.level": /diagnostics\?\.level|passSettings\(/,
-  key: /resolvePluginConfig\(|applyResolvedKey\(/,
+  key: /passSettings\(|\bkey: [\w.]+\.key\b/,
 };
 
 function refuses(text: string, path: string): boolean {

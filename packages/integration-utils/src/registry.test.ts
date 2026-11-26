@@ -10,6 +10,7 @@ import {
   type AfterpackConfig,
   CONFIG_KEYS,
   CONFIG_PREFIXES,
+  CONFIG_RESET,
   DIRECTIVES_ENABLED_DEFAULT,
   envName,
   getPath,
@@ -514,11 +515,10 @@ describe("the environment mapper", () => {
     }
   });
 
-  it("treats an empty all-caps variable as unset", () => {
-    expect(parseEnvOptions({ AFTERPACK_SEED: "", AFTERPACK_KEY: "" })).toEqual({
-      config: {},
-      issues: [],
-    });
+  it("reads an empty all-caps key or seed as a reset, not as unset", () => {
+    const { config, issues } = parseEnvOptions({ AFTERPACK_SEED: "", AFTERPACK_KEY: " " });
+    expect(issues).toEqual([]);
+    expect(config).toEqual({ seed: CONFIG_RESET, key: CONFIG_RESET });
   });
 
   it("documents the directives.enabled default as a LITERAL that still matches the constant", () => {

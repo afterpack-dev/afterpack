@@ -2184,7 +2184,7 @@ describe("runObfuscationPass names the engine in its build log", () => {
 
     await runObfuscationPass({
       ...baseOptions([file], cloudBatchEngine("0.3.0")),
-      env: { AFTERPACK_KEY: "k" },
+      key: "k",
       client: client(`${MIN_CORE_VERSION}-rc.1`),
       cloudEngineExpectation: {
         engineVersion: "0.3.0",
@@ -2207,7 +2207,7 @@ describe("runObfuscationPass names the engine in its build log", () => {
 
     await runObfuscationPass({
       ...baseOptions([file], cloudBatchEngine("0.3.0")),
-      env: { AFTERPACK_KEY: "k" },
+      key: "k",
       logger: cap.logger,
     });
 
@@ -2236,7 +2236,7 @@ describe("runObfuscationPass names the engine in its build log", () => {
     const cloud = silentLogger();
     await runObfuscationPass({
       ...baseOptions([file], cloudBatchEngine("0.3.0")),
-      env: { AFTERPACK_KEY: "k" },
+      key: "k",
       cloudEngineExpectation: {
         engineVersion: "0.3.0",
         nonce: null,
@@ -2596,5 +2596,54 @@ describe("runObfuscationPass resolvedSeed", () => {
     });
     expect(calls[0].config.seed).toBe(99);
     expect(result.seedOrigin).toBe("fresh");
+  });
+});
+
+describe("runObfuscationPass — the one resolved key", () => {
+  async function sent(input: { key?: string | null; env?: Record<string, string | undefined> }) {
+    const file = join(outDir, "a.js");
+    writeFileSync(file, "export const a = 1;");
+    const { engine, calls } = makeEngine(() => ({}));
+    const cap = silentLogger();
+    await runObfuscationPass({
+      ...baseOptions([file], engine),
+      ...(input.env ? { env: input.env } : {}),
+      ...("key" in input ? { key: input.key } : {}),
+      logger: cap.logger,
+    });
+    return { config: calls[0].config as CoreConfig & { key?: unknown }, logs: cap.logs };
+  }
+
+  it("always sends `key`, as null when no key was resolved", async () => {
+    const { config } = await sent({});
+    expect(config).toHaveProperty("key", null);
+  });
+
+  it("sends the resolved key trimmed, and announces the cloud engine", async () => {
+    const { config, logs } = await sent({ key: "  ap_live_x  " });
+    expect(config.key).toBe("ap_live_x");
+    expect(logs.some((l) => l.includes("with the cloud engine"))).toBe(true);
+  });
+
+  it("sends a whitespace-only key as null and announces the local engine", async () => {
+    const { config, logs } = await sent({ key: "   " });
+    expect(config.key).toBeNull();
+    expect(logs.some((l) => l.includes("cloud engine"))).toBe(false);
+  });
+
+  it("ignores AFTERPACK_KEY in the environment it is handed — the caller resolved the key", async () => {
+    const env: Record<string, string | undefined> = { AFTERPACK_KEY: "ap_live_env" };
+    const { config, logs } = await sent({ key: null, env });
+    expect(config.key).toBeNull();
+    expect(logs.some((l) => l.includes("cloud engine"))).toBe(false);
+    expect(env.AFTERPACK_KEY).toBe("ap_live_env");
+  });
+
+  it("never writes the key into any environment", async () => {
+    const env: Record<string, string | undefined> = {};
+    const before = process.env.AFTERPACK_KEY;
+    await sent({ key: "ap_live_x", env });
+    expect(env.AFTERPACK_KEY).toBeUndefined();
+    expect(process.env.AFTERPACK_KEY).toBe(before);
   });
 });

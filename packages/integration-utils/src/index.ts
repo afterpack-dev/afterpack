@@ -126,7 +126,7 @@ export {
 export { type ArtifactMode, findUpward } from "./paths.js";
 export {
   type AfterpackPluginOptions,
-  applyResolvedKey,
+  type ConfigLayer,
   type NormalizedPluginOptions,
   normalizePluginOptions,
   type PassSettings,
@@ -134,6 +134,8 @@ export {
   passSettings,
   type ResolvedPluginConfig,
   resolvePluginConfig,
+  type SettledConfig,
+  settleConfigLayers,
 } from "./plugin-config.js";
 export {
   type AfterpackArtifactOptions,
@@ -179,7 +181,7 @@ export {
   type CoreConfigSubset,
   type GlobReserved,
   getPath,
-  mergeConfig,
+  mergeLayers,
   type PluginOptionsView,
   type SourceType,
   sourceTypeForOutputFormat,
@@ -191,8 +193,10 @@ export {
   validateConfig,
 } from "./registry.js";
 export {
+  isOwnEnvExport,
   type ResolvedBuildSeed,
   SEED_ENV_VAR,
+  type SeedFallback,
   type SeedOption,
   type SeedOrigin,
 } from "./seed.js";

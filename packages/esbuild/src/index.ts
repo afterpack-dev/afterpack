@@ -57,6 +57,8 @@ export function afterpackEsbuild(options: AfterpackEsbuildOptions = {}): Plugin 
       const initialCwd = initial.absWorkingDir ?? process.cwd();
       const hashSalt = await prepareHashSalt({
         seed: settings.seed,
+        seedFallback: settings.seedFallback,
+        key: settings.key,
         root: initialCwd,
         leg: outputBuildDir(initial, initialCwd),
         localEngineVersion: await readEngineVersion({ version }),

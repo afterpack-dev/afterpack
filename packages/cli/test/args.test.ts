@@ -1,11 +1,14 @@
-import { parseCliOptions, validateConfig } from "@afterpack/integration-utils";
+import { parseCliOptions, settleConfigLayers, validateConfig } from "@afterpack/integration-utils";
 import { describe, expect, it } from "vitest";
 import { expandShortFlags, HELP, HELP_ALL, renderFlag, toRunOptions, USAGE } from "../src/args.js";
 
 function runOptionsFor(argv: string[]) {
   const parsed = parseCliOptions(argv);
   expect(parsed.issues).toEqual([]);
-  return { options: toRunOptions(parsed.config), positionals: parsed.positionals };
+  const settled = settleConfigLayers([
+    { config: parsed.config, from: "the command line", seedOrigin: "option" },
+  ]);
+  return { options: toRunOptions(settled), positionals: parsed.positionals };
 }
 
 describe("toRunOptions", () => {
@@ -154,6 +157,20 @@ describe("help", () => {
     expect(HELP_ALL).toContain("--identifiers.reserved=<name[,...]>");
     expect(HELP_ALL).toContain("regions (afterpack.json only)");
     expect(HELP_ALL).toContain("default: light");
+  });
+
+  it("ranks only the layers the CLI has — no directive layer — and states the empty-value rule", () => {
+    expect(HELP_ALL).toContain(
+      "Most specific wins: a flag, then\nthe environment, then afterpack.json.",
+    );
+    expect(HELP_ALL).not.toContain("a directive, then a");
+    expect(HELP_ALL).toContain("An empty value resets `key`, `seed` or\na list");
+  });
+
+  it("resets a seed for --seed= and refuses an empty enum flag", () => {
+    expect(runOptionsFor(["--seed="]).options.seed).toBeUndefined();
+    const parsed = parseCliOptions(["--preset="]);
+    expect(parsed.issues[0].message).toContain("`preset` is empty in `--preset=`");
   });
 
   it("documents the bundled-build reasoning for paths.include in the full help", () => {

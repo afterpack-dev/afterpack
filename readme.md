@@ -20,7 +20,10 @@ options.
 [Presets](https://www.afterpack.dev/docs/config#preset) go from `minify` through `light`, `medium`
 and `hard` to `extreme`. Every option has one name everywhere: `--preset=hard` on the command line,
 `AFTERPACK_PRESET=hard` in the environment, `"preset": "hard"` in `afterpack.json`, and `preset` in
-a plugin's options. The [configuration reference](https://www.afterpack.dev/docs/config) lists
+a plugin's options. A flag or plugin option outranks the environment, which outranks
+`afterpack.json`. An empty value resets `key`, `seed` or a list to its default over the lower
+layers, so `AFTERPACK_KEY=` builds on Free even when `afterpack.json` holds a key; it is an error
+for any other option. The [configuration reference](https://www.afterpack.dev/docs/config) lists
 every option.
 
 Without a key, AfterPack runs locally with the full pipeline at any preset.

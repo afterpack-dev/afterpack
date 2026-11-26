@@ -1,7 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { PassSettings } from "./plugin-config.js";
 import { resolveReportPolicy } from "./policy.js";
-import { type ResolvedBuildSeed, resolveBuildSeed, type SeedOption } from "./seed.js";
+import { cloudKey } from "./registry.js";
+import {
+  type ResolvedBuildSeed,
+  resolveBuildSeed,
+  type SeedFallback,
+  type SeedOption,
+} from "./seed.js";
 import { DEFAULT_API_URL } from "./telemetry.js";
 
 const API_URL_ENV_VAR = "AFTERPACK_API_URL";
@@ -47,9 +53,8 @@ export function afterpackHashSalt(input: HashSaltInput): string {
   return createHash("sha256").update(payload).digest("hex").slice(0, 32);
 }
 
-export function isCloudBuild(env: Record<string, string | undefined>): boolean {
-  const key = env.AFTERPACK_KEY;
-  return typeof key === "string" && key.trim() !== "";
+export function isCloudBuild(key: string | null | undefined): boolean {
+  return cloudKey(key) !== null;
 }
 
 export function versionEndpoint(env: Record<string, string | undefined>): string {
@@ -63,11 +68,12 @@ export interface ResolveSaltEngineDeps {
 }
 
 export async function resolveSaltEngine(
+  key: string | null,
   env: Record<string, string | undefined>,
   localEngineVersion: string | null,
   deps: ResolveSaltEngineDeps = {},
 ): Promise<SaltEngine> {
-  if (!isCloudBuild(env)) {
+  if (!isCloudBuild(key)) {
     return {
       engineVersion: localEngineVersion,
       nonce: null,
@@ -119,6 +125,8 @@ export const PROBE_FAILED_WARNING =
 export function saltSettings(settings: PassSettings, extra: Record<string, unknown> = {}): unknown {
   const {
     seed: _seed,
+    seedFallback: _seedFallback,
+    key: _key,
     diagnostics: _diagnostics,
     artifactOptions,
     engineConfig,
@@ -151,6 +159,8 @@ export interface PreparedHashSalt {
 
 export interface PrepareHashSaltInput {
   seed: SeedOption;
+  seedFallback?: SeedFallback | null;
+  key: string | null;
   root: string;
   leg: string;
   localEngineVersion: string | null;
@@ -165,9 +175,9 @@ export async function prepareHashSalt(input: PrepareHashSaltInput): Promise<Prep
   const resolvedSeed = resolveBuildSeed(
     input.seed,
     { root: input.root, leg: input.leg },
-    { env, warn: input.warn },
+    { env, warn: input.warn, fallback: input.seedFallback },
   );
-  const engine = await resolveSaltEngine(env, input.localEngineVersion, {
+  const engine = await resolveSaltEngine(input.key, env, input.localEngineVersion, {
     fetchImpl: input.fetchImpl,
   });
   if (engine.probeFailed) input.warn?.(PROBE_FAILED_WARNING);

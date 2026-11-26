@@ -3,19 +3,16 @@ import type { Readable } from "node:stream";
 import { text } from "node:stream/consumers";
 import { processBatch, version } from "@afterpack/core";
 import {
-  applyResolvedKey,
   CONFIG_FILE_NAME,
   type CoreConfigSubset,
   createTelemetryReporter,
   extractSourceMappingURL,
-  mergeConfig,
   type PluginOptionsView,
   parseEnvOptions,
   resolveClientIdentity,
   runObfuscationPass,
+  settleConfigLayers,
   sourceTypeForOutputFormat,
-  toEngineConfig,
-  toPluginOptions,
   validateConfig,
 } from "@afterpack/integration-utils";
 import diagnosticExport from "@parcel/diagnostic";
@@ -79,8 +76,11 @@ export default new Optimizer<ParcelConfig, void>({
         },
       });
     }
-    const mergedWithEnvOutrankingFile = mergeConfig(fromFile.config, fromEnv.config);
-    const view = toPluginOptions(mergedWithEnvOutrankingFile);
+    const settled = settleConfigLayers([
+      { config: fromFile.config, from: source, seedOrigin: "option" },
+      { config: fromEnv.config, from: "the environment", seedOrigin: "env" },
+    ]);
+    const view = settled.options;
     if ((view.paths?.include ?? []).length > 0) {
       throw new ThrowableDiagnostic({
         diagnostic: {
@@ -93,8 +93,7 @@ export default new Optimizer<ParcelConfig, void>({
         },
       });
     }
-    applyResolvedKey(mergedWithEnvOutrankingFile);
-    return { options: view, engineConfig: toEngineConfig(mergedWithEnvOutrankingFile) };
+    return { options: view, engineConfig: settled.engineConfig };
   },
 
   async optimize({ bundle, contents, map, options, logger, config, getSourceMapReference }) {
@@ -158,6 +157,8 @@ export default new Optimizer<ParcelConfig, void>({
         log: (message) => logger.info({ message: escapeParcelMarkdown(message) }),
       },
       seed: config.options.seed,
+      seedFallback: config.options.seedFallback,
+      key: config.options.key,
       preset: config.options.preset,
       complexity: config.options.complexity,
       regions: config.options.regions,

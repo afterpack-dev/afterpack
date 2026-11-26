@@ -177,6 +177,8 @@ export class AfterpackWebpackPlugin {
       const prepare = async (): Promise<void> => {
         this.hashSalt = await prepareHashSalt({
           seed: this.settings.seed,
+          seedFallback: this.settings.seedFallback,
+          key: this.settings.key,
           root: context,
           leg: compiler.outputPath,
           localEngineVersion: await readEngineVersion({ version }),

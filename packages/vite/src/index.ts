@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { processBatch, version } from "@afterpack/core";
 import {
+  type AfterpackConfig,
   type AfterpackPluginOptions,
   applyBundleOutput,
   type CapturedDirective,
@@ -41,10 +42,18 @@ const PATHS_INCLUDE_UNSUPPORTED =
   "output-directory walk for a glob to re-admit anything into. Use `npx afterpack@latest <dir> " +
   "--paths.include=...` for a disk walk, or drop the key.";
 
-export function afterpackVite(options: AfterpackViteOptions = {}): Plugin {
+export interface AfterpackViteLayers {
+  appendLists?: AfterpackConfig;
+}
+
+export function afterpackVite(
+  options: AfterpackViteOptions = {},
+  layers: AfterpackViteLayers = {},
+): Plugin {
   const resolved = resolvePluginConfig({
     label: "afterpack-vite",
     options,
+    appendLists: layers.appendLists,
     localKeys: LOCAL_KEYS,
     unsupported: { "paths.include": PATHS_INCLUDE_UNSUPPORTED },
   });
@@ -131,6 +140,8 @@ export function afterpackVite(options: AfterpackViteOptions = {}): Plugin {
       if (!autorun || !building || !outDir) return;
       hashSalt = await prepareHashSalt({
         seed: settings.seed,
+        seedFallback: settings.seedFallback,
+        key: settings.key,
         root: options.projectRoot ?? root ?? outDir,
         leg: leg ?? outDir,
         localEngineVersion: await readEngineVersion({ version }),

@@ -7,7 +7,7 @@ import {
   getPath,
   type LoadedConfigFile,
   loadConfigFile,
-  mergeConfig,
+  mergeLayers,
   parseCliOptions,
   parseEnvOptions,
 } from "@afterpack/integration-utils";
@@ -59,7 +59,7 @@ export function resolveOutputMode(input: {
   }
   const env = parseEnvOptions(input.env);
   const cli = parseCliOptions([...input.argv]);
-  const config = mergeConfig(mergeConfig(file.config, env.config), cli.config);
+  const config = mergeLayers([file.config, env.config, cli.config]);
   return {
     mode: outputModeOf(config),
     issues: [

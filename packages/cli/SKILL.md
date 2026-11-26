@@ -213,7 +213,10 @@ self-integrity, which detects edits to its own check table only, not edits
 elsewhere in your code, and comparison hardening.
 
 - Set it as `AFTERPACK_KEY` in the environment (a CI secret), or [`key`][key] in an uncommitted
-  `afterpack.json`.
+  `afterpack.json`. The environment outranks the file; an empty or whitespace-only `AFTERPACK_KEY=`
+  means no key and builds locally even when `afterpack.json` holds one.
+- An empty value resets `key`, `seed` or a list to its default over every lower layer. For any
+  other option (`AFTERPACK_PRESET=`, `--complexity=`) it is an error, never a silent default.
 - Never put it in a plugin's options object. Plugins reject it there, because a bundler config is
   committed source.
 - Never commit it.

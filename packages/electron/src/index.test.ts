@@ -193,6 +193,36 @@ describe("multi-process advisory", () => {
     guard.closeBundle();
     expect(listeners).toHaveLength(0);
   });
+
+  it.each(["", "  "])("still advises when AFTERPACK_SEED is %j, which pins nothing", (value) => {
+    const saved = process.env.AFTERPACK_SEED;
+    process.env.AFTERPACK_SEED = value;
+    try {
+      const listeners = exitListeners();
+      const guard = guardOf(afterpackElectron({ leg: "main" }));
+      guard.configResolved(resolvedConfig());
+      guard.closeBundle();
+      expect(listeners).toHaveLength(1);
+    } finally {
+      if (saved === undefined) delete process.env.AFTERPACK_SEED;
+      else process.env.AFTERPACK_SEED = saved;
+    }
+  });
+
+  it("stays quiet when AFTERPACK_SEED pins a seed", () => {
+    const saved = process.env.AFTERPACK_SEED;
+    process.env.AFTERPACK_SEED = "123";
+    try {
+      const listeners = exitListeners();
+      const guard = guardOf(afterpackElectron({ leg: "main" }));
+      guard.configResolved(resolvedConfig());
+      guard.closeBundle();
+      expect(listeners).toHaveLength(0);
+    } finally {
+      if (saved === undefined) delete process.env.AFTERPACK_SEED;
+      else process.env.AFTERPACK_SEED = saved;
+    }
+  });
 });
 
 describe("afterpackElectron afterpack.json", () => {

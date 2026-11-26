@@ -152,7 +152,10 @@ An unknown or misspelled option fails the run and names the right spelling.
 | [`--build.backup`][build.backup] | back up originals to `.afterpack/backups/` | `true` |
 | [`--protectionMap.enabled`][protectionMap.enabled] | write the Protection Map | on when an input map exists, outside CI |
 
-Each flag is also a key in `afterpack.json` and an `AFTERPACK_*` variable. Every other option is in
+Each flag is also a key in `afterpack.json` and an `AFTERPACK_*` variable. A flag outranks the
+environment, which outranks `afterpack.json`. An empty value (`--seed=`, `AFTERPACK_KEY=`) resets
+`key`, `seed` or a list to its default over the lower layers, and is an error for any other
+option. Every other option is in
 the [configuration reference](https://www.afterpack.dev/docs/config). The
 [CLI reference](https://www.afterpack.dev/docs/cli) covers the commands.
 
@@ -187,7 +190,8 @@ support it too. Every document, failures included, starts with `"schemaVersion":
 
 Without a key, AfterPack runs on your machine with the full pipeline at any preset. Set
 [`AFTERPACK_KEY`][key] in your environment (or [`key`][key] in `afterpack.json`) and the same
-command builds in AfterPack's cloud instead, which adds two hardening transforms you can turn on:
+command builds in AfterPack's cloud instead (`AFTERPACK_KEY=`, empty, overrides a key in
+`afterpack.json` and builds locally), which adds two hardening transforms you can turn on:
 self-integrity, which detects edits to its own check table only, not edits
 elsewhere in your code, and comparison hardening. If the cloud cannot be reached, the run
 fails; it never falls back to a local build. Never commit the key. See [AfterPack

@@ -11,6 +11,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   type AfterpackConfig,
+  type CoreConfigSubset,
+  type PluginOptionsView,
   toEngineConfig,
   toPluginOptions,
   validateConfig,
@@ -519,6 +521,48 @@ describe("loadConfig", () => {
         options: { projectRoot: root, env: { AFTERPACK_preset: "nope" } },
       }),
     ).rejects.toThrow(/minify, light, medium, hard, extreme/);
+  });
+});
+
+describe("the key Parcel resolves once and sends the engine", () => {
+  async function loaded(contents: unknown, env: Record<string, string | undefined>) {
+    const config = { getConfigFrom: async () => ({ contents }) };
+    return (await handlers.loadConfig({ config, options: { projectRoot: root, env } })) as {
+      options: PluginOptionsView;
+      engineConfig: CoreConfigSubset;
+    };
+  }
+
+  it("resolves the afterpack.json key, and AFTERPACK_KEY= resets it to no key", async () => {
+    expect((await loaded({ key: "ap_live_file" }, {})).options.key).toBe("ap_live_file");
+    expect((await loaded({ key: "ap_live_file" }, { AFTERPACK_KEY: "" })).options.key).toBeNull();
+  });
+
+  it("an AFTERPACK_SEED= reset drops the afterpack.json seed", async () => {
+    const reset = await loaded({ seed: 7 }, { AFTERPACK_SEED: " " });
+    expect(reset.options.seed).toBeUndefined();
+    expect(reset.engineConfig.seed).toBeUndefined();
+  });
+
+  it("sends that key to the engine and leaves Parcel's env copy alone", async () => {
+    const env: Record<string, string | undefined> = {};
+    const config = await loaded({ key: "ap_live_file" }, env);
+    await handlers.optimize({
+      bundle: fakeBundle(),
+      contents: "export const a = 1;",
+      map: null,
+      config,
+      logger: { warn: () => {}, info: () => {} },
+      options: { projectRoot: root, mode: "production", env, inputFS: {} },
+      getSourceMapReference: async () => null,
+    });
+    expect(engineCalls[0].config.key).toBe("ap_live_file");
+    expect(env.AFTERPACK_KEY).toBeUndefined();
+  });
+
+  it("sends `key: null` when nothing resolved a key", async () => {
+    await run();
+    expect(engineCalls[0].config).toHaveProperty("key", null);
   });
 });
 

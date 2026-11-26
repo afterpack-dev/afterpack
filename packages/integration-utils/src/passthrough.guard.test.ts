@@ -25,10 +25,11 @@ describe("every accepted config key reaches something", () => {
 
     if (viaEnv) {
       expect(
-        env.AFTERPACK_KEY,
-        "`key` was accepted but never converged onto AFTERPACK_KEY — the engine " +
-          "reads only that variable, so this build runs FREE while the user paid",
+        resolved.options.key,
+        "`key` was accepted but never reached the resolved key the pass sends the engine, " +
+          "so this build runs FREE while the user paid",
       ).toBe("ap_live_probe");
+      expect(env).toEqual({ AFTERPACK_key: "ap_live_probe" });
       return;
     }
     const view = resolved.options as never as { artifactOptions?: unknown };
