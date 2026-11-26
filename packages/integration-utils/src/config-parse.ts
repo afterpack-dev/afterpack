@@ -23,7 +23,7 @@ import {
   suggestKey,
   unknownKeyMessage,
 } from "./registry.js";
-import { isOwnEnvExport, SEED_ENV_VAR } from "./seed.js";
+import { envSeedBeforeOwnExport, SEED_ENV_VAR } from "./seed.js";
 
 export { ENV_PREFIX };
 
@@ -334,7 +334,7 @@ export function parseEnvOptions(env: Record<string, string | undefined>): EnvPar
   for (const name of Object.keys(env).sort()) {
     if (!name.startsWith(ENV_PREFIX)) continue;
     const suffix = name.slice(ENV_PREFIX.length);
-    const raw = env[name];
+    let raw = env[name];
     if (suffix === "" || raw === undefined) continue;
     let key = suffix.replace(/_/g, ".");
     if (!/[a-z]/.test(suffix)) {
@@ -346,7 +346,13 @@ export function parseEnvOptions(env: Record<string, string | undefined>): EnvPar
         }
         continue;
       }
-      if (name === SEED_ENV_VAR && isOwnEnvExport(env, raw)) continue;
+      if (name === SEED_ENV_VAR) {
+        const own = envSeedBeforeOwnExport(env, raw);
+        if (own) {
+          if (own.prior === undefined) continue;
+          raw = own.prior;
+        }
+      }
       key = path;
     }
     const parsed = parseAssignment(key, raw, "env", name);

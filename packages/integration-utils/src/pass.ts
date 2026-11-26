@@ -15,12 +15,17 @@ import { collectSourceMaps, collectStylesheets } from "./collect.js";
 import {
   assertSupportedCore,
   type ClientIdentity,
+  CORE_PACKAGE,
   clientString,
+  coreHonoursNullKey,
   coreSupportsFileSourceType,
   coreSupportsSourceType,
   installedEngineVersion,
+  keySourceForOlderCore,
+  NULL_KEY_MIN_CORE_VERSION,
   safeVersionString,
   toCloudApiError,
+  updateCommand,
 } from "./compat.js";
 import {
   AlreadyObfuscatedError,
@@ -579,6 +584,19 @@ export async function runObfuscationPass(
 
   const localEngineVersion = await readEngineVersion(engine);
   const gateVersion = localEngineVersion ?? options.client?.coreVersion;
+  if (key === null && !coreHonoursNullKey(gateVersion)) {
+    const source = keySourceForOlderCore(env, process.cwd());
+    if (source) {
+      throw new Error(
+        prefix(
+          `no key is set for this build, but ${CORE_PACKAGE} ${gateVersion} reads the key itself ` +
+            `and would build in the cloud with the key from ${source}. ` +
+            `Update to ${CORE_PACKAGE} ${NULL_KEY_MIN_CORE_VERSION} or newer: ` +
+            updateCommand(options.client, NULL_KEY_MIN_CORE_VERSION),
+        ),
+      );
+    }
+  }
   const derivedSourceType =
     options.sourceType !== undefined && coreSupportsSourceType(gateVersion)
       ? options.sourceType

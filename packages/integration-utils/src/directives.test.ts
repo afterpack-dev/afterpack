@@ -248,6 +248,20 @@ describe("parseDirectivePayload — the documented dotted vocabulary", () => {
   it("requires a value on a non-bool key", () => {
     expect(parseDirectivePayload("complexity").error).toContain("=<value>");
   });
+
+  it("refuses an empty number instead of reading it as 0", () => {
+    for (const payload of ["complexity=", "complexity= ", "inflation.max="]) {
+      const parsed = parseDirectivePayload(payload);
+      expect(parsed.error).toContain("needs a non-negative number");
+      expect(parsed.delta).toEqual({});
+    }
+  });
+
+  it("refuses an empty number in a scanned file, with no region", () => {
+    const scan = scanDirectives("/* @afterpack complexity= */\nconst a = 1;");
+    expect(scan.regions.some((r) => r.complexity !== undefined)).toBe(false);
+    expect(scan.diagnostics.some((d) => d.message.includes("`complexity`"))).toBe(true);
+  });
 });
 
 describe("captureDirectiveRegions — the channel bridge", () => {

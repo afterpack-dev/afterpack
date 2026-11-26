@@ -127,6 +127,32 @@ describe("an empty `seed` resets to no pinned seed, over every lower layer", () 
     );
     expect(seed).toMatchObject({ seed: 99, origin: "fresh" });
   });
+
+  it("AFTERPACK_SEED= survives the fresh seed a first leg exports over it", () => {
+    writeConfigFile({ seed: 42 });
+    const env: Record<string, string | undefined> = { AFTERPACK_SEED: "" };
+    const first = resolvePluginConfig({ label: "afterpack-vite", cwd, env });
+    expect(first.options.seed).toBeUndefined();
+    const client = resolveBuildSeed(
+      first.options.seed,
+      { root: cwd, leg: "client" },
+      { env, fallback: first.options.seedFallback, randomSeed: () => 2138 },
+    );
+    expect(client).toMatchObject({ seed: 2138, origin: "fresh" });
+    expect(env.AFTERPACK_SEED).toBe("2138");
+
+    const second = resolvePluginConfig({ label: "afterpack-vite", cwd, env });
+    expect(second.options.seed).toBeUndefined();
+    const server = resolveBuildSeed(
+      second.options.seed,
+      { root: cwd, leg: "server" },
+      { env, fallback: second.options.seedFallback, randomSeed: () => 9 },
+    );
+    expect(server.seed).toBe(2138);
+
+    resetBuildSessions();
+    expect(env.AFTERPACK_SEED).toBe("");
+  });
 });
 
 describe("an empty list resets it to the empty list, over every lower layer", () => {

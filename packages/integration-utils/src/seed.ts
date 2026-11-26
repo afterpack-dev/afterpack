@@ -69,7 +69,7 @@ interface BuildSession {
 
 interface SeedState {
   sessions: Map<string, BuildSession>;
-  ownEnvExports: { env: Record<string, string | undefined>; value: string }[];
+  ownEnvExports: { env: Record<string, string | undefined>; value: string; prior?: string }[];
 }
 
 const SEED_STATE = Symbol.for("afterpack.integration-utils.seed-sessions");
@@ -85,13 +85,23 @@ const { sessions, ownEnvExports } = sharedSeedState();
 export function resetBuildSessions(): void {
   sessions.clear();
   for (const e of ownEnvExports) {
-    if (e.env[SEED_ENV_VAR] === e.value) delete e.env[SEED_ENV_VAR];
+    if (e.env[SEED_ENV_VAR] !== e.value) continue;
+    if (e.prior === undefined) delete e.env[SEED_ENV_VAR];
+    else e.env[SEED_ENV_VAR] = e.prior;
   }
   ownEnvExports.length = 0;
 }
 
 export function isOwnEnvExport(env: Record<string, string | undefined>, value: string): boolean {
   return ownEnvExports.some((e) => e.env === env && e.value === value);
+}
+
+export function envSeedBeforeOwnExport(
+  env: Record<string, string | undefined>,
+  value: string,
+): { prior: string | undefined } | null {
+  const own = ownEnvExports.find((e) => e.env === env && e.value === value);
+  return own ? { prior: own.prior } : null;
 }
 
 function openGeneration(root: string, leg: string): BuildSession {
@@ -171,10 +181,13 @@ export function resolveBuildSeed(
   if (origin === "env" || origin === "fresh") session.seed = seed;
   if (origin === "fresh" && (deps.exportToEnv ?? true)) {
     const value = String(seed);
-    env[SEED_ENV_VAR] = value;
     const stale = ownEnvExports.findIndex((e) => e.env === env);
+    const current = env[SEED_ENV_VAR];
+    const prior =
+      stale >= 0 && current === ownEnvExports[stale].value ? ownEnvExports[stale].prior : current;
+    env[SEED_ENV_VAR] = value;
     if (stale >= 0) ownEnvExports.splice(stale, 1);
-    ownEnvExports.push({ env, value });
+    ownEnvExports.push(prior === undefined ? { env, value } : { env, value, prior });
   }
 
   const prior = [...session.resolvedByLeg].find(([, s]) => s !== seed);

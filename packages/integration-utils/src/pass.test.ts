@@ -16,7 +16,12 @@ import { dirname, join } from "node:path";
 import type { ProtectionMap } from "@afterpack/protection-map";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { guardedEngine } from "../../../test/core-fake.js";
-import { isBelowVersion, MIN_CORE_VERSION, releaseTriple } from "./compat.js";
+import {
+  isBelowVersion,
+  MIN_CORE_VERSION,
+  NULL_KEY_MIN_CORE_VERSION,
+  releaseTriple,
+} from "./compat.js";
 import type { EngineDiagnostic } from "./diagnostics.js";
 import { DIAG_ALREADY_OBFUSCATED } from "./diagnostics.js";
 import type { EngineFileInput, EngineFileResult, ObfuscationEngine } from "./pass.js";
@@ -2600,10 +2605,14 @@ describe("runObfuscationPass resolvedSeed", () => {
 });
 
 describe("runObfuscationPass — the one resolved key", () => {
-  async function sent(input: { key?: string | null; env?: Record<string, string | undefined> }) {
+  async function sent(input: {
+    key?: string | null;
+    env?: Record<string, string | undefined>;
+    engineVersion?: string;
+  }) {
     const file = join(outDir, "a.js");
     writeFileSync(file, "export const a = 1;");
-    const { engine, calls } = makeEngine(() => ({}));
+    const { engine, calls } = makeEngine(() => ({}), "local", input.engineVersion);
     const cap = silentLogger();
     await runObfuscationPass({
       ...baseOptions([file], engine),
@@ -2637,6 +2646,28 @@ describe("runObfuscationPass — the one resolved key", () => {
     expect(config.key).toBeNull();
     expect(logs.some((l) => l.includes("cloud engine"))).toBe(false);
     expect(env.AFTERPACK_KEY).toBe("ap_live_env");
+  });
+
+  it("refuses no key on an engine that would read a key itself, naming where it would find one", async () => {
+    const env = { AFTERPACK_KEY: "ap_live_env" };
+    await expect(sent({ key: null, env, engineVersion: "1.0.3" })).rejects.toThrow(
+      `would build in the cloud with the key from AFTERPACK_KEY. Update to @afterpack/core ${NULL_KEY_MIN_CORE_VERSION} or newer`,
+    );
+  });
+
+  it("builds without a key on an older engine that would find no key either", async () => {
+    const { config } = await sent({
+      key: null,
+      env: { AFTERPACK_KEY: " " },
+      engineVersion: "1.0.3",
+    });
+    expect(config.key).toBeNull();
+  });
+
+  it("sends no key to an engine that honours it, whatever the environment holds", async () => {
+    const env = { AFTERPACK_KEY: "ap_live_env" };
+    const { config } = await sent({ key: null, env, engineVersion: NULL_KEY_MIN_CORE_VERSION });
+    expect(config.key).toBeNull();
   });
 
   it("never writes the key into any environment", async () => {

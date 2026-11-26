@@ -17,6 +17,8 @@ export const SOURCE_TYPE_MIN_CORE_VERSION = "0.2.3";
 
 export const FILE_SOURCE_TYPE_MIN_CORE_VERSION = "0.2.5";
 
+export const NULL_KEY_MIN_CORE_VERSION = "1.0.4";
+
 export const CORE_PACKAGE = "@afterpack/core";
 
 export interface ClientIdentity {
@@ -146,6 +148,26 @@ export function coreSupportsFileSourceType(coreVersion: string | null | undefine
     releaseTriple(coreVersion) !== null &&
     !isBelowVersion(coreVersion, FILE_SOURCE_TYPE_MIN_CORE_VERSION)
   );
+}
+
+export function coreHonoursNullKey(coreVersion: string | null | undefined): boolean {
+  return !isBelowVersion(coreVersion, NULL_KEY_MIN_CORE_VERSION);
+}
+
+export function keySourceForOlderCore(
+  env: Record<string, string | undefined>,
+  startDir: string,
+): string | null {
+  if ((env.AFTERPACK_KEY ?? "").trim() !== "") return "AFTERPACK_KEY";
+  const path = findUpward(startDir, "afterpack.json");
+  if (!path) return null;
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+    const key = isPlainObject(parsed) ? parsed.key : undefined;
+    return typeof key === "string" && key.trim() !== "" ? path : null;
+  } catch {
+    return null;
+  }
 }
 
 export const CLI_PACKAGE = "afterpack";
