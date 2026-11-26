@@ -17,7 +17,7 @@ export const SOURCE_TYPE_MIN_CORE_VERSION = "0.2.3";
 
 export const FILE_SOURCE_TYPE_MIN_CORE_VERSION = "0.2.5";
 
-export const NULL_KEY_MIN_CORE_VERSION = "1.0.4";
+export const NULL_KEY_MIN_CORE_VERSION = "1.1.0";
 
 export const CORE_PACKAGE = "@afterpack/core";
 
