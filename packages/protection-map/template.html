@@ -1694,6 +1694,7 @@ function afterpackMergeDocuments(docs) {
   const entries = [];
   let head = null;
   let generatedAt = null;
+  const storedAggregate = new Map();
   for (const doc of docs) {
     if (!doc) continue;
     if (!head || (head.engine == null && doc.engine != null)) head = doc;
@@ -1702,6 +1703,7 @@ function afterpackMergeDocuments(docs) {
     }
     for (const entry of doc.files || []) {
       const file = entry && entry.file;
+      for (const r of (entry && entry.regions) || []) storedAggregate.set(r, entry.aggregate);
       entries.push(
         file && file.pathCollision && typeof file.path === "string"
           ? { ...entry, file: afterpackUncollidedFile(file) }
@@ -1710,12 +1712,22 @@ function afterpackMergeDocuments(docs) {
     }
   }
   head = head || {};
+  const files = afterpackBuildProjectFileTree(entries);
+  for (const f of files) {
+    const from = new Set(f.regions.map((r) => storedAggregate.get(r)));
+    if (from.size !== 1) continue;
+    const [stored] = from;
+    if (!stored) continue;
+    for (const k of ["avgEntropy", "maxEntropy", "minEntropy"]) {
+      if (typeof stored[k] === "number") f.aggregate[k] = stored[k];
+    }
+  }
   return {
     schemaVersion: head.schemaVersion,
     ...(head.spanUnits !== undefined ? { spanUnits: head.spanUnits } : {}),
     generatedAt,
     engine: head.engine !== undefined ? head.engine : null,
-    files: afterpackBuildProjectFileTree(entries),
+    files,
   };
 }
 
@@ -1742,18 +1754,30 @@ async function afterpackDecodeSlice(slice) {
     var payload = dataEl.textContent.trim();
     if (payload.charAt(0) === "[") {
       var slices = JSON.parse(payload);
+      payload = null;
       MAP_BYTES = slices.reduce(function (sum, slice) {
         return sum + payloadBytes(typeof slice === "string" ? slice : JSON.stringify(slice));
       }, 0);
       codeBodyEl.textContent = "Loading…";
-      DATA = afterpackMergeDocuments(await Promise.all(slices.map(afterpackDecodeSlice)));
+      var docs = [];
+      for (var si = 0; si < slices.length; si++) {
+        docs.push(await afterpackDecodeSlice(slices[si]));
+        slices[si] = null;
+      }
+      slices = null;
+      DATA = afterpackMergeDocuments(docs);
+      docs = null;
     } else if (payload.charAt(0) === "{") {
       MAP_BYTES = payloadBytes(payload);
       DATA = JSON.parse(payload);
+      payload = null;
     } else {
+      MAP_BYTES = payloadBytes(payload);
       codeBodyEl.textContent = "Loading…";
       var json = await afterpackInflateBase64Gzip(payload);
+      payload = null;
       DATA = afterpackDecodeDocument(JSON.parse(json));
+      json = null;
     }
   } catch (e) {
     codeBodyEl.textContent = "Couldn't open this Protection Map: " + e.message;

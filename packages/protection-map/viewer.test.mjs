@@ -1523,12 +1523,16 @@ function slicedTree() {
     spotlights,
   });
   const envelope = { schemaVersion: whole.schemaVersion, spanUnits: whole.spanUnits };
+  const withEntropy = (entry, avgEntropy) => ({
+    ...entry,
+    aggregate: { ...entry.aggregate, avgEntropy, maxEntropy: avgEntropy, minEntropy: avgEntropy },
+  });
   return [
     {
       ...envelope,
       generatedAt: "2026-01-01T00:00:00Z",
       engine: whole.engine,
-      files: [page, authHalf([auth.spotlights[0]], [0, 5], 40)],
+      files: [withEntropy(page, 0.61), authHalf([auth.spotlights[0]], [0, 5], 40)],
     },
     {
       ...envelope,
@@ -1539,7 +1543,7 @@ function slicedTree() {
   ];
 }
 
-test("N. a sliced map renders every file of every slice, a split source once", async () => {
+test("V. a sliced map renders every file of every slice, a split source once", async () => {
   const slices = slicedTree().map(sealedSlice);
   const v = await loadViewer(slices);
   assert.deepEqual(plain(v.FILES.map((f) => f.doc.file.path)), [
@@ -1564,13 +1568,19 @@ test("N. a sliced map renders every file of every slice, a split source once", a
   assert.equal(v.DATA.generatedAt, "2026-01-02T00:00:00Z");
   const keys = v.FILES[2].doc;
   assert.deepEqual(plain(keys.aggregate.directives), docWithTree().files[2].aggregate.directives);
+  const page = v.FILES[0].doc.aggregate;
+  assert.deepEqual(
+    [page.avgEntropy, page.maxEntropy, page.minEntropy],
+    [0.61, 0.61, 0.61],
+    "a file stored in one slice keeps its stored entropy",
+  );
   const bytes = slices.reduce((n, s) => n + Math.floor((s.replace(/=+$/, "").length * 3) / 4), 0);
   assert.ok(
     v.byId("private-tag").attrs["data-tip"].includes(`3 files, ${(bytes / 1024).toFixed(1)} KB`),
   );
 });
 
-test("N2. one slice renders exactly as the same blob spliced on its own", async () => {
+test("V2. one slice renders exactly as the same blob spliced on its own", async () => {
   const [first] = slicedTree();
   const sliced = await loadViewer([sealedSlice(first)]);
   const single = await loadViewer(sealedSlice(first));
@@ -1579,9 +1589,13 @@ test("N2. one slice renders exactly as the same blob spliced on its own", async 
     "src/app/page.tsx",
     "src/lib/auth.ts",
   ]);
+  const tip = (v) => v.byId("private-tag").attrs["data-tip"];
+  assert.equal(tip(sliced), tip(single));
+  const bytes = Math.floor((sealedSlice(first).replace(/=+$/, "").length * 3) / 4);
+  assert.ok(tip(single).includes(`(2 files, ${bytes} B)`), tip(single));
 });
 
-test("N3. a path that collided inside a slice keeps one entry per source across slices", async () => {
+test("V3. a path that collided inside a slice keeps one entry per source across slices", async () => {
   const [base] = slicedTree();
   const at = (path, source, extra) => ({
     ...base.files[0],
@@ -1604,7 +1618,7 @@ test("N3. a path that collided inside a slice keeps one entry per source across 
   assert.equal(v.FILES[1].doc.file.pathCollision, true);
 });
 
-test("N4. a slice that cannot be decoded fails the page visibly", async () => {
+test("V4. a slice that cannot be decoded fails the page visibly", async () => {
   const [first] = slicedTree();
   await assert.rejects(
     loadViewer([sealedSlice(first), "bm90IGd6aXA="]),
