@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { gunzipSync } from "node:zlib";
+import { gunzipSync, gzipSync } from "node:zlib";
 import { decodeCompact, encodeCompact } from "./codec.mjs";
 import { embedIntoTemplate, PLACEHOLDER, renderProtectionMapHtml } from "./render-core.mjs";
 
@@ -304,6 +304,65 @@ test("template.html's inline decoder logic matches codec.mjs's afterpackDecodeDo
     stripCommentsAndNormalizeWhitespace(codecFn),
     "template.html's inline afterpackDecodeDocument no longer matches codec.mjs's export",
   );
+});
+
+function canonicalJs(code) {
+  const out = ts.transpileModule(code, {
+    compilerOptions: {
+      target: ts.ScriptTarget.ESNext,
+      module: ts.ModuleKind.ESNext,
+      removeComments: true,
+    },
+  }).outputText;
+  return out.replace(/\s+/g, "").replace(/,([)\]}])/g, "$1");
+}
+
+function projectTreeSlice(source) {
+  const lines = source.split("\n");
+  const start = lines.findIndex((l) => /^interface PmFileMeta \{/.test(l));
+  let end = lines.findIndex((l) => /^export function buildProjectFileTree\(/.test(l));
+  assert.ok(
+    start >= 0 && end > start,
+    "artifacts.ts still opens and closes the project-tree slice",
+  );
+  while (end < lines.length && lines[end] !== "}") end++;
+  return lines
+    .slice(start, end + 1)
+    .join("\n")
+    .replace(/^export /gm, "");
+}
+
+test("template.html's inline project-tree merge matches integration-utils' buildProjectFileTree", () => {
+  const artifacts = readFileSync(here("../integration-utils/src/artifacts.ts"), "utf8");
+  const template = readFileSync(here("./template.html"), "utf8");
+  const OPEN = "var afterpackBuildProjectFileTree = (function () {";
+  const CLOSE = "  return buildProjectFileTree;\n})();";
+  const from = template.indexOf(OPEN);
+  const to = template.indexOf(CLOSE, from);
+  assert.ok(from >= 0 && to > from, "template.html carries the project-tree merge");
+  assert.equal(
+    canonicalJs(template.slice(from + OPEN.length, to)),
+    canonicalJs(projectTreeSlice(artifacts)),
+    "template.html's inline buildProjectFileTree no longer matches artifacts.ts",
+  );
+});
+
+test("the slice splice: a JSON array of base64 gzip blobs, safe inside the data script", () => {
+  const slices = [richDoc(), richDoc()].map((doc) =>
+    gzipSync(Buffer.from(JSON.stringify(encodeCompact(doc)), "utf8")).toString("base64"),
+  );
+  const payload = `[${slices.map((b64) => `"${b64}"`).join(",")}]`;
+  assert.deepEqual(JSON.parse(payload), slices);
+  assert.ok(!/[<>&\\]/.test(payload), "nothing in the splice needs escaping in a script element");
+  const template = readFileSync(here("./template.html"), "utf8");
+  const at = template.indexOf(PLACEHOLDER);
+  const html = template.slice(0, at) + payload + template.slice(at + PLACEHOLDER.length);
+  const m = html.match(/<script id="afterpack-data"[^>]*>([\s\S]*?)<\/script>/);
+  assert.equal(m[1], payload);
+  for (const b64 of JSON.parse(m[1])) {
+    const back = decodeCompact(JSON.parse(gunzipSync(Buffer.from(b64, "base64")).toString("utf8")));
+    assert.equal(back.files.length, richDoc().files.length);
+  }
 });
 
 test("renderProtectionMapHtml embeds a gzip+base64 payload that inflates + decodes back", () => {

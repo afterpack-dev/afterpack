@@ -204,7 +204,7 @@ export async function loadViewer(doc, { hash = "", storage = makeStorage() } = {
     return els.get(id);
   };
   const dataEl = byId("afterpack-data");
-  dataEl.textContent = JSON.stringify(doc);
+  dataEl.textContent = typeof doc === "string" ? doc : JSON.stringify(doc);
 
   const document = {
     getElementById: byId,
@@ -245,6 +245,8 @@ export async function loadViewer(doc, { hash = "", storage = makeStorage() } = {
     TextDecoder,
     Blob,
     DecompressionStream,
+    Response,
+    atob,
     navigator: {},
     globalThis: undefined,
   };
@@ -253,7 +255,11 @@ export async function loadViewer(doc, { hash = "", storage = makeStorage() } = {
   sandbox.globalThis = sandbox;
   vm.runInContext(codecScript, sandbox, { filename: "template.html#codec" });
   vm.runInContext(viewer, sandbox, { filename: "template.html#viewer" });
-  await flushPendingMicrotasksForAsyncIife();
+  const codeBody = byId("code-body");
+  for (let i = 0; i < 200 && !sandbox.__VIEWER; i++) {
+    await flushPendingMicrotasksForAsyncIife();
+    if (i > 0 && codeBody.textContent !== "Loading…") break;
+  }
   if (!sandbox.__VIEWER)
     throw new Error(
       `viewer did not run: code-body says ${JSON.stringify(byId("code-body").textContent)}`,

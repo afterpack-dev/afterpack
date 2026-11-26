@@ -1337,6 +1337,393 @@ async function afterpackInflateBase64Gzip(b64) {
   var buf = await new Response(stream).arrayBuffer();
   return new TextDecoder().decode(buf);
 }
+
+var afterpackBuildProjectFileTree = (function () {
+  const REVERSAL_CLASS_ORDER = ["preserved", "renamed-encoded", "flattened-fused", "destroyed-fused"];
+
+  function round4(v) {
+    return Math.round(v * 1e4) / 1e4;
+  }
+
+  function isRuntimeSource(rawPath) {
+    const p = rawPath ?? "";
+    if (p.includes("[turbopack]") || p.includes("[next]")) return true;
+    if (/(^|\/)webpack\/(runtime|bootstrap)/.test(p)) return true;
+    if (p.includes("webpack://_N_E/webpack/")) return true;
+    if (/node_modules\/\.pnpm\/next[@/]/.test(p)) return true;
+    if (/(^|\/)node_modules\/next\//.test(p)) return true;
+    return false;
+  }
+
+  function cleanSourcePath(rawPath) {
+    let p = rawPath ?? "";
+    p = p.replace(/^turbopack:\/\/\/\[project\]\//, "");
+    p = p.replace(/^turbopack:\/\/\//, "");
+    p = p.replace(/^webpack:\/\/_N_E\/\.\//, "");
+    p = p.replace(/^webpack:\/\/_N_E\//, "");
+    p = p.replace(/^webpack:\/\//, "");
+    p = p.replace(/^\.\//, "");
+    p = p.replace(/node_modules\/\.pnpm\/[^/]+\/node_modules\//, "node_modules/");
+    return p;
+  }
+
+  function computeAggregate(
+    regions,
+    spotlights,
+    renamedCount = 0,
+    directives = [],
+    extractedCount = 0,
+  ) {
+    const regionCount = regions.length;
+    let sumEntropy = 0;
+    let maxEntropy = 0;
+    let minEntropy = regionCount === 0 ? 0 : 1;
+    let totalTransforms = 0;
+    let decodeOps = 0;
+    let callFrames = 0;
+    let sizeDeltaEstTotal = 0;
+    const classCounts = {
+      preserved: 0,
+      "renamed-encoded": 0,
+      "flattened-fused": 0,
+      "destroyed-fused": 0,
+    };
+    let maxClassRank = 0;
+    for (const r of regions) {
+      const e = typeof r.entropy === "number" ? r.entropy : 0;
+      sumEntropy += e;
+      if (e > maxEntropy) maxEntropy = e;
+      if (e < minEntropy) minEntropy = e;
+      totalTransforms += r.transformCount ?? (Array.isArray(r.lineage) ? r.lineage.length : 0);
+      if (r.perf) {
+        decodeOps += r.perf.decodeOps ?? 0;
+        callFrames += r.perf.callFrames ?? 0;
+      }
+      sizeDeltaEstTotal += r.sizeDeltaEst ?? 0;
+      const cls = r.reversalClass;
+      if (cls != null && cls in classCounts) classCounts[cls] += 1;
+      const rank = REVERSAL_CLASS_ORDER.indexOf(cls);
+      if (rank > maxClassRank) maxClassRank = rank;
+    }
+    let leakCount = 0;
+    for (const s of spotlights) if (s.severity === "leak") leakCount += 1;
+    return {
+      avgEntropy: round4(regionCount === 0 ? 0 : sumEntropy / regionCount),
+      maxEntropy: round4(maxEntropy),
+      minEntropy: round4(regionCount === 0 ? 0 : minEntropy),
+      totalTransforms,
+      renamedCount,
+      extractedCount,
+      weakRegions: spotlights.length,
+      leakCount,
+      perfCostTotal: { decodeOps, callFrames },
+      sizeDeltaEstTotal,
+      classSummary: { ...classCounts, maxClassReached: REVERSAL_CLASS_ORDER[maxClassRank] },
+      directives,
+    };
+  }
+
+  const SPAN_PACK_LIMIT = 1 << 25;
+
+  function packable(v, limit) {
+    return v >= 0 && v < limit && (v | 0) === v;
+  }
+
+  function spanKey(start, end, kind) {
+    if (packable(start, SPAN_PACK_LIMIT) && packable(end, SPAN_PACK_LIMIT) && packable(kind, 4)) {
+      return (start * SPAN_PACK_LIMIT + end) * 4 + kind;
+    }
+    return `${start},${end},${kind}`;
+  }
+
+  function sortTriples(flat) {
+    const count = (flat.length / 3) | 0;
+    const order = new Uint32Array(count);
+    for (let i = 0; i < count; i++) order[i] = i;
+    order.sort((x, y) => {
+      const a = x * 3;
+      const b = y * 3;
+      return flat[a] - flat[b] || flat[a + 1] - flat[b + 1] || flat[a + 2] - flat[b + 2];
+    });
+    const out = new Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      out[i * 3] = flat[order[i] * 3];
+      out[i * 3 + 1] = flat[order[i] * 3 + 1];
+      out[i * 3 + 2] = flat[order[i] * 3 + 2];
+    }
+    return out;
+  }
+
+  function mergeComplexitySpans(entries) {
+    const lowest = new Map();
+    for (const e of entries) {
+      const flat = e.complexitySpans ?? [];
+      for (let i = 0; i + 2 < flat.length; i += 3) {
+        const key = spanKey(flat[i], flat[i + 1], 0);
+        const seen = lowest.get(key);
+        if (!seen) lowest.set(key, [flat[i], flat[i + 1], flat[i + 2]]);
+        else if (flat[i + 2] < seen[2]) seen[2] = flat[i + 2];
+      }
+    }
+    return sortTriples([...lowest.values()].flat());
+  }
+
+  function mergeKindOrder(tables) {
+    const next = new Map();
+    const inDegree = new Map();
+    for (const t of tables) {
+      for (const name of t) {
+        if (!next.has(name)) {
+          next.set(name, new Set());
+          inDegree.set(name, 0);
+        }
+      }
+    }
+    for (const t of tables) {
+      for (let i = 1; i < t.length; i++) {
+        const after = next.get(t[i - 1]);
+        if (t[i] === t[i - 1] || after.has(t[i])) continue;
+        after.add(t[i]);
+        inDegree.set(t[i], (inDegree.get(t[i]) ?? 0) + 1);
+      }
+    }
+    const order = [];
+    const ready = [...next.keys()].filter((n) => inDegree.get(n) === 0).sort();
+    while (ready.length) {
+      const name = ready.shift();
+      order.push(name);
+      for (const m of next.get(name)) {
+        const d = (inDegree.get(m) ?? 0) - 1;
+        inDegree.set(m, d);
+        if (d === 0) {
+          ready.push(m);
+          ready.sort();
+        }
+      }
+    }
+    for (const name of [...next.keys()].sort()) if (!order.includes(name)) order.push(name);
+    return order;
+  }
+
+  function mergeDeclarationLane(entries) {
+    const tables = entries.map((e) =>
+      Array.isArray(e.declarationKinds)
+        ? e.declarationKinds.filter((k) => typeof k === "string")
+        : [],
+    );
+    const order = mergeKindOrder(tables);
+    const rank = new Map(order.map((name, i) => [name, i]));
+    const seen = new Set();
+    const flat = [];
+    for (const e of entries) {
+      const kinds = Array.isArray(e.declarationKinds) ? e.declarationKinds : [];
+      const spans = e.declarationSpans ?? [];
+      for (let i = 0; i + 2 < spans.length; i += 3) {
+        const k = rank.get(kinds[spans[i + 2]]);
+        if (k === undefined) continue;
+        const key = spanKey(spans[i], spans[i + 1], k);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        flat.push(spans[i], spans[i + 1], k);
+      }
+    }
+    const used = [...new Set(flat.filter((_, i) => i % 3 === 2))].sort((a, b) => a - b);
+    const compact = new Map(used.map((k, i) => [k, i]));
+    for (let i = 2; i < flat.length; i += 3) flat[i] = compact.get(flat[i]);
+    return { declarationKinds: used.map((k) => order[k]), declarationSpans: sortTriples(flat) };
+  }
+
+  function mergeEntries(entries, path) {
+    const regions = [];
+    const seenRegion = new Set();
+    const spotlights = [];
+    const seenSpot = new Set();
+    const renamedSpans = [];
+    const seenRenamed = new Set();
+    const extractedFlat = [];
+    const seenExtracted = new Set();
+    const directives = [];
+    const seenDirective = new Set();
+    for (const e of entries) {
+      for (const r of e.regions ?? []) {
+        const key = Array.isArray(r.span) ? `${r.span[0]},${r.span[1]}` : `~${regions.length}`;
+        if (seenRegion.has(key)) continue;
+        seenRegion.add(key);
+        regions.push(r);
+      }
+      for (const s of e.spotlights ?? []) {
+        const sp = Array.isArray(s.span) ? `${s.span[0]},${s.span[1]}` : "";
+        const key = `${sp}|${s.severity ?? ""}|${s.sample ?? ""}`;
+        if (seenSpot.has(key)) continue;
+        seenSpot.add(key);
+        spotlights.push(s);
+      }
+      for (const rn of e.renamedSpans ?? []) {
+        const key = spanKey(rn[0], rn[1], 0);
+        if (seenRenamed.has(key)) continue;
+        seenRenamed.add(key);
+        renamedSpans.push(rn);
+      }
+      const flat = e.extractedSpans ?? [];
+      for (let i = 0; i + 2 < flat.length; i += 3) {
+        const key = spanKey(flat[i], flat[i + 1], flat[i + 2]);
+        if (seenExtracted.has(key)) continue;
+        seenExtracted.add(key);
+        extractedFlat.push(flat[i], flat[i + 1], flat[i + 2]);
+      }
+      const agg = e.aggregate;
+      for (const d of agg?.directives ?? []) {
+        const key = typeof d === "string" ? d : JSON.stringify(d);
+        if (seenDirective.has(key)) continue;
+        seenDirective.add(key);
+        directives.push(d);
+      }
+    }
+    renamedSpans.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    const extractedCount = (extractedFlat.length / 3) | 0;
+    const extractedSpans = sortTriples(extractedFlat);
+    regions.sort((a, b) => {
+      const er = (b.entropyRaw ?? 0) - (a.entropyRaw ?? 0);
+      if (er !== 0) return er;
+      const as = Array.isArray(a.span) ? a.span[0] : 0;
+      const bs = Array.isArray(b.span) ? b.span[0] : 0;
+      if (as !== bs) return as - bs;
+      const ae = Array.isArray(a.span) ? a.span[1] : 0;
+      const be = Array.isArray(b.span) ? b.span[1] : 0;
+      return ae - be;
+    });
+    const rep = entries.find((e) => e.file?.sourceOrigin === "original") ?? entries[0];
+    const file = { ...(rep.file ?? {}), path, sourceOrigin: "original" };
+    let outputSum = 0;
+    let bundledSum = 0;
+    let sawOutput = false;
+    let sawBundled = false;
+    let anyEstimated = false;
+    for (const e of entries) {
+      const m = e.file;
+      if (!m) continue;
+      if (typeof m.outputSize === "number" && Number.isFinite(m.outputSize)) {
+        outputSum += m.outputSize;
+        sawOutput = true;
+      }
+      if (typeof m.bundledInputSize === "number" && Number.isFinite(m.bundledInputSize)) {
+        bundledSum += m.bundledInputSize;
+        sawBundled = true;
+      }
+      if (m.outputSizeEstimated) anyEstimated = true;
+    }
+    if (sawBundled) file.bundledInputSize = bundledSum;
+    if (sawOutput) {
+      file.outputSize = outputSum;
+      file.outputSizeEstimated = anyEstimated;
+    }
+    const denom = sawBundled && bundledSum > 0 ? bundledSum : file.inputSize;
+    if (sawOutput && typeof denom === "number" && denom > 0) {
+      file.inflationRatio = round4(outputSum / denom);
+    } else if (sawOutput) {
+      file.inflationRatio = 0;
+    }
+    return {
+      file,
+      regions,
+      spotlights,
+      renamedSpans,
+      extractedSpans,
+      ...(entries.some((e) => Array.isArray(e.complexitySpans))
+        ? { complexitySpans: mergeComplexitySpans(entries) }
+        : {}),
+      ...(entries.some((e) => Array.isArray(e.declarationSpans))
+        ? mergeDeclarationLane(entries)
+        : {}),
+      aggregate: computeAggregate(
+        regions,
+        spotlights,
+        renamedSpans.length,
+        directives,
+        extractedCount,
+      ),
+    };
+  }
+
+  function buildProjectFileTree(files) {
+    const byPath = new Map();
+    const pathOrder = [];
+    for (const raw of files) {
+      const entry = raw;
+      const file = entry?.file;
+      if (!file) continue;
+      if (file.sourceOrigin !== "original") continue;
+      if (isRuntimeSource(file.path)) continue;
+      const clean = cleanSourcePath(file.path);
+      const srcKey = file.originalSource ?? "";
+      let bySrc = byPath.get(clean);
+      if (!bySrc) {
+        bySrc = new Map();
+        byPath.set(clean, bySrc);
+        pathOrder.push(clean);
+      }
+      const group = bySrc.get(srcKey);
+      if (group) group.push(entry);
+      else bySrc.set(srcKey, [entry]);
+    }
+    const out = [];
+    for (const clean of pathOrder) {
+      const bySrc = byPath.get(clean);
+      const variants = [...bySrc.values()];
+      variants.forEach((entries, i) => {
+        const path = i === 0 ? clean : `${clean}#${i + 1}`;
+        const merged = mergeEntries(entries, path);
+        if (i > 0 && merged.file) merged.file.pathCollision = true;
+        out.push(merged);
+      });
+    }
+    return out;
+  }
+
+  return buildProjectFileTree;
+})();
+
+function afterpackUncollidedFile(file) {
+  const rest = { ...file, path: file.path.replace(/#\d+$/, "") };
+  delete rest.pathCollision;
+  return rest;
+}
+
+function afterpackMergeDocuments(docs) {
+  if (docs.length === 1) return docs[0];
+  const entries = [];
+  let head = null;
+  let generatedAt = null;
+  for (const doc of docs) {
+    if (!doc) continue;
+    if (!head || (head.engine == null && doc.engine != null)) head = doc;
+    if (doc.generatedAt != null && (generatedAt == null || doc.generatedAt > generatedAt)) {
+      generatedAt = doc.generatedAt;
+    }
+    for (const entry of doc.files || []) {
+      const file = entry && entry.file;
+      entries.push(
+        file && file.pathCollision && typeof file.path === "string"
+          ? { ...entry, file: afterpackUncollidedFile(file) }
+          : entry,
+      );
+    }
+  }
+  head = head || {};
+  return {
+    schemaVersion: head.schemaVersion,
+    ...(head.spanUnits !== undefined ? { spanUnits: head.spanUnits } : {}),
+    generatedAt,
+    engine: head.engine !== undefined ? head.engine : null,
+    files: afterpackBuildProjectFileTree(entries),
+  };
+}
+
+async function afterpackDecodeSlice(slice) {
+  return typeof slice === "string"
+    ? afterpackDecodeDocument(JSON.parse(await afterpackInflateBase64Gzip(slice)))
+    : slice;
+}
 </script>
 <script>
 (async function () {
@@ -1347,11 +1734,21 @@ async function afterpackInflateBase64Gzip(b64) {
   var MAP_BYTES = null;
   var codeBodyEl = document.getElementById("code-body");
   try {
+    var payloadBytes = function (text) {
+      return text.charAt(0) === "{"
+        ? new TextEncoder().encode(text).length
+        : Math.floor(text.replace(/=+$/, "").length * 3 / 4);
+    };
     var payload = dataEl.textContent.trim();
-    MAP_BYTES = payload.charAt(0) === "{"
-      ? new TextEncoder().encode(payload).length
-      : Math.floor(payload.replace(/=+$/, "").length * 3 / 4);
-    if (payload.charAt(0) === "{") {
+    if (payload.charAt(0) === "[") {
+      var slices = JSON.parse(payload);
+      MAP_BYTES = slices.reduce(function (sum, slice) {
+        return sum + payloadBytes(typeof slice === "string" ? slice : JSON.stringify(slice));
+      }, 0);
+      codeBodyEl.textContent = "Loading…";
+      DATA = afterpackMergeDocuments(await Promise.all(slices.map(afterpackDecodeSlice)));
+    } else if (payload.charAt(0) === "{") {
+      MAP_BYTES = payloadBytes(payload);
       DATA = JSON.parse(payload);
     } else {
       codeBodyEl.textContent = "Loading…";

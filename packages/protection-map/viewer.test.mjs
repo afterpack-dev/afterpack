@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { gzipSync } from "node:zlib";
+import { encodeCompact } from "./codec.mjs";
 import { loadViewer, makeStorage, readPrefs } from "./viewer-harness.mjs";
 
 const MACHINERY_NOTE =
@@ -1502,5 +1504,110 @@ test("U. the weak-spots panel lists each readable string once and counts propert
   assert.match(
     v.byId("workspace-summary").getAttribute("data-tip"),
     /4 property names stay readable/,
+  );
+});
+
+const plain = (value) => JSON.parse(JSON.stringify(value));
+
+function sealedSlice(doc) {
+  return gzipSync(Buffer.from(JSON.stringify(encodeCompact(doc)), "utf8")).toString("base64");
+}
+
+function slicedTree() {
+  const whole = docWithTree();
+  const [page, auth, keys] = whole.files;
+  const authHalf = (spotlights, span, outputSize) => ({
+    ...auth,
+    file: { ...auth.file, outputSize },
+    regions: [region({ span, reversalClass: "renamed-encoded" })],
+    spotlights,
+  });
+  const envelope = { schemaVersion: whole.schemaVersion, spanUnits: whole.spanUnits };
+  return [
+    {
+      ...envelope,
+      generatedAt: "2026-01-01T00:00:00Z",
+      engine: whole.engine,
+      files: [page, authHalf([auth.spotlights[0]], [0, 5], 40)],
+    },
+    {
+      ...envelope,
+      generatedAt: "2026-01-02T00:00:00Z",
+      engine: whole.engine,
+      files: [authHalf([auth.spotlights[1]], [6, 11], 60), keys],
+    },
+  ];
+}
+
+test("N. a sliced map renders every file of every slice, a split source once", async () => {
+  const slices = slicedTree().map(sealedSlice);
+  const v = await loadViewer(slices);
+  assert.deepEqual(plain(v.FILES.map((f) => f.doc.file.path)), [
+    "src/app/page.tsx",
+    "src/lib/auth.ts",
+    "src/lib/crypto/keys.ts",
+  ]);
+  const auth = v.FILES[1];
+  assert.equal(auth.doc.file.outputSize, 100, "the chunk sizes of both slices add up");
+  assert.deepEqual(plain(auth.doc.regions.map((r) => r.span)), [
+    [0, 5],
+    [6, 11],
+  ]);
+  assert.deepEqual(plain(auth.doc.spotlights.map((s) => s.sample).sort()), [
+    '"let-me-in"',
+    "stringify",
+  ]);
+  assert.equal(auth.leakCount, 1);
+  assert.equal(auth.weakSpotCount, 1);
+  assert.equal(v.DATA.engine.version, "9.9.9");
+  assert.equal(v.DATA.spanUnits, "utf16");
+  assert.equal(v.DATA.generatedAt, "2026-01-02T00:00:00Z");
+  const keys = v.FILES[2].doc;
+  assert.deepEqual(plain(keys.aggregate.directives), docWithTree().files[2].aggregate.directives);
+  const bytes = slices.reduce((n, s) => n + Math.floor((s.replace(/=+$/, "").length * 3) / 4), 0);
+  assert.ok(
+    v.byId("private-tag").attrs["data-tip"].includes(`3 files, ${(bytes / 1024).toFixed(1)} KB`),
+  );
+});
+
+test("N2. one slice renders exactly as the same blob spliced on its own", async () => {
+  const [first] = slicedTree();
+  const sliced = await loadViewer([sealedSlice(first)]);
+  const single = await loadViewer(sealedSlice(first));
+  assert.deepEqual(plain(sliced.FILES.map((f) => f.doc)), plain(single.FILES.map((f) => f.doc)));
+  assert.deepEqual(plain(single.FILES.map((f) => f.doc.file.path)), [
+    "src/app/page.tsx",
+    "src/lib/auth.ts",
+  ]);
+});
+
+test("N3. a path that collided inside a slice keeps one entry per source across slices", async () => {
+  const [base] = slicedTree();
+  const at = (path, source, extra) => ({
+    ...base.files[0],
+    file: { ...base.files[0].file, path, originalSource: source, outputSize: 10, ...extra },
+  });
+  const v = await loadViewer(
+    [
+      { ...base, files: [at("src/a.ts", "one"), at("src/a.ts#2", "two", { pathCollision: true })] },
+      { ...base, files: [at("src/a.ts", "two")] },
+    ].map(sealedSlice),
+  );
+  assert.deepEqual(
+    plain(v.FILES.map((f) => [f.doc.file.path, f.doc.file.originalSource, f.doc.file.outputSize])),
+    [
+      ["src/a.ts", "one", 10],
+      ["src/a.ts#2", "two", 20],
+    ],
+  );
+  assert.equal(v.FILES[0].doc.file.pathCollision, undefined);
+  assert.equal(v.FILES[1].doc.file.pathCollision, true);
+});
+
+test("N4. a slice that cannot be decoded fails the page visibly", async () => {
+  const [first] = slicedTree();
+  await assert.rejects(
+    loadViewer([sealedSlice(first), "bm90IGd6aXA="]),
+    /Couldn't open this Protection Map/,
   );
 });
