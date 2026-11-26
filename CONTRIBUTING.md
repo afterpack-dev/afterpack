@@ -170,3 +170,12 @@ alone means `true`. An unknown key, a kebab-cased key or a malformed value **fai
 the canonical spelling — it is never silently ignored. Adding a key means adding it to the registry;
 every surface then accepts it without further work. Its environment variable must fit in 42
 characters, or 54 for a `transforms.*` key; a unit test holds every key to that.
+
+**Empty values.** Layers rank afterpack.json < environment < flag or plugin option < directive. An
+empty or whitespace-only value resets `key` (no key, a Free build), `seed` (no pinned seed) or a
+list (the empty list) to its default, and that reset overrides every lower layer: parsing produces
+`CONFIG_RESET`, and `mergeLayers` in the registry, which every plugin and the CLI merge through,
+honours it and strips it. An empty enum, number or boolean is an error naming the key and what the
+user wrote, so a blank CI substitution can never weaken a preset; an empty group name such as
+`AFTERPACK_STRINGS=` is refused. The plugins and the CLI resolve the key once and always send the
+engine `"key": string | null`.

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { SEED_ENV_VAR } from "@afterpack/integration-utils";
+import { isOwnEnvExport, SEED_ENV_VAR } from "@afterpack/integration-utils";
 
 const PACKAGER_CONFIGS = [
   "electron-builder.yml",
@@ -47,8 +47,9 @@ export function resetNotices(): void {
   state.envSeedPinned = undefined;
 }
 
-export function recordEnvSeedPinned(): void {
-  state.envSeedPinned ??= process.env[SEED_ENV_VAR] != null;
+export function recordEnvSeedPinned(env: Record<string, string | undefined> = process.env): void {
+  const value = env[SEED_ENV_VAR];
+  state.envSeedPinned ??= value != null && value.trim() !== "" && !isOwnEnvExport(env, value);
 }
 
 function hasPackagerConfig(root: string): boolean {

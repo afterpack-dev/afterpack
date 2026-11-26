@@ -88,7 +88,10 @@ two copies share it.
 identically as an `afterpack.json` field, a `--flag` and a plugin option; its environment variable
 is the same path in SCREAMING_SNAKE_CASE (`strings.minLength` is `AFTERPACK_STRINGS_MIN_LENGTH`,
 `envName` in the registry), and the case-kept `AFTERPACK_strings_minLength` is also read. An
-unknown key fails the run naming the canonical spelling — it is never silently ignored.
+unknown key fails the run naming the canonical spelling — it is never silently ignored. An empty
+value resets `key`, `seed` or a list over every lower layer (`CONFIG_RESET`, merged only through
+`mergeLayers`) and is an error for any other key. The key is resolved once and always sent to the
+engine as `"key": string | null`; nothing writes it into `process.env`.
 
 **No explanatory comments.** Code says what it does; tests say what it must do. The only comments
 are tool directives such as `biome-ignore`.

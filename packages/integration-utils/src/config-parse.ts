@@ -2,6 +2,7 @@ import {
   type AfterpackConfig,
   CONFIG_BY_ENV_NAME,
   CONFIG_BY_PATH,
+  CONFIG_PREFIXES,
   type ConfigIssue,
   type ConfigKeyDef,
   canonicalSpelling,
@@ -10,8 +11,12 @@ import {
   DOCS_URL,
   EMPTY_CONFIG,
   ENV_PREFIX,
+  emptyGroupMessage,
+  emptyValue,
+  emptyValueMessage,
   envName,
   groupBooleanKey,
+  isBlank,
   mergeConfig,
   misdirectedHint,
   nest,
@@ -129,11 +134,43 @@ interface Assignment {
   value: unknown;
 }
 
+function emptyAssignment(
+  key: string,
+  surface: ParseSurface,
+  written: string,
+): { assignment: Assignment } | { issue: ConfigIssue } | undefined {
+  const spell = (p: string): string => (surface === "env" ? envName(p) : spellKey(p, surface));
+  if (CONFIG_PREFIXES.has(key) && !CONFIG_BY_PATH.has(key)) {
+    return {
+      issue: { path: key, message: emptyGroupMessage(key, written, surfaceLabel(surface), spell) },
+    };
+  }
+  const def = CONFIG_BY_PATH.get(key);
+  if (!def || def.shape === "structured") return undefined;
+  const reset = emptyValue(def);
+  if (reset === undefined) {
+    return {
+      issue: { path: key, message: emptyValueMessage(def, written, surfaceLabel(surface)) },
+    };
+  }
+  return { assignment: { path: def.path, value: reset } };
+}
+
+function writtenEmpty(key: string, surface: ParseSurface, raw: string): string {
+  if (surface === "env") return writtenKey(key, surface);
+  return `${spellKey(key, surface)}=${raw}`;
+}
+
 function parseAssignment(
   key: string,
   raw: string | true,
   surface: ParseSurface,
+  written?: string,
 ): { assignment: Assignment } | { issue: ConfigIssue } {
+  if (isBlank(raw)) {
+    const empty = emptyAssignment(key, surface, written ?? writtenEmpty(key, surface, raw));
+    if (empty) return empty;
+  }
   const spaced = raw === true ? /^(\S+)[ \t]+(.+)$/.exec(key) : null;
   const head = spaced ? CONFIG_BY_PATH.get(spaced[1]) : undefined;
   if (spaced && head) {
@@ -301,9 +338,9 @@ export function parseEnvOptions(env: Record<string, string | undefined>): EnvPar
     if (suffix === "" || raw === undefined) continue;
     let key = suffix.replace(/_/g, ".");
     if (!/[a-z]/.test(suffix)) {
-      if (raw === "") continue;
       const path = CONFIG_BY_ENV_NAME.get(name);
       if (path === undefined) {
+        if (isBlank(raw)) continue;
         if (claimsEnvSuffix(suffix) || canonicalSpelling(suffix) !== undefined) {
           issues.push(unclaimedEnvIssue(name, suffix));
         }
@@ -312,7 +349,7 @@ export function parseEnvOptions(env: Record<string, string | undefined>): EnvPar
       if (name === SEED_ENV_VAR && isOwnEnvExport(env, raw)) continue;
       key = path;
     }
-    const parsed = parseAssignment(key, raw, "env");
+    const parsed = parseAssignment(key, raw, "env", name);
     if ("issue" in parsed) {
       issues.push(parsed.issue);
       continue;

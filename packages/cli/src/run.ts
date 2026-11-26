@@ -18,7 +18,6 @@ import {
   type EngineDiagnostic,
   type EngineFileInput,
   type EngineFileResult,
-  getPath,
   installedRequiredLine,
   npxAlternative,
   type ObfuscationEngine,
@@ -544,6 +543,8 @@ async function runObfuscationAndBackup(input: {
           clientVersion: input.version,
           client: input.client,
           seed: input.parsed.seed,
+          seedFallback: input.parsed.seedFallback,
+          key: input.parsed.key,
           preset: input.parsed.preset,
           complexity: input.parsed.complexity,
           diagnostics: input.parsed.diagnostics?.level,
@@ -904,12 +905,9 @@ async function runHolding(deps: CliDeps, locks: HeldLock[]): Promise<number> {
     );
   }
 
-  const parsed = toRunOptions(resolved.config);
+  const parsed = toRunOptions(resolved);
   const backupEnabled = parsed.artifactOptions.build?.backup ?? true;
-  const configuredKey = getPath(resolved.config, "key");
-  const hasConfiguredKey =
-    (typeof configuredKey === "string" && configuredKey !== "") ||
-    (typeof env.AFTERPACK_KEY === "string" && env.AFTERPACK_KEY !== "");
+  const hasConfiguredKey = parsed.key !== null;
   if (resolved.configFile) {
     report.log(`afterpack: using ${documentPath(cwd, resolved.configFile)}`);
   }

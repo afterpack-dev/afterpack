@@ -1,11 +1,8 @@
 import {
-  type AfterpackConfig,
   CONFIG_KEYS,
   type ConfigKeyDef,
   type CoreConfigSubset,
   type PluginOptionsView,
-  toEngineConfig,
-  toPluginOptions,
 } from "@afterpack/integration-utils";
 import { OUTPUT_DIRS } from "./detect.js";
 import { EXIT_CODE_HELP } from "./exit.js";
@@ -16,12 +13,15 @@ export interface CliRunOptions extends PluginOptionsView {
   engineConfig: CoreConfigSubset;
 }
 
-export function toRunOptions(config: AfterpackConfig): CliRunOptions {
-  const view = toPluginOptions(config);
+export function toRunOptions(resolved: {
+  options: PluginOptionsView;
+  engineConfig: CoreConfigSubset;
+}): CliRunOptions {
+  const view = resolved.options;
   return {
     ...view,
     pathsInclude: view.paths?.include ?? [],
-    engineConfig: toEngineConfig(config),
+    engineConfig: resolved.engineConfig,
   };
 }
 
@@ -194,10 +194,11 @@ obfuscated bytes, and rewrites every reference to it.
 Every option below has one name in all four places: \`--key=value\` here,
 AFTERPACK_<KEY> in the environment with the key in SCREAMING_SNAKE_CASE
 (strings.minLength is AFTERPACK_STRINGS_MIN_LENGTH), nested in afterpack.json
-(the nearest one at or above the working directory), and — for the
-region-scoped keys — in an \`/* @afterpack key=value */\` source directive. A boolean key written alone
-means true; \`=false\` switches it off. Most specific wins: a directive, then a
-flag, then the environment, then afterpack.json.
+(the nearest one at or above the working directory). A boolean key written
+alone means true; \`=false\` switches it off. Most specific wins: a flag, then
+the environment, then afterpack.json. An empty value resets \`key\`, \`seed\` or
+a list to its default over every lower layer (AFTERPACK_KEY= builds locally
+on Free); an empty value for any other key is an error.
 
 Arguments:
   [path]                   directory of emitted JS to obfuscate, or a single

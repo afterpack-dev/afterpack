@@ -77,10 +77,11 @@ import {
   type WriteProtectionReceiptInput,
   writeProtectionReceipt,
 } from "./receipt.js";
-import type { CoreConfigSubset, SourceType } from "./registry.js";
+import { type CoreConfigSubset, cloudKey, type SourceType } from "./registry.js";
 import {
   type ResolvedBuildSeed,
   resolveBuildSeed,
+  type SeedFallback,
   type SeedOption,
   type SeedOrigin,
 } from "./seed.js";
@@ -184,6 +185,8 @@ export interface ObfuscationPassOptions {
   artifactOptions?: AfterpackArtifactOptions;
   hasBundlerSourcemap?: boolean;
   seed?: SeedOption;
+  seedFallback?: SeedFallback | null;
+  key?: string | null;
   buildLeg?: string;
   preset?: Preset;
   complexity?: number;
@@ -336,6 +339,7 @@ export async function runObfuscationPass(
     artifactOptions = {},
     env = process.env,
   } = options;
+  const key = cloudKey(options.key);
   const logger = silenceSummaryLines(options.logger ?? DEFAULT_LOGGER, options.diagnostics);
   const prefix = (message: string): string => `[${label}] ${message}`;
   const style: PassSummaryStyle = options.summaryStyle ?? "plugin";
@@ -402,7 +406,7 @@ export async function runObfuscationPass(
     resolveBuildSeed(
       options.seed,
       { root: cwd, leg: options.buildLeg ?? combinedProtectionMap.buildDir },
-      { env, warn: (m) => logger.warn(m) },
+      { env, warn: (m) => logger.warn(m), fallback: options.seedFallback },
     );
   const seed = resolvedSeed.seed;
   if (resolvedSeed.mismatch) {
@@ -601,7 +605,7 @@ export async function runObfuscationPass(
   });
   const saltEngine: SaltEngine | null =
     options.cloudEngineExpectation ??
-    (options.hashedNames ? await resolveSaltEngine(env, localEngineVersion) : null);
+    (options.hashedNames ? await resolveSaltEngine(key, env, localEngineVersion) : null);
   let namesPlan: HashedNamesPlan | null = null;
   let hashSalt: string | null = null;
   if (options.hashedNames && saltEngine && !options.emitToCaller) {
@@ -640,7 +644,7 @@ export async function runObfuscationPass(
     options.client?.coreVersion ?? null,
     localEngineVersion,
   );
-  const announcedEngine = isCloudBuild(env)
+  const announcedEngine = isCloudBuild(key)
     ? describeEngine("cloud", saltEngine?.probedCloudVersion ?? null)
     : describeEngine("local", localEngineDisplay);
   if (style !== "cli") {
@@ -664,9 +668,10 @@ export async function runObfuscationPass(
     if (error instanceof WirePathError) throw new Error(prefix(error.message));
     throw error;
   }
+  const wireConfig = { ...wire.config, key };
   let batch: EngineBatchResult;
   try {
-    batch = wire.toLocal(await engine.processBatch(wire.inputs, wire.config, context));
+    batch = wire.toLocal(await engine.processBatch(wire.inputs, wireConfig, context));
   } catch (error) {
     const cloud = toCloudApiError(error, { identity: options.client, prefix });
     if (!cloud) throw error;

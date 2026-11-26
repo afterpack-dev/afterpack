@@ -441,6 +441,7 @@ describe("prepareHashSalt", () => {
       leg: "dist",
       localEngineVersion: "0.2.4",
       settings: {},
+      key: null,
       env,
     });
     expect(first.resolvedSeed.seed).toBe(7);
@@ -452,6 +453,7 @@ describe("prepareHashSalt", () => {
       leg: "dist",
       localEngineVersion: "0.2.4",
       settings: {},
+      key: null,
       env,
     });
     expect(again.salt).toBe(first.salt);
@@ -465,6 +467,7 @@ describe("prepareHashSalt", () => {
       leg: "dist",
       localEngineVersion: "0.2.4",
       settings: {},
+      key: null,
       env,
     };
     const first = await prepareHashSalt(input);
@@ -482,7 +485,8 @@ describe("prepareHashSalt", () => {
           leg: "dist",
           localEngineVersion: "0.2.4",
           settings: {},
-          env: { AFTERPACK_KEY: "k" },
+          key: "k",
+          env: {},
           fetchImpl: versionFetch(engineVersion),
         })
       ).salt;
@@ -492,6 +496,7 @@ describe("prepareHashSalt", () => {
       leg: "dist",
       localEngineVersion: "0.2.4",
       settings: {},
+      key: null,
       env: {},
     });
     const cloudA = await at("0.3.0");
@@ -508,7 +513,8 @@ describe("prepareHashSalt", () => {
       leg: "dist",
       localEngineVersion: "0.2.4",
       settings: {},
-      env: { AFTERPACK_KEY: "k" },
+      key: "k",
+      env: {},
       warn: (message: string) => warnings.push(message),
       fetchImpl: failFetch,
     };

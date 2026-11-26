@@ -1,4 +1,5 @@
 import type { AfterpackArtifactOptions, Preset, RegionConfig, TransformKind } from "./policy.js";
+import type { SeedFallback } from "./seed.js";
 
 export type ConfigScope = "program" | "region";
 export type ConfigTier = "free" | "pro";
@@ -660,6 +661,43 @@ function describe(item: ValueType): string {
   }
 }
 
+export const CONFIG_RESET: unique symbol = Symbol.for("afterpack.config.reset");
+
+export function isBlank(value: unknown): value is string {
+  return typeof value === "string" && value.trim() === "";
+}
+
+export function emptyValue(key: ConfigKeyDef): typeof CONFIG_RESET | [] | undefined {
+  if (key.shape === "list" || key.shape === "mixedList") return [];
+  if (key.shape !== "scalar") return undefined;
+  return key.item.kind === "seed" || key.item.kind === "string" ? CONFIG_RESET : undefined;
+}
+
+export function emptyValueMessage(key: ConfigKeyDef, written: string, surface: string): string {
+  return (
+    `\`${key.path}\` is empty in \`${written}\` (${surface}) — an empty value resets only ` +
+    `\`key\`, \`seed\` and list keys to their default, and \`${key.path}\` has no empty ` +
+    `form: set it to ${describe(key.item)}, or remove it`
+  );
+}
+
+export function emptyGroupMessage(
+  group: string,
+  written: string,
+  surface: string,
+  spell: (path: string) => string = (p) => p,
+): string {
+  const children = CONFIG_CHILDREN.get(group) ?? [];
+  return (
+    `\`${written}\` is empty and names the group \`${group}\`, not a key (${surface}) — ` +
+    `set one of its keys instead: ${children.map((child) => `\`${spell(child)}\``).join(", ")}`
+  );
+}
+
+export function shownValue(value: unknown): string {
+  return value === CONFIG_RESET ? '""' : JSON.stringify(value);
+}
+
 export function misdirectedHint(
   key: ConfigKeyDef,
   value: unknown,
@@ -848,6 +886,16 @@ function walk(
     if (value === undefined) continue;
     const path = prefix ? `${prefix}.${name}` : name;
     const key = CONFIG_BY_PATH.get(path);
+    if (key && isBlank(value)) {
+      const reset = emptyValue(key);
+      if (reset === undefined) {
+        issues.push({
+          path,
+          message: emptyValueMessage(key, `"${path}": ${JSON.stringify(value)}`, surface),
+        });
+      } else target[name] = reset;
+      continue;
+    }
     if (key) {
       const failure = checkValue(key, value);
       if (failure) {
@@ -896,6 +944,50 @@ export function mergeConfig(base: AfterpackConfig, override: AfterpackConfig): A
     base as Record<string, unknown>,
     override as Record<string, unknown>,
   ) as AfterpackConfig;
+}
+
+function withoutResets(config: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(config)) {
+    if (value === CONFIG_RESET || value === undefined) continue;
+    if (isPlainObject(value)) {
+      const inner = withoutResets(value);
+      if (Object.keys(inner).length > 0) out[name] = inner;
+      continue;
+    }
+    out[name] = value;
+  }
+  return out;
+}
+
+function appendLists(config: Record<string, unknown>, extra: AfterpackConfig): AfterpackConfig {
+  const out = config;
+  for (const key of CONFIG_KEYS) {
+    if (key.shape !== "list" && key.shape !== "mixedList") continue;
+    const added = getPath(extra, key.path);
+    if (!Array.isArray(added) || added.length === 0) continue;
+    const current = getPath(out as AfterpackConfig, key.path);
+    const base: unknown[] = Array.isArray(current) ? current : [];
+    const fresh = added.filter(
+      (item) => !base.some((b) => JSON.stringify(b) === JSON.stringify(item)),
+    );
+    setPath(out, key.path, [...base, ...fresh]);
+  }
+  return out as AfterpackConfig;
+}
+
+export function mergeLayers(
+  layers: readonly AfterpackConfig[],
+  appended: AfterpackConfig = EMPTY_CONFIG,
+): AfterpackConfig {
+  const merged = layers.reduce<AfterpackConfig>(mergeConfig, EMPTY_CONFIG);
+  return appendLists(withoutResets(merged as Record<string, unknown>), appended);
+}
+
+export function cloudKey(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed === "" ? null : trimmed;
 }
 
 export function getPath(config: AfterpackConfig, path: string): unknown {
@@ -955,10 +1047,11 @@ function setPath(target: Record<string, unknown>, path: string, value: unknown):
 }
 
 export function toEngineConfig(config: AfterpackConfig): CoreConfigSubset {
+  const clean = withoutResets(config as Record<string, unknown>) as AfterpackConfig;
   const out: Record<string, unknown> = {};
   for (const key of CONFIG_KEYS) {
     if (key.surface !== "engine") continue;
-    const value = getPath(config, key.path);
+    const value = getPath(clean, key.path);
     if (value === undefined) continue;
     setPath(out, key.path, value);
   }
@@ -975,11 +1068,13 @@ export interface PluginOptionsView {
   build?: { autorun?: boolean };
   diagnostics?: { level?: "summary" | "all" | "none"; format?: "text" | "json" };
   paths?: { include?: string[] };
-  key?: string;
+  key: string | null;
+  seedFallback?: SeedFallback | null;
 }
 
 export function toPluginOptions(config: AfterpackConfig): PluginOptionsView {
-  const read = <T>(path: string): T | undefined => getPath(config, path) as T | undefined;
+  const clean = withoutResets(config as Record<string, unknown>) as AfterpackConfig;
+  const read = <T>(path: string): T | undefined => getPath(clean, path) as T | undefined;
   const set = <T extends object>(container: T): T | undefined =>
     Object.values(container).some((v) => v !== undefined) ? container : undefined;
   return {
@@ -1006,6 +1101,6 @@ export function toPluginOptions(config: AfterpackConfig): PluginOptionsView {
       format: read<"text" | "json">("diagnostics.format"),
     }),
     paths: set({ include: read<string[]>("paths.include") }),
-    key: read<string>("key"),
+    key: cloudKey(read("key")),
   };
 }

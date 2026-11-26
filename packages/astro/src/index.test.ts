@@ -1,6 +1,11 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { type AfterpackConfig, resolvePluginConfig } from "@afterpack/integration-utils";
 import { afterpackVite } from "@afterpack/vite";
 import { describe, expect, it, vi } from "vitest";
 import afterpackDefault, { afterpackAstro } from "./index.js";
+import { ASTRO_POST_BUILD_PLACEHOLDERS } from "./placeholders.js";
 
 vi.mock("@afterpack/vite", () => ({
   afterpackVite: vi.fn(() => ({ name: "afterpack-vite" })),
@@ -56,17 +61,17 @@ describe("afterpackAstro", () => {
       },
     });
 
-    expect(afterpackVite).toHaveBeenCalledWith({
-      seed: 99,
-      strings: {
-        preserveLiterals: [
-          "KEEP_ME",
-          "@@ASTRO_MANIFEST_REPLACE@@",
-          "@@ASTRO-LINKS@@",
-          "@@ASTRO-STYLES@@",
-          "$$server-islands-map$$",
-          "$$server-islands-name-map$$",
-        ],
+    expect(afterpackVite).toHaveBeenCalledWith(options, {
+      appendLists: {
+        strings: {
+          preserveLiterals: [
+            "@@ASTRO_MANIFEST_REPLACE@@",
+            "@@ASTRO-LINKS@@",
+            "@@ASTRO-STYLES@@",
+            "$$server-islands-map$$",
+            "$$server-islands-name-map$$",
+          ],
+        },
       },
     });
 
@@ -80,22 +85,41 @@ describe("afterpackAstro", () => {
     expect(serverPlugin.applyToEnvironment({ name: "client" })).toBe(false);
   });
 
-  it("pins Astro's post-build placeholders even with no user-provided preserveLiterals", () => {
-    afterpackAstro().hooks["astro:config:setup"]({
-      updateConfig: () => {},
-    });
-
-    expect(afterpackVite).toHaveBeenCalledWith({
-      strings: {
-        preserveLiterals: [
-          "@@ASTRO_MANIFEST_REPLACE@@",
-          "@@ASTRO-LINKS@@",
-          "@@ASTRO-STYLES@@",
-          "$$server-islands-map$$",
-          "$$server-islands-name-map$$",
-        ],
-      },
-    });
+  it("keeps the afterpack.json and environment lists on the server leg, then adds the placeholders", () => {
+    afterpackAstro().hooks["astro:config:setup"]({ updateConfig: () => {} });
+    const serverCall = vi.mocked(afterpackVite).mock.calls.find((call) => call.length > 1);
+    const appendLists = (serverCall?.[1] as { appendLists?: AfterpackConfig }).appendLists;
+    const cwd = mkdtempSync(join(tmpdir(), "afterpack-astro-"));
+    try {
+      writeFileSync(
+        join(cwd, "afterpack.json"),
+        JSON.stringify({ strings: { preserveLiterals: ["FROM_FILE"] } }),
+      );
+      const fromFile = resolvePluginConfig({ label: "afterpack-vite", cwd, env: {}, appendLists });
+      expect(fromFile.engineConfig.strings?.preserveLiterals).toEqual([
+        "FROM_FILE",
+        ...ASTRO_POST_BUILD_PLACEHOLDERS,
+      ]);
+      const fromEnv = resolvePluginConfig({
+        label: "afterpack-vite",
+        cwd,
+        env: { AFTERPACK_STRINGS_PRESERVE_LITERALS: "FROM_ENV" },
+        appendLists,
+      });
+      expect(fromEnv.engineConfig.strings?.preserveLiterals).toEqual([
+        "FROM_ENV",
+        ...ASTRO_POST_BUILD_PLACEHOLDERS,
+      ]);
+      const reset = resolvePluginConfig({
+        label: "afterpack-vite",
+        cwd,
+        env: { AFTERPACK_STRINGS_PRESERVE_LITERALS: "" },
+        appendLists,
+      });
+      expect(reset.engineConfig.strings?.preserveLiterals).toEqual(ASTRO_POST_BUILD_PLACEHOLDERS);
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
   });
 
   it("is also the default export", () => {

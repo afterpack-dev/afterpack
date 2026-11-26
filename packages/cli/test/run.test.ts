@@ -220,25 +220,41 @@ describe("run — the Pro key reaches the engine from every documented channel",
     return run({ argv, cwd: root, engine: { processBatch }, logger, version: "9.9.9", env });
   }
 
-  it("forwards --key= onto the variable the engine reads", async () => {
+  it("sends --key=… to the engine as `key`, without touching the environment", async () => {
     const env: Record<string, string | undefined> = {};
     writeFileSync(join(buildDir, "app.js"), "export const a = 1;");
     expect(await invokeWithEnv(["dist", "--key=ap_live_cli"], env)).toBe(0);
-    expect(env.AFTERPACK_KEY).toBe("ap_live_cli");
+    expect(engineCalls[0].config.key).toBe("ap_live_cli");
+    expect(env.AFTERPACK_KEY).toBeUndefined();
   });
 
-  it("forwards the lower-case variable twin, which was inert while AFTERPACK_SEED's twin worked", async () => {
+  it("sends the lower-case variable twin's key", async () => {
     const env: Record<string, string | undefined> = { AFTERPACK_key: "ap_live_lower" };
     writeFileSync(join(buildDir, "app.js"), "export const a = 1;");
     expect(await invokeWithEnv(["dist"], env)).toBe(0);
-    expect(env.AFTERPACK_KEY).toBe("ap_live_lower");
+    expect(engineCalls[0].config.key).toBe("ap_live_lower");
+    expect(env.AFTERPACK_KEY).toBeUndefined();
   });
 
-  it("sets nothing when no channel supplied a key, so a Free build stays Free", async () => {
+  it("sends `key: null` when no channel supplied a key, so a Free build stays Free", async () => {
     const env: Record<string, string | undefined> = {};
     writeFileSync(join(buildDir, "app.js"), "export const a = 1;");
     expect(await invokeWithEnv(["dist"], env)).toBe(0);
+    expect(engineCalls[0].config).toHaveProperty("key", null);
     expect(env.AFTERPACK_KEY).toBeUndefined();
+  });
+
+  it("sends `key: null` when AFTERPACK_KEY= resets the key afterpack.json sets", async () => {
+    writeFileSync(join(root, "afterpack.json"), JSON.stringify({ key: "ap_live_file" }));
+    writeFileSync(join(buildDir, "app.js"), "export const a = 1;");
+    expect(await invokeWithEnv(["dist"], { AFTERPACK_KEY: "" })).toBe(0);
+    expect(engineCalls[0].config).toHaveProperty("key", null);
+  });
+
+  it("sends `key: null` for --key= over a key in the environment", async () => {
+    writeFileSync(join(buildDir, "app.js"), "export const a = 1;");
+    expect(await invokeWithEnv(["dist", "--key="], { AFTERPACK_KEY: "ap_live_env" })).toBe(0);
+    expect(engineCalls[0].config).toHaveProperty("key", null);
   });
 
   it("never prints the key", async () => {
@@ -286,6 +302,15 @@ describe("run — the Pro upsell line is suppressed whenever a key resolves from
       await invokeTTY(["dist", "--protectionMap.enabled=false"], { AFTERPACK_KEY: "ap_live_env" }),
     ).toBe(0);
     expect(out.join("\n")).not.toContain("10 MB/month free");
+  });
+
+  it("shows it when AFTERPACK_KEY= resets the afterpack.json key, as the build runs Free", async () => {
+    writeFileSync(join(buildDir, "app.js"), "export const a = 1;");
+    writeFileSync(join(root, "afterpack.json"), JSON.stringify({ key: "ap_live_file" }));
+    expect(await invokeTTY(["dist", "--protectionMap.enabled=false"], { AFTERPACK_KEY: " " })).toBe(
+      0,
+    );
+    expect(out.join("\n")).toContain("10 MB/month free");
   });
 
   it("still suppresses it in CI even with no key at all", async () => {

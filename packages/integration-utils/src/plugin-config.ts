@@ -7,6 +7,7 @@ import {
   CONFIG_BY_PATH,
   CONFIG_KEYS,
   CONFIG_PREFIXES,
+  CONFIG_RESET,
   type ConfigIssue,
   type CoreConfigSubset,
   deepMerge,
@@ -14,12 +15,15 @@ import {
   getPath,
   isPlainObject,
   mergeConfig,
+  mergeLayers,
   type PluginOptionsView,
+  shownValue,
   toEngineConfig,
   toPluginOptions,
   unknownKeyMessage,
   validateConfig,
 } from "./registry.js";
+import type { SeedFallback, SeedOrigin } from "./seed.js";
 
 export const PLUGIN_LOCAL_KEYS = [
   "git",
@@ -83,6 +87,7 @@ export interface PluginConfigInput {
   env?: Record<string, string | undefined>;
   localKeys?: readonly string[];
   unsupported?: Readonly<Record<string, string>>;
+  appendLists?: AfterpackConfig;
 }
 
 export interface ResolvedPluginConfig {
@@ -106,6 +111,8 @@ export type PassSettings = Pick<
   | "diagnostics"
   | "directivesEnabled"
   | "directivesEnabledExplicit"
+  | "seedFallback"
+  | "key"
 >;
 
 export function passSettings(
@@ -115,6 +122,8 @@ export function passSettings(
   return {
     artifactOptions: settings.artifactOptions,
     seed: settings.seed,
+    seedFallback: settings.seedFallback,
+    key: settings.key,
     preset: settings.preset,
     complexity: settings.complexity,
     regions: settings.regions,
@@ -142,12 +151,45 @@ function unsupportedIssues(
   return out;
 }
 
-export function applyResolvedKey(
-  config: AfterpackConfig,
-  env: Record<string, string | undefined> = process.env,
-): void {
-  const key = getPath(config, "key");
-  if (typeof key === "string" && key !== "") env.AFTERPACK_KEY = key;
+export interface ConfigLayer {
+  config: AfterpackConfig;
+  from: string;
+  seedOrigin: SeedOrigin;
+}
+
+function gitSeedFallback(layers: readonly ConfigLayer[]): SeedFallback | null {
+  let top = layers.length - 1;
+  while (top >= 0 && getPath(layers[top].config, "seed") === undefined) top--;
+  if (top < 0 || getPath(layers[top].config, "seed") !== "git") return null;
+  for (let i = top - 1; i >= 0; i--) {
+    const seed = getPath(layers[i].config, "seed");
+    if (seed === undefined || seed === "git") continue;
+    if (seed === CONFIG_RESET) return null;
+    if (typeof seed !== "number" && typeof seed !== "string") return null;
+    return { seed, origin: layers[i].seedOrigin, from: layers[i].from };
+  }
+  return null;
+}
+
+export interface SettledConfig {
+  config: AfterpackConfig;
+  options: PluginOptionsView;
+  engineConfig: CoreConfigSubset;
+}
+
+export function settleConfigLayers(
+  layers: readonly ConfigLayer[],
+  appendLists?: AfterpackConfig,
+): SettledConfig {
+  const config = mergeLayers(
+    layers.map((l) => l.config),
+    appendLists,
+  );
+  return {
+    config,
+    options: { ...toPluginOptions(config), seedFallback: gitSeedFallback(layers) },
+    engineConfig: toEngineConfig(config),
+  };
 }
 
 function sameRankConflicts(options: AfterpackConfig, cli: AfterpackConfig): ConfigIssue[] {
@@ -156,12 +198,12 @@ function sameRankConflicts(options: AfterpackConfig, cli: AfterpackConfig): Conf
     const fromOptions = getPath(options, key.path);
     const fromCli = getPath(cli, key.path);
     if (fromOptions === undefined || fromCli === undefined) continue;
-    if (JSON.stringify(fromOptions) === JSON.stringify(fromCli)) continue;
+    if (shownValue(fromOptions) === shownValue(fromCli)) continue;
     issues.push({
       path: key.path,
       message:
         `\`${key.path}\` is set twice at the same precedence — the options object says ` +
-        `${JSON.stringify(fromOptions)}, the command line says ${JSON.stringify(fromCli)}. ` +
+        `${shownValue(fromOptions)}, the command line says ${shownValue(fromCli)}. ` +
         "A flag and an option rank equally, so neither wins: set it in one of them, or move " +
         "it to afterpack.json.",
     });
@@ -201,7 +243,16 @@ export function resolvePluginConfig(input: PluginConfigInput): ResolvedPluginCon
   const normalized = normalizePluginOptions(input.options, localKeys, optionsSurface);
   const options = validateConfig(normalized.config, optionsSurface);
   const explicit = mergeConfig(options.config, cli.config);
-  const config = mergeConfig(mergeConfig(file.config, env.config), explicit);
+  const fileName = file.path ?? CONFIG_FILE_NAME;
+  const settled = settleConfigLayers(
+    [
+      { config: file.config, from: fileName, seedOrigin: "option" },
+      { config: env.config, from: "the environment", seedOrigin: "env" },
+      { config: explicit, from: "the command line or plugin options", seedOrigin: "option" },
+    ],
+    input.appendLists,
+  );
+  const config = settled.config;
   const issues: string[] = [
     ...file.issues.map((i) => `  ${file.path ?? CONFIG_FILE_NAME}: ${i.message}`),
     ...env.issues.map((i) => `  environment: ${i.message}`),
@@ -220,8 +271,7 @@ export function resolvePluginConfig(input: PluginConfigInput): ResolvedPluginCon
       [`[${input.label}] refusing to build with an invalid configuration:`, ...issues].join("\n"),
     );
   }
-  applyResolvedKey(config, input.env ?? process.env);
-  const pluginOptions = toPluginOptions(config);
+  const pluginOptions = settled.options;
   const supplied = isPlainObject(input.options) ? input.options : {};
   const localArtifactOptions: Record<string, unknown> = {};
   for (const name of PLUGIN_LOCAL_KEYS) {
@@ -233,7 +283,7 @@ export function resolvePluginConfig(input: PluginConfigInput): ResolvedPluginCon
       ...pluginOptions,
       artifactOptions: { ...pluginOptions.artifactOptions, ...localArtifactOptions },
     },
-    engineConfig: toEngineConfig(config),
+    engineConfig: settled.engineConfig,
     configFile: file.path,
     positionals: cli.positionals,
     help: false,

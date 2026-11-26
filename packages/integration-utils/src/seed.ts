@@ -27,6 +27,12 @@ export const SEED_ENV_VAR = "AFTERPACK_SEED";
 
 export type SeedOrigin = "option" | "git" | "env" | "session" | "fresh";
 
+export interface SeedFallback {
+  seed: number | string;
+  origin: SeedOrigin;
+  from: string;
+}
+
 interface BuildSeedScope {
   root: string;
   leg: string;
@@ -46,6 +52,7 @@ interface ResolveBuildSeedDeps {
   warn?: (message: string) => void;
   env?: Record<string, string | undefined>;
   exportToEnv?: boolean;
+  fallback?: SeedFallback | null;
 }
 
 export function parseSeedValue(raw: string): number | string {
@@ -109,6 +116,19 @@ function openGeneration(root: string, leg: string): BuildSession {
   return session;
 }
 
+function pinnedEnvSeed(env: Record<string, string | undefined>): number | string | undefined {
+  const fromEnv = env[SEED_ENV_VAR];
+  if (fromEnv == null || fromEnv.trim() === "" || isOwnEnvExport(env, fromEnv)) return undefined;
+  return parseSeedValue(fromEnv);
+}
+
+function gitFallbackNotice(fallback: { seed: number | string; from: string } | null): string {
+  const using = fallback
+    ? `falling back to the seed ${JSON.stringify(fallback.seed)} from ${fallback.from}`
+    : "using a fresh random seed for this build";
+  return `[afterpack] seed "git": no git repository / HEAD found; ${using}.`;
+}
+
 function resolveWithinSession(
   input: SeedOption,
   session: BuildSession,
@@ -117,20 +137,23 @@ function resolveWithinSession(
 ): { seed: number | string; origin: SeedOrigin } {
   if (typeof input === "number") return { seed: input, origin: "option" };
   if (typeof input === "string" && input !== "git") return { seed: input, origin: "option" };
+  const layered = deps.fallback !== undefined;
+  const fromEnv = layered ? undefined : pinnedEnvSeed(env);
   if (input === "git") {
     const head = (deps.gitHead ?? gitHead)();
     if (head) return { seed: head, origin: "git" };
+    const fallback = layered
+      ? (deps.fallback ?? null)
+      : fromEnv === undefined
+        ? null
+        : { seed: fromEnv, origin: "env" as const, from: SEED_ENV_VAR };
     if (!session.gitFallbackWarned) {
       session.gitFallbackWarned = true;
-      (deps.warn ?? ((m: string) => console.warn(m)))(
-        '[afterpack] seed "git": no git repository / HEAD found; ' +
-          "using a fresh random seed for this build.",
-      );
+      (deps.warn ?? ((m: string) => console.warn(m)))(gitFallbackNotice(fallback));
     }
-  }
-  const fromEnv = env[SEED_ENV_VAR];
-  if (fromEnv != null && fromEnv !== "" && !isOwnEnvExport(env, fromEnv)) {
-    return { seed: parseSeedValue(fromEnv), origin: "env" };
+    if (fallback) return { seed: fallback.seed, origin: fallback.origin };
+  } else if (fromEnv !== undefined) {
+    return { seed: fromEnv, origin: "env" };
   }
   if (session.seed !== undefined) return { seed: session.seed, origin: "session" };
   return { seed: (deps.randomSeed ?? randomSeed)(), origin: "fresh" };
