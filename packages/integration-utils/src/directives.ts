@@ -217,7 +217,7 @@ const DIRECTIVE_KEYS: readonly KeySpec[] = [
     key: "complexity",
     kind: "amplifier",
     apply: (delta, value) => {
-      const n = Number(value);
+      const n = value.trim() === "" ? Number.NaN : Number(value);
       if (!Number.isFinite(n) || n < 0) return "`complexity` needs a non-negative number";
       delta.complexity = n;
       return undefined;
@@ -227,7 +227,7 @@ const DIRECTIVE_KEYS: readonly KeySpec[] = [
     key: "inflation.max",
     kind: "amplifier",
     apply: (delta, value) => {
-      const n = Number(value);
+      const n = value.trim() === "" ? Number.NaN : Number(value);
       if (!Number.isFinite(n) || n < 0) return "`inflation.max` needs a non-negative number";
       delta.inflation = { max: n };
       return undefined;
