@@ -5,5 +5,5 @@ import type { Plugin } from "vite";
 export type AfterpackSveltekitOptions = AfterpackPluginOptions;
 
 export function afterpackSveltekit(options: AfterpackSveltekitOptions = {}): Plugin {
-  return afterpackVite(options);
+  return afterpackVite(options, { framework: "sveltekit" });
 }

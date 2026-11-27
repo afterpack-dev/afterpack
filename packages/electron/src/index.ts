@@ -84,7 +84,10 @@ export function afterpackElectron(
     );
   }
   const sharedSeedProjectRoot = rest.projectRoot ?? process.cwd();
-  const obfuscationPlugin = afterpackVite({ ...rest, leg, projectRoot: sharedSeedProjectRoot });
+  const obfuscationPlugin = afterpackVite(
+    { ...rest, leg, projectRoot: sharedSeedProjectRoot },
+    { framework: "electron" },
+  );
   const bytecodeAndSeedGuardPlugin = guardPlugin(leg, resolvedSettings.seed !== undefined);
   return [obfuscationPlugin, bytecodeAndSeedGuardPlugin];
 }

@@ -10,6 +10,8 @@ import {
 
 export type AfterpackAstroOptions = AfterpackPluginOptions;
 
+const ASTRO = "astro";
+
 const SERVER_VITE_ENVIRONMENT_NAMES = ["ssr", "prerender"];
 
 function assertAstroPlaceholdersPinned(): void {
@@ -44,11 +46,11 @@ export function afterpackAstro(options: AfterpackAstroOptions = {}): AfterpackAs
       "astro:config:setup": ({ updateConfig }) => {
         assertAstroPlaceholdersPinned();
         const clientPlugin = {
-          ...afterpackVite(options),
+          ...afterpackVite(options, { framework: ASTRO }),
           applyToEnvironment: (environment: { name: string }) => environment.name === "client",
         };
         const serverPlugin = {
-          ...afterpackVite(options, { appendLists: SERVER_LISTS }),
+          ...afterpackVite(options, { appendLists: SERVER_LISTS, framework: ASTRO }),
           applyToEnvironment: (environment: { name: string }) =>
             SERVER_VITE_ENVIRONMENT_NAMES.includes(environment.name),
         };

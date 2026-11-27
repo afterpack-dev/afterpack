@@ -31,7 +31,7 @@ describe("@afterpack/nuxt module", () => {
     expect(typeof factory).toBe("function");
 
     const plugin = factory();
-    expect(afterpackVite).toHaveBeenCalledWith(options);
+    expect(afterpackVite).toHaveBeenCalledWith(options, { framework: "nuxt" });
     expect(plugin).toEqual({ name: "afterpack-vite" });
   });
 });

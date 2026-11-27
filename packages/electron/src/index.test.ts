@@ -47,7 +47,10 @@ describe("afterpackElectron — per-leg wiring", () => {
     ["renderer"],
   ])("names the %s leg, which is what keys its seed and its Protection Map", (leg) => {
     afterpackElectron({ leg, preset: "medium", projectRoot: root });
-    expect(afterpackVite).toHaveBeenCalledWith({ preset: "medium", leg, projectRoot: root });
+    expect(afterpackVite).toHaveBeenCalledWith(
+      { preset: "medium", leg, projectRoot: root },
+      { framework: "electron" },
+    );
   });
 
   it("pins every leg to ONE project root — electron-vite roots the renderer at src/renderer", () => {

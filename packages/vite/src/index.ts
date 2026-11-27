@@ -29,6 +29,7 @@ import {
   writeDeferredProtectionReceipt,
 } from "@afterpack/integration-utils";
 import type { Plugin, ResolvedConfig, UserConfig } from "vite";
+import { viteBundleLabel } from "./bundle-label.js";
 
 export type AfterpackViteOptions = AfterpackPluginOptions & {
   leg?: string;
@@ -44,6 +45,7 @@ const PATHS_INCLUDE_UNSUPPORTED =
 
 export interface AfterpackViteLayers {
   appendLists?: AfterpackConfig;
+  framework?: string;
 }
 
 export function afterpackVite(
@@ -65,6 +67,8 @@ export function afterpackVite(
   let root = "";
   let buildSourcemap = false;
   let building = false;
+  let configFile: string | undefined;
+  let ssrBuild = false;
   const preMinifyCaptureByModuleId = new Map<
     string,
     { source: string; directives: CapturedDirective[]; renameGlobals: boolean }
@@ -127,6 +131,8 @@ export function afterpackVite(
       root = config.root;
       outDir = resolve(config.root, config.build.outDir);
       buildSourcemap = Boolean(config.build.sourcemap);
+      configFile = config.configFile;
+      ssrBuild = Boolean(config.build.ssr);
       building = config.command === "build";
       if (autorun && building) {
         const refusal = sriPluginRefusal(config.plugins as { name?: string }[], label);
@@ -214,6 +220,7 @@ export function afterpackVite(
         }
         captureDiagnostics.length = 0;
 
+        const environmentName: unknown = this.environment?.name;
         const result = await runObfuscationPass({
           files,
           inputs,
@@ -221,6 +228,14 @@ export function afterpackVite(
           engine: { processBatch, version },
           client: resolveClientIdentity(import.meta.url),
           telemetry: createTelemetryReporter(),
+          bundle: viteBundleLabel({
+            configFile,
+            root: projectRoot,
+            framework: layers.framework,
+            environment:
+              typeof environmentName === "string" ? environmentName : ssrBuild ? "ssr" : "client",
+            leg,
+          }),
           label,
           cwd: projectRoot,
           buildLeg: leg,

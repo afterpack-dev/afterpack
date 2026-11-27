@@ -29,7 +29,7 @@ describe("afterpackAstro", () => {
       },
     });
 
-    expect(afterpackVite).toHaveBeenCalledWith(options);
+    expect(afterpackVite).toHaveBeenCalledWith(options, { framework: "astro" });
     expect(received?.vite?.plugins).toHaveLength(2);
     expect((received?.vite?.plugins as { name: string }[])[0].name).toBe("afterpack-vite");
   });
@@ -73,6 +73,7 @@ describe("afterpackAstro", () => {
           ],
         },
       },
+      framework: "astro",
     });
 
     const serverPlugin = (
@@ -87,7 +88,9 @@ describe("afterpackAstro", () => {
 
   it("keeps the afterpack.json and environment lists on the server leg, then adds the placeholders", () => {
     afterpackAstro().hooks["astro:config:setup"]({ updateConfig: () => {} });
-    const serverCall = vi.mocked(afterpackVite).mock.calls.find((call) => call.length > 1);
+    const serverCall = vi
+      .mocked(afterpackVite)
+      .mock.calls.find((call) => call[1]?.appendLists !== undefined);
     const appendLists = (serverCall?.[1] as { appendLists?: AfterpackConfig }).appendLists;
     const cwd = mkdtempSync(join(tmpdir(), "afterpack-astro-"));
     try {

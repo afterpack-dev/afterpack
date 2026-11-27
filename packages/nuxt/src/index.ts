@@ -11,7 +11,7 @@ export default defineNuxtModule<AfterpackNuxtOptions>({
     compatibility: { nuxt: ">=3.0.0" },
   },
   setup(options) {
-    const createFreshPluginPerViteEnvironment = () => afterpackVite(options);
+    const createFreshPluginPerViteEnvironment = () => afterpackVite(options, { framework: "nuxt" });
     addVitePlugin(createFreshPluginPerViteEnvironment);
   },
 });

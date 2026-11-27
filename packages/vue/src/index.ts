@@ -5,5 +5,5 @@ import type { Plugin } from "vite";
 export type AfterpackVueOptions = AfterpackPluginOptions;
 
 export function afterpackVue(options: AfterpackVueOptions = {}): Plugin {
-  return afterpackVite(options);
+  return afterpackVite(options, { framework: "vue" });
 }
