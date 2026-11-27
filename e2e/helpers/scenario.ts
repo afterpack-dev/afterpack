@@ -9,7 +9,7 @@ import {
 } from "@playwright/test";
 import { currentFixture } from "./current.js";
 import { readExpectations } from "./expectations.js";
-import { stripHashes } from "./normalize.js";
+import { stripHashes, stripQueryHashes } from "./normalize.js";
 import type { Fixture } from "./registry.js";
 import { waitUntilReady } from "./smoke.js";
 
@@ -51,7 +51,7 @@ const IN_PLACE_MARKER = "__afterpackInPlace";
 export function normalizeUrl(url: string, origin: string): string {
   const parsed = new URL(url);
   const where = parsed.origin === origin ? "" : parsed.origin;
-  return `${where}${stripHashes(`${parsed.pathname}${parsed.search}`)}`;
+  return `${where}${stripHashes(`${parsed.pathname}${stripQueryHashes(parsed.search)}`)}`;
 }
 
 export function normalizeMessage(text: string, origin: string): string {
