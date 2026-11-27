@@ -2,6 +2,25 @@
 
 The full changelog, including cloud and dashboard changes, is at https://www.afterpack.dev/changelog.
 
+## 1.2.0 - 2026-11-28
+
+A file list for every build, and excluded files stay local
+
+### Added
+
+- **Dashboard:** Every Pro cloud build's page lists the files it was made of, each with its size before and after protection, its inflation and its status. Coverage, inflation and complexity show on every build, with or without a Protection Map. ([Builds](https://www.afterpack.dev/docs/dashboard/builds))
+- **Dashboard:** A build's page names the bundle it built, such as `vite.landing.config.ts`, and shows whether it ran in CI, with a link to the run, or locally. The builds list groups the builds of one commit by bundle. The bundle name and the CI details come from the 1.2.0 CLI and plugins.
+- **Plugins:** A Pro cloud build reports the bundle it built, the CI provider and a link to the CI run, for the build's page.
+- **Engine:** The build context in `@afterpack/core` accepts `bundle`, `environment`, `ciProvider` and `ciRunUrl`.
+
+### Changed
+
+- **Plugins:** On a Pro cloud build, files matched by `paths.exclude` are no longer uploaded or billed. They ship unchanged, as before, and still appear in the build's file list. ([paths.exclude](https://www.afterpack.dev/docs/config#paths-exclude))
+
+### Fixed
+
+- **Cloud:** A Pro cloud build no longer hangs when an upload stalls: the stalled part is sent again, and it is not billed twice.
+
 ## 1.1.0 - 2026-11-28
 
 Cloud builds of any size, all-caps variables and empty values that reset
