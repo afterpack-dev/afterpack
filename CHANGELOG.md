@@ -2,6 +2,28 @@
 
 The full changelog, including cloud and dashboard changes, is at https://www.afterpack.dev/changelog.
 
+## 1.1.0 - 2026-11-28
+
+Cloud builds of any size, all-caps variables and empty values that reset
+
+### Added
+
+- **Cloud:** A Pro cloud build of any size runs as one build. The server splits a large build into parts, and you get one entry in the builds list, one usage charge and one Protection Map that merges every part. The 200-file limit on a cloud build is gone with the 1.1.0 CLI and plugins; older versions keep sending each build as one request, within that limit. A build that is cancelled or drops gives back what it reserved for files it did not deliver.
+- **Dashboard:** A cloud build in progress shows as building, with the bytes it has reserved. Once it finishes, its page shows what was billed and what went back.
+- **Plugins:** An empty value resets `key`, `seed` or a list option to its default and overrides `afterpack.json`: `AFTERPACK_KEY=` builds locally on Free, and `AFTERPACK_SEED=` draws a fresh seed. Before, an empty seed pinned one fixed seed, in the plugins and in `@afterpack/core` and `@afterpack/wasm` alike. An empty value for any other option, such as `AFTERPACK_PRESET=`, now fails the build with an error naming the option, and so do `complexity=` and `inflation.max=` in a directive. ([Empty values](https://www.afterpack.dev/docs/config#empty-values))
+- **Engine:** In `@afterpack/core`, `key: null` builds locally on Free without reading `AFTERPACK_KEY` or `afterpack.json`.
+- **CLI:** `afterpack network keygen` prints a key pair for network protection, which arrives in a later release.
+
+### Changed
+
+- **Plugins:** Every option's environment variable is spelled in capitals: `strings.minLength` is `AFTERPACK_STRINGS_MIN_LENGTH`. The spelling that keeps the option's case, `AFTERPACK_strings_minLength`, still works. Setting both spellings of one option to different values fails the build. An all-caps variable that looks like an option but matches none, such as `AFTERPACK_SOURCEMAP_ENABLED`, fails with the right spelling. ([Configuration](https://www.afterpack.dev/docs/config))
+- **Plugins:** The CLI and plugins read `key` only from `--key=`, `AFTERPACK_KEY` and the `afterpack.json` they read the rest of the configuration from. A key in another `afterpack.json`, such as one at a monorepo root above the project's own, no longer applies. If your key lives only in a monorepo-root `afterpack.json`, move it to `AFTERPACK_KEY` or the project's own `afterpack.json`. With an engine older than 1.1.0, a build that would pick up such a key fails and names the update to install. ([Key lookup](https://www.afterpack.dev/docs/config#key-lookup))
+
+### Fixed
+
+- **Plugins:** `seed: "git"` with no commit to read falls back to the seed in `AFTERPACK_SEED`, then the one in `afterpack.json`.
+- **Plugins:** Astro's server build adds its entries to `strings.preserveLiterals` instead of replacing the list from `afterpack.json` or the environment.
+
 ## 1.0.3 - 2026-11-13
 
 A smaller WebAssembly engine and a `super` fix
