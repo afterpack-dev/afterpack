@@ -1,7 +1,7 @@
 {
   "framework": "sveltekit",
   "frameworkClass": "ssg",
-  "description": "A SvelteKit notes app with the static adapter (SSG), obfuscated via @afterpack/sveltekit (over @afterpack/vite): client-side navigation between prerendered routes, a zod-validated form, module-level $state shared across routes, notes persisted to localStorage, and a report route with a universal load function that reads the notes through a class with private fields and getters. @afterpack runs on Vite closeBundle, so the client bundle is obfuscated before the static adapter copies it into build/.",
+  "description": "A SvelteKit notes app with the static adapter (SSG), obfuscated via @afterpack/sveltekit (over @afterpack/vite): client-side navigation between prerendered routes, a zod-validated form, module-level $state shared across routes, notes persisted to localStorage, and a report route with a universal load function that reads the notes through a class with private fields and getters. The prerendered pages show their content before they hydrate, so the layout sets <main data-app-ready> once it has, and the smoke check waits for smoke.readySelector before it clicks. @afterpack runs on Vite closeBundle, so the client bundle is obfuscated before the static adapter copies it into build/.",
   "seed": 517293846,
   "deterministicOutput": true,
   "build": {
@@ -20,6 +20,7 @@
     "minRenamed": 10
   },
   "smoke": {
+    "readySelector": "main[data-app-ready]",
     "routes": [
       {
         "path": "/",

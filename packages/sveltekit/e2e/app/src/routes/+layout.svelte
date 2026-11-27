@@ -3,8 +3,12 @@ import { onMount } from "svelte";
 import { restoreNotes } from "$lib/notes.svelte.js";
 
 let { children } = $props();
+let hydrated = $state(false);
 
-onMount(restoreNotes);
+onMount(() => {
+  restoreNotes();
+  hydrated = true;
+});
 </script>
 
 <nav aria-label="Main">
@@ -12,6 +16,6 @@ onMount(restoreNotes);
   <a href="/notes">Notes</a>
   <a href="/reports">Reports</a>
 </nav>
-<main>
+<main data-app-ready={hydrated ? "" : undefined}>
   {@render children()}
 </main>
