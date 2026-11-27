@@ -31,6 +31,11 @@ export function breakingLine(version) {
   return major === 0 ? `0.${minor}` : `${major}`;
 }
 
+export function minorStart(version) {
+  const [major, minor] = triple(version);
+  return `${major}.${minor}.0`;
+}
+
 export function lineStart(version) {
   const [major, minor] = triple(version);
   return major === 0 ? `0.${minor}.0` : `${major}.0.0`;
@@ -54,7 +59,7 @@ export function planEngineBump({ rootVersion, packages, minCore }, next) {
   }
   const range = `~${next}`;
   const lineChanged = breakingLine(next) !== breakingLine(current);
-  const floor = lineChanged ? higher(rootVersion, lineStart(next)) : rootVersion;
+  const floor = higher(rootVersion, minorStart(next));
   const nextMinCore = lineChanged ? higher(minCore, lineStart(next)) : minCore;
   const repins = pins.filter((pin) => pin.range !== range);
   const changed = repins.length > 0 || floor !== rootVersion || nextMinCore !== minCore;

@@ -108,7 +108,9 @@ publishes any. To abandon a half-published version, raise the root `package.json
 
 Every package in this repository carries **one version**, stamped at publish time and never
 committed: the root `package.json` version is a floor, and the next version is one bump above the
-last `vX.Y.Z` tag or the npm `latest`, whichever is higher. `node scripts/release-plan.mjs changed`
+last `vX.Y.Z` tag or the npm `latest`, whichever is higher. An engine bump raises that floor to the
+engine's `major.minor.0`, so the packages never release below the engine they pin.
+`node scripts/release-plan.mjs changed`
 shows what a release would ship; never bump a single package on its own.
 
 The root `CHANGELOG.md` is generated from the website's changelog

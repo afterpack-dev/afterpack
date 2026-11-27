@@ -57,8 +57,15 @@ describe("planEngineBump", () => {
     assert.equal(planEngineBump(repo(), "1.0.0").floor, "1.0.0");
     const minor = planEngineBump(repo({ root: "1.2.0", pin: "~1.2.3", minCore: "1.0.0" }), "1.3.0");
     assert.equal(minor.lineChanged, false);
-    assert.equal(minor.floor, "1.2.0");
     assert.equal(minor.minCore, "1.0.0");
+  });
+
+  it("raises the floor to the engine's minor, so the CLI and plugins never release below it", () => {
+    const minor = planEngineBump(repo({ root: "1.0.0", pin: "~1.0.3", minCore: "1.0.0" }), "1.1.0");
+    assert.equal(minor.floor, "1.1.0");
+    assert.equal(minor.changed, true);
+    const patch = planEngineBump(repo({ root: "1.1.0", pin: "~1.1.0", minCore: "1.0.0" }), "1.1.1");
+    assert.equal(patch.floor, "1.1.0");
   });
 
   it("never lowers a floor that is already higher", () => {

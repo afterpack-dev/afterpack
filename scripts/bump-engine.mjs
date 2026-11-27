@@ -20,9 +20,8 @@ if (!plan.changed) {
   console.log(`::notice::${CORE} ${next}: nothing to change (${plan.reason})`);
 } else {
   console.log(`${CORE} ${plan.reason}: pin ${plan.range}`);
-  if (plan.lineChanged) {
-    console.log(`new release line: package floor ${plan.floor}, MIN_CORE_VERSION ${plan.minCore}`);
-  }
+  if (written.includes("package.json")) console.log(`package floor ${plan.floor}`);
+  if (plan.lineChanged) console.log(`new release line: MIN_CORE_VERSION ${plan.minCore}`);
   for (const file of written) console.log(`  wrote ${file}`);
 }
 
@@ -33,6 +32,6 @@ appendFile(
 appendFile(
   "GITHUB_STEP_SUMMARY",
   plan.changed
-    ? `Bumped \`${CORE}\` ${plan.reason}: every package pins \`${plan.range}\`${plan.lineChanged ? `, the packages move to \`${plan.floor}\` and the runtime floor to \`${plan.minCore}\`` : ""}.\n\n`
+    ? `Bumped \`${CORE}\` ${plan.reason}: every package pins \`${plan.range}\`${written.includes("package.json") ? `, the packages move to \`${plan.floor}\`` : ""}${plan.lineChanged ? ` and the runtime floor to \`${plan.minCore}\`` : ""}.\n\n`
     : `\`${CORE}\` ${next}: ${plan.reason}; nothing to commit.\n\n`,
 );
