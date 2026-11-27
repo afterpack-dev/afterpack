@@ -28,6 +28,7 @@ import {
   writeDeferredProtectionReceipt,
 } from "@afterpack/integration-utils";
 import type { Compilation, Compiler, sources } from "webpack";
+import { webpackConfigFileLabel } from "./config-label.js";
 
 const PLUGIN_NAME = "AfterpackWebpackPlugin";
 const EMITTED_JS_RE = /\.(?:js|mjs|cjs)$/;
@@ -340,7 +341,7 @@ export class AfterpackWebpackPlugin {
       engine: { processBatch, version },
       client: resolveClientIdentity(import.meta.url),
       telemetry: createTelemetryReporter(),
-      bundle: compiler.options.name,
+      bundle: compiler.options.name || webpackConfigFileLabel(process.argv, process.cwd(), context),
       label: "afterpack-webpack",
       cwd: context,
       resolvedSeed: this.hashSalt?.resolvedSeed,
