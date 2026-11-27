@@ -23,6 +23,7 @@ export {
   stripBundleCssSourceMaps,
   unsaltedAssetsWarning,
 } from "./bundle.js";
+export { pathBundleLabel, qualifiedBundleLabel } from "./bundle-label.js";
 export {
   type CollectJsOptions,
   collectJsFiles,

@@ -11,6 +11,7 @@ import {
   writeCombinedProtectionMap,
 } from "./artifacts.js";
 import { sha256Hex, stagedPath } from "./atomic-write.js";
+import { detectCiContext } from "./ci.js";
 import { collectSourceMaps, collectStylesheets } from "./collect.js";
 import {
   assertSupportedCore,
@@ -64,6 +65,7 @@ import { type CloudNotice, reportNotices, sanitizeServerText } from "./notices.j
 import {
   type AfterpackArtifactOptions,
   type BuildContext,
+  type BuildInsights,
   buildContext,
   buildEngineConfig,
   type CoreConfig,
@@ -217,6 +219,7 @@ export interface ObfuscationPassOptions {
   telemetry?: TelemetryReporter;
   clientVersion?: string;
   client?: ClientIdentity | null;
+  bundle?: string;
   logger?: Logger;
   startedAt?: number;
   summaryStyle?: PassSummaryStyle;
@@ -318,6 +321,15 @@ function removeBundlerSourceMaps(input: {
   if (sweepDir != null && !policy.sourceMap) {
     stripCssSourceMappingURLs(collectStylesheets(sweepDir));
   }
+}
+
+function cloudBuildInsights(
+  env: EnvLike,
+  bundle: string | undefined,
+  shareRunUrl: boolean,
+): BuildInsights {
+  const { ciRunUrl, ...ci } = detectCiContext(env);
+  return { ...ci, bundle, ...(shareRunUrl && ciRunUrl ? { ciRunUrl } : {}) };
 }
 
 function describeEngine(source: EngineSource, version: string | null): string | null {
@@ -675,10 +687,16 @@ export async function runObfuscationPass(
   }
   const engineStartedAt = Date.now();
   const prepMs = engineStartedAt - passStartedAt;
-  const context = buildContext(git, {
-    clientVersion: options.client?.coreVersion,
-    client: clientString(options.client),
-  });
+  const context = buildContext(
+    git,
+    {
+      clientVersion: options.client?.coreVersion,
+      client: clientString(options.client),
+    },
+    isCloudBuild(key)
+      ? cloudBuildInsights(env, options.bundle, artifactOptions.git !== false)
+      : null,
+  );
   let wire: WireBatch;
   try {
     wire = prepareWireBatch(inputs, engineConfig, combinedProtectionMap.buildDir, home.projectRoot);

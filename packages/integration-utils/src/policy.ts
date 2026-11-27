@@ -1,3 +1,5 @@
+import { sanitizeBundleLabel } from "./bundle-label.js";
+import { type BuildEnvironment, sanitizeCiRunUrl } from "./ci.js";
 import type { GitBuildContext } from "./git.js";
 import {
   type BuildMode,
@@ -195,21 +197,45 @@ export interface ClientContext {
   client?: string | null;
 }
 
+export interface BuildInsights {
+  bundle?: string | null;
+  environment?: BuildEnvironment;
+  ciProvider?: string;
+  ciRunUrl?: string;
+}
+
 export interface BuildContext {
   commitSha?: string;
   ref?: string;
   clientVersion?: string;
   client?: string;
+  bundle?: string;
+  environment?: BuildEnvironment;
+  ciProvider?: string;
+  ciRunUrl?: string;
 }
+
+const CI_PROVIDER_PATTERN = /^[a-z0-9-]{1,40}$/;
 
 export function buildContext(
   git: GitBuildContext | null | undefined,
   client: ClientContext = {},
+  insights: BuildInsights | null = null,
 ): BuildContext | undefined {
   const context: BuildContext = {};
   if (git?.commitSha) context.commitSha = git.commitSha;
   if (git?.ref) context.ref = git.ref;
   if (client.clientVersion) context.clientVersion = client.clientVersion;
   if (client.client) context.client = client.client;
+  const bundle = sanitizeBundleLabel(insights?.bundle);
+  if (bundle !== null) context.bundle = bundle;
+  if (insights?.environment === "ci" || insights?.environment === "local") {
+    context.environment = insights.environment;
+  }
+  if (insights?.ciProvider && CI_PROVIDER_PATTERN.test(insights.ciProvider)) {
+    context.ciProvider = insights.ciProvider;
+  }
+  const ciRunUrl = sanitizeCiRunUrl(insights?.ciRunUrl);
+  if (ciRunUrl !== null) context.ciRunUrl = ciRunUrl;
   return Object.keys(context).length > 0 ? context : undefined;
 }

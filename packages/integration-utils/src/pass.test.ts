@@ -24,7 +24,12 @@ import {
 } from "./compat.js";
 import type { EngineDiagnostic } from "./diagnostics.js";
 import { DIAG_ALREADY_OBFUSCATED } from "./diagnostics.js";
-import type { EngineFileInput, EngineFileResult, ObfuscationEngine } from "./pass.js";
+import type {
+  EngineFileInput,
+  EngineFileResult,
+  ObfuscationEngine,
+  ObfuscationPassOptions,
+} from "./pass.js";
 import { runObfuscationPass } from "./pass.js";
 import type { BuildContext, CoreConfig } from "./policy.js";
 import {
@@ -1449,6 +1454,66 @@ describe("runObfuscationPass (git context)", () => {
       expect(wire).not.toContain("secret-branch");
       expect(wire).not.toContain("commitSha");
     }
+  });
+});
+
+describe("runObfuscationPass (build insights)", () => {
+  const GITHUB_ENV = {
+    GITHUB_ACTIONS: "true",
+    GITHUB_SERVER_URL: "https://github.com",
+    GITHUB_REPOSITORY: "o/r",
+    GITHUB_RUN_ID: "1",
+  };
+
+  async function contextFor(extra: Partial<ObfuscationPassOptions>) {
+    const a = join(outDir, "a.js");
+    writeFileSync(a, "const x = 1;");
+    const { engine, calls } = makeEngine(() => ({}));
+    await runObfuscationPass({
+      ...baseOptions([a], engine),
+      artifactOptions: { git: { commitSha: "abcdef1" } },
+      logger: silentLogger().logger,
+      ...extra,
+    });
+    return calls[0];
+  }
+
+  it("puts the bundle, environment, CI provider and run link on a Pro cloud build's context", async () => {
+    const call = await contextFor({ key: "k", env: GITHUB_ENV, bundle: "vite.config.ts" });
+    expect(call.buildContext).toEqual({
+      commitSha: "abcdef1",
+      bundle: "vite.config.ts",
+      environment: "ci",
+      ciProvider: "github-actions",
+      ciRunUrl: "https://github.com/o/r/actions/runs/1",
+    });
+    expect(JSON.stringify(call.config)).not.toContain("ciRunUrl");
+  });
+
+  it("marks a Pro cloud build outside CI as local, with no provider or link", async () => {
+    const call = await contextFor({ key: "k", env: {} });
+    expect(call.buildContext).toEqual({ commitSha: "abcdef1", environment: "local" });
+  });
+
+  it("sends none of it on a local-engine (Free) build", async () => {
+    const call = await contextFor({ env: GITHUB_ENV, bundle: "vite.config.ts" });
+    expect(call.buildContext).toEqual({ commitSha: "abcdef1" });
+  });
+
+  it("drops a bundle label that is not printable text of at most 120 characters", async () => {
+    for (const bundle of ["a\nb", "x".repeat(121), "   "]) {
+      const call = await contextFor({ key: "k", env: {}, bundle });
+      expect(call.buildContext).toEqual({ commitSha: "abcdef1", environment: "local" });
+    }
+  });
+
+  it("keeps the run link, which names the repository, off a build that opted out with `git: false`", async () => {
+    const call = await contextFor({
+      key: "k",
+      env: GITHUB_ENV,
+      artifactOptions: { git: false },
+    });
+    expect(call.buildContext).toEqual({ environment: "ci", ciProvider: "github-actions" });
   });
 });
 
