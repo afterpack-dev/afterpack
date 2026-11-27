@@ -7,7 +7,8 @@ const PRINTABLE = /^[^\p{C}]+$/u;
 export function sanitizeBundleLabel(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const label = value.trim();
-  if (label.length === 0 || label.length > MAX_BUNDLE_LABEL_LENGTH) return null;
+  const length = [...label].length;
+  if (length === 0 || length > MAX_BUNDLE_LABEL_LENGTH) return null;
   return PRINTABLE.test(label) ? label : null;
 }
 

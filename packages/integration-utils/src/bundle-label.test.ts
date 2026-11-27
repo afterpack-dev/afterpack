@@ -45,6 +45,11 @@ describe("sanitizeBundleLabel", () => {
     expect(sanitizeBundleLabel("приложение/vite.config.ts")).toBe("приложение/vite.config.ts");
   });
 
+  it("counts characters, not UTF-16 units, as the engine and server do", () => {
+    expect(sanitizeBundleLabel("\u{1F680}".repeat(120))).toBe("\u{1F680}".repeat(120));
+    expect(sanitizeBundleLabel("\u{1F680}".repeat(121))).toBeNull();
+  });
+
   it("drops anything else", () => {
     for (const value of [
       "x".repeat(121),
