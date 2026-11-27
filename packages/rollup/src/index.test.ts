@@ -9,10 +9,16 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as utils from "@afterpack/integration-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __reset, __setProcessResult, __setVersion, engineCalls } from "../../../test/core-fake.js";
 import { resetBuildSessions } from "../../integration-utils/src/seed.js";
 import { type AfterpackRollupOptions, afterpackRollup } from "./index.js";
+
+vi.mock("@afterpack/integration-utils", async (importOriginal) => {
+  const actual = await importOriginal<typeof utils>();
+  return { ...actual, runObfuscationPass: vi.fn(actual.runObfuscationPass) };
+});
 
 let root: string;
 let outDir: string;
@@ -482,5 +488,15 @@ describe("afterpackRollup content-hashed names", () => {
       .filter((m) => m.includes("plain assets"));
     expect(unsalted).toHaveLength(1);
     expect(unsalted[0]).toContain("raw-AAAA.js");
+  });
+});
+
+describe("afterpackRollup bundle label", () => {
+  it("is the output directory relative to the working directory, never an absolute path", async () => {
+    vi.mocked(utils.runObfuscationPass).mockClear();
+    await runPlugin({}, { dir: outDir }, bundleOf(chunk("a.js", "export const a = 1;")));
+    const bundle = vi.mocked(utils.runObfuscationPass).mock.calls[0][0].bundle;
+    expect(bundle).toBe(utils.pathBundleLabel(outDir, process.cwd()));
+    expect(bundle).not.toContain(root);
   });
 });

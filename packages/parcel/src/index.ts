@@ -9,6 +9,7 @@ import {
   extractSourceMappingURL,
   type PluginOptionsView,
   parseEnvOptions,
+  pathBundleLabel,
   resolveClientIdentity,
   runObfuscationPass,
   settleConfigLayers,
@@ -53,8 +54,12 @@ function contentHashRefsExcludingSourceMapComment(code: string): string[] {
   return [...refs];
 }
 
+function unhashedName(displayName: string): string {
+  return displayName.replace(/\.?\[[^\]]*\]/g, "");
+}
+
 function stableBundleStem(bundle: NamedBundle): string {
-  const name = bundle.displayName.replace(/\.?\[[^\]]*\]/g, "").replace(/[\\/]/g, "-");
+  const name = unhashedName(bundle.displayName).replace(/[\\/]/g, "-");
   return `${name}.${bundle.publicId}`;
 }
 
@@ -132,6 +137,10 @@ export default new Optimizer<ParcelConfig, void>({
       engine: { processBatch, version },
       client: resolveClientIdentity(import.meta.url),
       telemetry: createTelemetryReporter(),
+      bundle: pathBundleLabel(
+        join(bundle.target.distDir, unhashedName(bundle.displayName)),
+        options.projectRoot,
+      ),
       label: "afterpack-parcel",
       cwd: options.projectRoot,
       startedAt,

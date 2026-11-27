@@ -340,6 +340,7 @@ export class AfterpackWebpackPlugin {
       engine: { processBatch, version },
       client: resolveClientIdentity(import.meta.url),
       telemetry: createTelemetryReporter(),
+      bundle: compiler.options.name,
       label: "afterpack-webpack",
       cwd: context,
       resolvedSeed: this.hashSalt?.resolvedSeed,

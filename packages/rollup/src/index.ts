@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import { processBatch, version } from "@afterpack/core";
 import {
   type AfterpackPluginOptions,
@@ -11,6 +11,7 @@ import {
   type OutputBundleLike,
   type PreparedHashSalt,
   passSettings,
+  pathBundleLabel,
   prepareHashSalt,
   readEngineVersion,
   regenerateCompressedSiblings,
@@ -179,6 +180,7 @@ export function afterpackRollup(options: AfterpackRollupOptions = {}): Plugin {
           engine: { processBatch, version },
           client: resolveClientIdentity(import.meta.url),
           telemetry: createTelemetryReporter(),
+          bundle: pathBundleLabel(resolve(cwd, outputOptions.file ?? outDir), cwd),
           label: "afterpack-rollup",
           cwd,
           resolvedSeed: hashSaltByOutDir.get(outDir)?.resolvedSeed,

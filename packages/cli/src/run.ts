@@ -22,6 +22,7 @@ import {
   npxAlternative,
   type ObfuscationEngine,
   type ObfuscationPassResult,
+  pathBundleLabel,
   planAngularIntegrity,
   protectionReceiptPath,
   type ResolvedPluginConfig,
@@ -500,6 +501,7 @@ async function runObfuscationAndBackup(input: {
   slot: BackupSlot;
   layout: HashedLayout | null;
   client: ClientIdentity | null;
+  bundle: string | undefined;
 }): Promise<{
   captured: CapturedFile[];
   result: ObfuscationPassResult | null;
@@ -542,6 +544,7 @@ async function runObfuscationAndBackup(input: {
           telemetry: createTelemetryReporter({ logger: input.notice }),
           clientVersion: input.version,
           client: input.client,
+          bundle: input.bundle,
           seed: input.parsed.seed,
           seedFallback: input.parsed.seedFallback,
           key: input.parsed.key,
@@ -1117,6 +1120,7 @@ async function runHolding(deps: CliDeps, locks: HeldLock[]): Promise<number> {
       slot,
       layout: layoutDecision.status === "rename" ? layoutDecision.layout : null,
       client: deps.client ?? null,
+      bundle: pathBundleLabel(target, projectRoot),
     });
 
   if (failure !== null && undoFailure !== null) {

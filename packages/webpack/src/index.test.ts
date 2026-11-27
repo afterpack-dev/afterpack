@@ -10,9 +10,15 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as utils from "@afterpack/integration-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __reset, __setProcessResult, __setVersion, engineCalls } from "../../../test/core-fake.js";
 import { AfterpackWebpackPlugin } from "./index.js";
+
+vi.mock("@afterpack/integration-utils", async (importOriginal) => {
+  const actual = await importOriginal<typeof utils>();
+  return { ...actual, runObfuscationPass: vi.fn(actual.runObfuscationPass) };
+});
 
 let root: string;
 let outDir: string;
@@ -562,5 +568,21 @@ describe("AfterpackWebpackPlugin content-hashed names", () => {
         plugins: [new SubresourceIntegrityPlugin()],
       }),
     ).toThrow(/subresource-integrity/i);
+  });
+});
+
+describe("AfterpackWebpackPlugin bundle label", () => {
+  it("is the compiler's configured name, and absent without one", async () => {
+    const pass = vi.mocked(utils.runObfuscationPass);
+    pass.mockClear();
+    await applyPlugin(new AfterpackWebpackPlugin({}), { name: "client" })(
+      fixture({ "main.js": "export const a = 1;" }, ["main.js"]),
+    );
+    expect(pass.mock.calls[0][0].bundle).toBe("client");
+    pass.mockClear();
+    await applyPlugin(new AfterpackWebpackPlugin({}))(
+      fixture({ "main.js": "export const a = 1;" }, ["main.js"]),
+    );
+    expect(pass.mock.calls[0][0].bundle).toBeUndefined();
   });
 });
