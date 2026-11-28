@@ -1,6 +1,6 @@
 {
   "name": "@afterpack/vite",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Vite plugin for AfterPack: obfuscate your production JavaScript during vite build",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -38,7 +38,7 @@
     "vite": "^6.0.0 || ^7.0.0 || ^8.0.0"
   },
   "dependencies": {
-    "@afterpack/core": "~1.1.0",
+    "@afterpack/core": "~1.2.0",
     "@afterpack/integration-utils": "workspace:*"
   },
   "devDependencies": {
